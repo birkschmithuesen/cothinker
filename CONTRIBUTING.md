@@ -27,9 +27,9 @@ the CLA grants the project the right to also license your contribution
 commercially; the DCO is the record of who submitted what and that they
 were allowed to.
 
-A CI check that enforces this trailer automatically is tracked as a
-separate card; for now the requirement is binding by this document, not
-yet by an automated gate.
+A CI check enforces this trailer automatically on every pull request
+(`.github/workflows/dco.yml`, `scripts/check_dco.py`): a pull request
+whose commits are missing the trailer fails CI.
 
 ## Questions
 
