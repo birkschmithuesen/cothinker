@@ -1,3 +1,12 @@
 test: python3 -m pytest -q tests
 merge_target: main
 workflow: github-pr
+# Agent-authored commits in this PUBLIC repo must use a placeholder identity
+# (publish_check.py's email-real class flags any real address, including a
+# Co-Authored-By: trailer naming a real assistant mailbox -- CONTRIBUTING.md
+# section 3). Author, committer AND the Signed-off-by: trailer required by
+# the DCO gate (.github/workflows/dco.yml) all use this one identity; no
+# Co-Authored-By: trailer with a real address.
+commit_identity:
+  name: "CoThinker Agent"
+  email: "agent@cothinker.invalid"

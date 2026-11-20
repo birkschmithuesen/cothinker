@@ -64,7 +64,12 @@ def _git(*args: str) -> str:
 
 def check_repo(base: str) -> list[str]:
     merge_base = _git("merge-base", base, "HEAD").strip()
-    base_files = [f for f in _git("ls-tree", "--name-only", f"{merge_base}:{ADR_DIR}").split() if f.endswith(".md")]
+    try:
+        listing = _git("ls-tree", "--name-only", f"{merge_base}:{ADR_DIR}")
+    except subprocess.CalledProcessError:
+        # ADR_DIR did not exist yet at the base revision: nothing to protect.
+        listing = ""
+    base_files = [f for f in listing.split() if f.endswith(".md")]
     found = []
     for fname in base_files:
         if fname in ("README.md", "0000-template.md"):

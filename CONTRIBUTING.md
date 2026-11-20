@@ -31,6 +31,38 @@ A CI check enforces this trailer automatically on every pull request
 (`.github/workflows/dco.yml`, `scripts/check_dco.py`): a pull request
 whose commits are missing the trailer fails CI.
 
+## 3. Commit identity on agent-authored commits -- no real address
+
+`tools/publish_check.py` (the publish gate, now also running on every pull
+request) flags any email address that is not a documentation placeholder
+(`publish/denylist-public.txt`'s `email-real` class: everything except
+`*.example.*`, `*.invalid`, `*.test`). The DCO check above needs a real
+`Signed-off-by:` line on every commit. Both are satisfied together only if
+the `Signed-off-by:` identity itself uses a placeholder address -- a real
+operator or assistant mailbox in that trailer, or in author/committer
+metadata, or in a `Co-Authored-By:` trailer, fails the publish gate on its
+own commit.
+
+For the factory's own agent-authored commits in this repository (not a
+human contributor's), the fixed identity is:
+
+```
+Signed-off-by: CoThinker Agent <agent@cothinker.invalid>
+```
+
+matching the author/committer identity used by `git commit -s --author`
+or the equivalent `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_NAME`/
+`GIT_COMMITTER_EMAIL` environment overrides. Do not add a `Co-Authored-By:`
+trailer naming any assistant's own real mailbox -- a real vendor domain in
+that trailer is exactly the kind of address the publish gate flags, on its
+own commit, every time. If the authoring tool needs to be credited, name
+it in prose in the commit body instead of in a trailer with an email
+address.
+
+A human contributor signs off with their own real name and address, as the
+DCO intends -- the placeholder above is only for commits the factory itself
+authors in this repository, never for a human's contribution.
+
 ## Questions
 
 Open an issue in this repository on GitHub.

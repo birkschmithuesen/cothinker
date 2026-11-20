@@ -1,7 +1,8 @@
 """Tests for scripts/check_adr_immutable.py (accepted ADRs are superseded, never rewritten)."""
+import subprocess
 from pathlib import Path
 
-from check_adr_immutable import is_accepted, violations
+from check_adr_immutable import check_repo, is_accepted, violations
 
 ROOT = Path(__file__).resolve().parent.parent
 ADR_DIR = ROOT / "docs" / "adr"
@@ -70,3 +71,14 @@ def test_adr_0001_is_accepted():
     path = ADR_DIR / "0001-instance-core-module-layering.md"
     text = path.read_text(encoding="utf-8")
     assert is_accepted(text)
+
+
+def test_check_repo_base_without_adr_dir_does_not_crash():
+    """A base revision that predates docs/adr/ (e.g. the public export's first
+    commit) has nothing to protect yet -- check_repo() must not crash on the
+    git ls-tree failure, it must treat it as an empty ADR set."""
+    merge_base = subprocess.run(
+        ["git", "rev-list", "--max-parents=0", "HEAD"],
+        check=True, capture_output=True, text=True,
+    ).stdout.strip().splitlines()[-1]
+    assert check_repo(merge_base) == []
