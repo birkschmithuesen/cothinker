@@ -1,0 +1,19 @@
+# The vServer's STT venv (stt/.venv, Python 3.11). No PortAudio needed:
+# input comes over tcp: from fundusapps.bbb_tap. See docs/stt.md section 6.
+flask
+python-dotenv
+numpy
+requests
+samplerate
+sounddevice
+websocket-client
+# vosk is imported unconditionally by fundusapps.stt_server.backends
+# (backends/__init__.py: "from ...vosk_backend import VoskBackend" runs at
+# module load, not lazily like the other backends) -- even a server that
+# only ever selects infomaniak-whisper fails at import time without it.
+# Confirmed by grep across backends/*.py and matches the existing
+# recording-PC install list in docs/stt.md section 4.1.
+vosk
+
+# speechmatics-rt backend (shared/speechmatics.py, additional_headers kwarg)
+websockets>=13

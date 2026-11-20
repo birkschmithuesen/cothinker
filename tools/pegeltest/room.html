@@ -1,0 +1,60 @@
+<!doctype html><html><head><meta charset="utf-8"><meta name="robots" content="noindex,nofollow">
+<title>room - one screen</title>
+<style>
+html,body{margin:0;padding:0;background:#000;overflow:hidden;width:100%;height:100%}
+#stage{position:absolute;left:0;top:0;width:5810px;height:4114px;overflow:hidden;background:#000;transform-origin:0 0}
+.panel{position:absolute;overflow:hidden}
+.panel iframe{position:absolute;left:0;top:0;border:0;transform-origin:0 0;pointer-events:none;background:#000}
+</style></head><body><div id="stage"></div>
+<script>
+// One-screen output 5810x4114 (venue cross layout, accepted 05.11.): floor centre, every wall stretched
+// to the floor edge it touches; the venue media server maps it onto the real projectors.
+const q=new URLSearchParams(location.search), t=encodeURIComponent(q.get("t")||"");
+const stage=document.getElementById("stage");
+// [src, native w, native h, target length, rotation, panel x, y, w, h]
+const P=[
+ ["/floor?t="+t, 3710,2015, null,   0, 1050,1050,3710,2015],
+ ["/wall?wall=right&t="+t, 3710,1050, 3710,   0, 1050,0,3710,1050],
+ ["/wall?wall=back&t="+t,  1920,1000, 2015,  90, 4760,1050,1050,2015],
+ ["/wall?wall=left&t="+t,  3500,1050, 3710, 180, 1050,3065,3710,1050],
+ ["/wall?wall=front&t="+t, 1635,1000, 2015, -90, 0,1050,1050,2015],
+];
+for(const [src,nw,nh,L,rot,x,y,w,h] of P){
+  const p=document.createElement("div"); p.className="panel";
+  Object.assign(p.style,{left:x+"px",top:y+"px",width:w+"px",height:h+"px"});
+  const f=document.createElement("iframe"); f.src=src; f.width=nw; f.height=nh; f.setAttribute("scrolling","no");
+  const tw=L===null?w:L, th=L===null?h:1050;            // unrotated target size of this wall
+  const sx=tw/nw, sy=th/nh;
+  // rotate the (tw x th) box about its centre, then place that centre at the panel centre
+  const cx=w/2, cy=h/2;
+  f.style.transform=`translate(${cx}px,${cy}px) rotate(${rot}deg) translate(${-tw/2}px,${-th/2}px) scale(${sx},${sy})`;
+  p.appendChild(f); stage.appendChild(p);
+}
+function fit(){ const s=q.get("mode")==="projection"?1:Math.min(innerWidth/5810,innerHeight/4114); stage.style.transform=`scale(${s})`; }
+addEventListener("resize",fit); fit();
+</script><script>
+// Stopgap grid fix: hide each page's own grid (drawn in its native px, wrong after stretching) and draw ONE
+// grid in floor pixels across all five panels, so lines continue across every seam. The overlay copies the
+// opacity of the page's own grid canvas (fades in Zeitreise etc. still work).
+(function(){
+const S=233.3, NS="http://www.w3.org/2000/svg", COLOR="rgba(255,255,255,0.4)";
+const panels=[...document.querySelectorAll(".panel")];
+// per panel: grid origin (stage px) is the floor corner (1050,1050); lines at 1050+k*S on both axes
+panels.forEach(p=>{
+  const x0=parseFloat(p.style.left), y0=parseFloat(p.style.top), w=parseFloat(p.style.width), h=parseFloat(p.style.height);
+  const svg=document.createElementNS(NS,"svg"); svg.setAttribute("width",w); svg.setAttribute("height",h);
+  Object.assign(svg.style,{position:"absolute",left:0,top:0,pointerEvents:"none"});
+  for(let k=-10;k<=30;k++){const X=1050+k*S-x0; if(X>=-1&&X<=w+1){const l=document.createElementNS(NS,"line");
+    l.setAttribute("x1",X);l.setAttribute("x2",X);l.setAttribute("y1",0);l.setAttribute("y2",h);svg.appendChild(l);}
+    const Y=1050+k*S-y0; if(Y>=-1&&Y<=h+1){const l=document.createElementNS(NS,"line");
+    l.setAttribute("y1",Y);l.setAttribute("y2",Y);l.setAttribute("x1",0);l.setAttribute("x2",w);svg.appendChild(l);}}
+  svg.setAttribute("stroke",COLOR); svg.setAttribute("stroke-width","1");
+  p.appendChild(svg); p._grid=svg;
+  const f=p.querySelector("iframe");
+  f.addEventListener("load",()=>{try{const st=f.contentDocument.createElement("style");
+    st.textContent="#room-grid,#floor-grid{visibility:hidden !important}"; f.contentDocument.head.appendChild(st); p._src=f;}catch(e){}});
+});
+setInterval(()=>panels.forEach(p=>{try{const c=p._src&&p._src.contentDocument.querySelector("#room-grid,#floor-grid");
+  if(c) p._grid.style.opacity=getComputedStyle(c).opacity;}catch(e){}}),250);
+})();
+</script></body></html>

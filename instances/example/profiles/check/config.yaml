@@ -1,0 +1,16 @@
+# Neutral placeholder profile for the generic example instance.
+model:
+  default: example-model
+  provider: custom:example_provider
+providers:
+  example_provider:
+    api: https://api.example.org
+    transport: anthropic_messages
+    key_env: EXAMPLE_PROVIDER_KEY
+    models:
+      example-model:
+        context_length: 100000
+agent:
+  enabled_toolsets: []
+auth:
+  adopt_external_logins: false

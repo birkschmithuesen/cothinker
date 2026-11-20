@@ -1,0 +1,210 @@
+# Positive list for the public `cothinker` repo (repo split task 6.5).
+#
+# One git pathspec per line (as accepted by `git ls-files --`). Every path
+# a line resolves to must be GENERIC per `tools/inventory/classify.py` at
+# HEAD -- never MIXED, INSTANCE or OPERATOR -- checked by
+# tests/test_public_paths.py. A trailing slash takes the whole folder
+# (used only where every tracked file under it classifies GENERIC); a
+# folder with any MIXED/INSTANCE file in it is listed file by file
+# instead, never as a whole-folder pathspec.
+#
+# This is a starting set, not a complete one: docs/, workshop/, bench/,
+# deploy/, tests/ and .task-artifacts/ all have real MIXED/INSTANCE
+# content at this measurement and are left for task 6.6/6.7 to mine for a
+# clean subset. Growing this list only ever adds a path already proven
+# GENERIC above; task 6.3's publish/denylist-public.txt and
+# tools/publish_check.py still run against whatever is actually exported.
+
+# Fully GENERIC top-level folders (0 MIXED/INSTANCE/OPERATOR at HEAD).
+gateway/
+graph/
+modules/
+publish/
+stage/
+
+# docs/: the public docs for strangers (repo split task 6.6) plus the
+# already-generic module format doc (5.2). Every other file under docs/
+# is dated, operator or instance content and stays off this list.
+docs/architecture.md
+docs/instance-format.md
+docs/module-format.md
+
+# README.md: the public version for strangers (repo split task 6.6). The
+# internal, operator-facing version moved into the private instance
+# archive and is not public.
+README.md
+
+# LICENSE: GENERIC and clean (plain AGPL-3.0 text, no operator content);
+# missing from this list until repo split task 6.9 noticed the gap --
+# GitHub's licenceInfo detection needs it in the repo root.
+LICENSE
+
+# NOTICE, THIRD_PARTY.md, CONTRIBUTING.md, SECURITY.md, CLA.md: added
+# once all five classified GENERIC (task 6.9, second pass). The owner's
+# answer on the contact/attribution question: GitHub issues and GitHub's
+# private vulnerability reporting instead of any literal email address;
+# the two outside stt/ contributors named in an earlier THIRD_PARTY.md
+# draft are not named anywhere any more -- they gave code that is being
+# replaced, not a contribution. The AGPL copyright holder line stays as
+# is; classify.py excludes it (authorship lines), same as every other
+# source file's header.
+NOTICE
+THIRD_PARTY.md
+CONTRIBUTING.md
+SECURITY.md
+CLA.md
+
+# .secrets.baseline: tools/publish_check.py's detect_secrets() diffs the
+# tracked files against this baseline via detect-secrets-hook. Without it
+# in the export, every finding looks new and the gate never reaches a
+# clean run (repo split task 6.7b).
+.secrets.baseline
+
+# instances/: only the invented example instance and the top-level
+# README -- any other instance folder under instances/ holds real
+# meeting content and must never be on this list.
+instances/README.md
+instances/example/
+
+# shared/: everything except shared/instance.py (MIXED).
+shared/__init__.py
+shared/agent.py
+shared/modules.py
+shared/profiles.py
+shared/profiles/skel/main/config.yaml
+shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py
+shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py
+shared/speechmatics.py
+shared/utterance.py
+
+# tools/: everything except tools/inventory/inventory.tsv,
+# tools/inventory/rules.toml, tools/inventory/test_classify.py (all
+# MIXED -- card-id operator identifiers) and tools/pegeltest/{index.html,
+# upload_server.py,vad.js} (MIXED).
+tools/inventory/blame_scan.py
+tools/inventory/classify.py
+tools/inventory/history_scan.py
+tools/pegeltest/README.md
+tools/pegeltest/closer-warning.js
+tools/pegeltest/room-test-cross.html
+tools/pegeltest/room.html
+tools/pegeltest/warn-worklet.js
+tools/pegeltest/worklet.js
+tools/publish_check.py
+
+# scripts/: everything except the 8 MIXED files (card-id / person /
+# account operator identifiers).
+scripts/acceptance-control.py
+scripts/acceptance-run.py
+scripts/build-floor-demo.py
+scripts/build-wall-demo.py
+scripts/demo-stage.py
+scripts/einrichten-aufnahmerechner.ps1
+scripts/extract-session-fixture.py
+scripts/fb-rounds.py
+scripts/known-red-report.py
+scripts/measure-echo-rolling.py
+scripts/measure-own-question.py
+scripts/measure-turn-cuts.py
+scripts/measure_hermes/__init__.py
+scripts/measure_hermes/api_client.py
+scripts/measure_hermes/common.py
+scripts/measure_hermes/m1_turns.py
+scripts/measure_hermes/m1b_access_route.py
+scripts/measure_hermes/m2_delegation.py
+scripts/measure_hermes/m3_load.py
+scripts/measure_hermes/prompts.py
+scripts/messung-diarization/local_slice.py
+scripts/messung-diarization/rttm_metrics.py
+scripts/messung-diarization/slice_audio.py
+scripts/messung-diarization/timed_run.py
+scripts/messung-prompt-wiederholung.py
+scripts/own-question-turn-dump.py
+scripts/own_question_ground_truth.json
+scripts/own_question_ground_truth_v2.json
+scripts/own_question_synthetic_turns.json
+scripts/own_question_turns_lib.py
+scripts/pegeltest-replay.py
+scripts/pre-commit-leak-guard.sh
+scripts/render-floor-spot-png.py
+scripts/speaker-split-probe.py
+scripts/stt-vserver-probe.py
+scripts/wiki-lint.py
+
+# stt/: everything except the 12 MIXED files under fundusapps/bbb_tap,
+# fundusapps/stt_server/{args.py,backends/elevenlabs_scribe_backend.py,
+# templates/operator.html} and 4 MIXED test files (D1 = option (a):
+# consent on file, THIRD_PARTY.md).
+stt/pytest.ini
+stt/requirements-vserver.txt
+stt/fundusapps/__init__.py
+stt/fundusapps/bbb_tap/__init__.py
+stt/fundusapps/bbb_tap/feed_wav.py
+stt/fundusapps/bbb_tap/hook.js
+stt/fundusapps/bbb_tap/join.js
+stt/fundusapps/bbb_tap/pcm.py
+stt/fundusapps/bbb_tap/tests/__init__.py
+stt/fundusapps/bbb_tap/tests/test_cdp.py
+stt/fundusapps/bbb_tap/tests/test_page_scripts.py
+stt/fundusapps/bbb_tap/tests/test_per_track.py
+stt/fundusapps/common/__init__.py
+stt/fundusapps/common/tests/__init__.py
+stt/fundusapps/common/tests/test_turnid.py
+stt/fundusapps/common/turnid.py
+stt/fundusapps/stt_server/README.md
+stt/fundusapps/stt_server/__init__.py
+stt/fundusapps/stt_server/__main__.py
+stt/fundusapps/stt_server/app.py
+stt/fundusapps/stt_server/audio_clock.py
+stt/fundusapps/stt_server/backends/__init__.py
+stt/fundusapps/stt_server/backends/_vendored_whisper_streaming/LICENSE
+stt/fundusapps/stt_server/backends/_vendored_whisper_streaming/UPSTREAM.md
+stt/fundusapps/stt_server/backends/_vendored_whisper_streaming/__init__.py
+stt/fundusapps/stt_server/backends/_vendored_whisper_streaming/whisper_online.py
+stt/fundusapps/stt_server/backends/base.py
+stt/fundusapps/stt_server/backends/infomaniak_whisper_backend.py
+stt/fundusapps/stt_server/backends/speechmatics_rt_backend.py
+stt/fundusapps/stt_server/backends/vosk_backend.py
+stt/fundusapps/stt_server/backends/whisper_backend.py
+stt/fundusapps/stt_server/backends/whisper_streaming_backend.py
+stt/fundusapps/stt_server/botland_callbacks.py
+stt/fundusapps/stt_server/events.py
+stt/fundusapps/stt_server/interview_signal.py
+stt/fundusapps/stt_server/pcm_source.py
+stt/fundusapps/stt_server/settings.py
+stt/fundusapps/stt_server/sr.py
+stt/fundusapps/stt_server/test_vosk.py
+stt/fundusapps/stt_server/thought_end.py
+stt/fundusapps/stt_server/vad.py
+stt/fundusapps/stt_server/vad_detectors.py
+stt/fundusapps/stt_server/vad_models/LICENSE
+stt/fundusapps/stt_server/vad_models/UPSTREAM.md
+stt/fundusapps/stt_server/vad_models/silero_vad.onnx
+stt/fundusapps/stt_server/tests/__init__.py
+stt/fundusapps/stt_server/tests/conftest.py
+stt/fundusapps/stt_server/tests/test_app_events.py
+stt/fundusapps/stt_server/tests/test_args_config.py
+stt/fundusapps/stt_server/tests/test_audio_clock.py
+stt/fundusapps/stt_server/tests/test_audio_source.py
+stt/fundusapps/stt_server/tests/test_audio_timestamps_e2e.py
+stt/fundusapps/stt_server/tests/test_backend_registry.py
+stt/fundusapps/stt_server/tests/test_dispatcher_partials.py
+stt/fundusapps/stt_server/tests/test_elevenlabs_scribe_backend.py
+stt/fundusapps/stt_server/tests/test_elevenlabs_timestamps.py
+stt/fundusapps/stt_server/tests/test_event_fields.py
+stt/fundusapps/stt_server/tests/test_events.py
+stt/fundusapps/stt_server/tests/test_latency_callback.py
+stt/fundusapps/stt_server/tests/test_latency_pipeline.py
+stt/fundusapps/stt_server/tests/test_levels_and_device_switch.py
+stt/fundusapps/stt_server/tests/test_settings_persistence.py
+stt/fundusapps/stt_server/tests/test_smoke.py
+stt/fundusapps/stt_server/tests/test_speechmatics_rt_backend.py
+stt/fundusapps/stt_server/tests/test_thought_end_e2e.py
+stt/fundusapps/stt_server/tests/test_thought_end_tap.py
+stt/fundusapps/stt_server/tests/test_vad.py
+stt/fundusapps/stt_server/tests/test_vad_spans.py
+stt/fundusapps/stt_server/tests/test_vad_threshold.py
+stt/fundusapps/stt_server/tests/test_vosk_backend.py
+stt/fundusapps/stt_server/tests/test_whisper_backend.py
+stt/fundusapps/stt_server/tests/test_whisper_streaming_backend.py
+stt/fundusapps/stt_server/tests/test_whisper_streaming_vendored_import.py

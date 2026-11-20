@@ -1,0 +1,32 @@
+# Public-safe denylist for tools/publish_check.py.
+#
+# Pattern CLASSES only — never a literal operator value (AGENTS.md, Global
+# Constraints of docs/superpowers/plans/2026-11-12-repo-split.md). Each
+# `re:` line is a Python regex checked against every line of every commit
+# in the full history (diff content and author/committer/message). See
+# publish/README.md for where each class comes from.
+
+# card-id: CoThinker's own card-id shape (t_ + 8 hex), same regex as
+# docs/superpowers/specs/2026-11-12-repo-split-inventory/rules.toml operator_class "card-id".
+re:\bt_[0-9a-f]{8}\b
+
+# ipv4-public: any dotted quad except loopback, 0.0.0.0, 255.*, the three
+# documentation ranges (192.0.2/24, 198.51.100/24, 203.0.113/24) and RFC 1918 —
+# same regex as the inventory rules.toml operator_class "ipv4-public".
+re:\b(?!127\.)(?!0\.0\.0\.0\b)(?!255\.)(?!192\.0\.2\.)(?!198\.51\.100\.)(?!203\.0\.113\.)(?!10\.)(?!192\.168\.)(?!172\.(?:1[6-9]|2\d|3[01])\.)(?:25[0-5]|2[0-4]\d|1?\d?\d)(?:\.(?:25[0-5]|2[0-4]\d|1?\d?\d)){3}\b
+
+# home-path: a Linux user home directory path.
+re:/home/[a-z_][a-z0-9_-]*/
+
+# mount-path: this project's volume-mount naming shape (/mnt/<VOL>_<VOL>_<digits>).
+re:/mnt/[A-Za-z]+_[A-Za-z]+_\d+
+
+# email-real: any email address that isn't a documentation placeholder
+# (example.*, *.invalid, *.test).
+re:\b[A-Za-z0-9._%+-]+@(?!example\.)(?![A-Za-z0-9.-]*\.(?:invalid|test)\b)[A-Za-z0-9-]+(?:\.[A-Za-z0-9-]+)*\.[a-z]{2,}\b
+
+# private-key header: the start of a PEM private key.
+re:-----BEGIN [A-Z ]*PRIVATE KEY-----
+
+# bot-token shape: a Telegram-style bot token (numeric id : 35-char secret).
+re:\b\d{8,10}:[A-Za-z0-9_-]{35}\b

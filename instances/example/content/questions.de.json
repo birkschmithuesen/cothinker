@@ -1,0 +1,27 @@
+{"language": "de", "status": "draft",
+ "generic": [
+  {"id": "g01", "text": "Was ist heute an diesem Ort anders als vor zehn Jahren?"},
+  {"id": "g02", "text": "Wer trifft hier die Entscheidungen, die niemand sieht?"}
+ ],
+ "roles": {
+  "E1": [
+   {"id": "e1-1", "text": "Was ist dein wichtigstes Werkzeug?"},
+   {"id": "e1-2", "text": "Was wuerdest du an deiner Arbeit sofort aendern?"}
+  ],
+  "E2": [
+   {"id": "e2-1", "text": "Was hast du heute zum ersten Mal gesehen?"},
+   {"id": "e2-2", "text": "Wovor hast du am meisten Respekt?"}
+  ],
+  "E3": [
+   {"id": "e3-1", "text": "Was siehst du, das tagsueber niemand sieht?"},
+   {"id": "e3-2", "text": "Wem vertraust du hier am wenigsten?"}
+  ],
+  "E4": [
+   {"id": "e4-1", "text": "Welche Frage stellst du dich hier noch nicht zu stellen traust?"},
+   {"id": "e4-2", "text": "Was ist dir heute zum ersten Mal aufgefallen?"}
+  ],
+  "E5": [
+   {"id": "e5-1", "text": "Welche Regel hast du zuletzt durchgesetzt?"},
+   {"id": "e5-2", "text": "Was bedeutet fuer dich 'Ordnung'?"}
+  ]
+ }}

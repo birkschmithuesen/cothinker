@@ -1,0 +1,7 @@
+{"language": "en", "questions": [
+  {"id": "wo", "text": "Where?"},
+  {"id": "wie", "text": "How?"},
+  {"id": "wann", "text": "When?"},
+  {"id": "wer", "text": "Who?"},
+  {"id": "warum", "text": "Why?"}
+ ], "source": "invented placeholder for the generic example instance"}

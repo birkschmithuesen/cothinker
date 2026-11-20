@@ -1,0 +1,37 @@
+{
+  "title": "Cue Sheet (invented example instance)",
+  "subtitle": "Generic placeholder cue sheet, invented content only.",
+  "updated": "2026-11-14 00:00",
+  "source": "invented placeholder for the generic example instance",
+  "columns": ["Wall", "Floor", "Phone", "Moderation", "Operator"],
+  "cues": [
+    {
+      "nr": "0",
+      "name": "Arrival",
+      "kind": "work",
+      "minutes": 5,
+      "trigger": "Doors open",
+      "what": "Placeholder: people find a seat.",
+      "Wall": "Placeholder grid display.",
+      "Floor": "Placeholder grid display.",
+      "Phone": "Nothing yet.",
+      "Moderation": "Placeholder: welcomes the group.",
+      "Operator": "Placeholder: waits for everyone to sit.",
+      "status": "invented"
+    },
+    {
+      "nr": "1",
+      "name": "Round one",
+      "kind": "work",
+      "minutes": 10,
+      "trigger": "Operator: go",
+      "what": "Placeholder: first round of questions.",
+      "Wall": "Placeholder question display.",
+      "Floor": "Placeholder question display.",
+      "Phone": "Placeholder running timer, no digits.",
+      "Moderation": "Placeholder: explains the round.",
+      "Operator": "Placeholder: advances when the round ends.",
+      "status": "invented"
+    }
+  ]
+}

@@ -1,0 +1,33 @@
+# Binary ledger for publish/public-paths.txt (repo split task 6.5).
+#
+# One line per binary file on the positive list (classify.py reason
+# "binary-unscanned" -- a null byte in the first probe bytes, so the
+# content scan never ran on it). Columns, whitespace-separated:
+#
+#   sha256  path  vision  checked-on(YYYY-MM-DD)
+#
+# `vision` is `yes` for a PNG/JPG that was opened and looked at (no
+# instance UI, no person, no operator text) before being listed, or
+# `n/a` for a binary that isn't an image (webfont, ML model weights --
+# nothing to look at). A doubtful image stays off public-paths.txt
+# instead of getting a `yes` here. tests/test_public_paths.py checks the
+# sha256 against the current blob and that every binary on the list has
+# a line here.
+#
+# None of the files below are PNG/JPG at this measurement (2026-11-20);
+# the fonts are the public Google Fonts Archivo/Unbounded/Limelight
+# webfont files already in stage/static/workshop/, the .onnx is the
+# Silero VAD model weights already in stt/.
+
+a999e009fdcd0f939c138e04043b3b2ad083b26252b644e8f94c083d48b77af0  stage/static/workshop/archivo-400-latin-ext.woff2  n/a  2026-11-20
+7150c0ec5ad356453013d11affec1fbab95de0dd2dcecb043b4f1cb7f87c4ba4  stage/static/workshop/archivo-400-latin.woff2  n/a  2026-11-20
+a999e009fdcd0f939c138e04043b3b2ad083b26252b644e8f94c083d48b77af0  stage/static/workshop/archivo-500-latin-ext.woff2  n/a  2026-11-20
+7150c0ec5ad356453013d11affec1fbab95de0dd2dcecb043b4f1cb7f87c4ba4  stage/static/workshop/archivo-500-latin.woff2  n/a  2026-11-20
+3057315fe9e4fe15d47d75e1ee8e9bed7c9e213dfe593660d92b60bf85bb0581  stage/static/workshop/archivo-600-latin-ext.woff2  n/a  2026-11-20
+e38af1c6f5d3cfd7293c2648c839f71ee0f8e78788ffc44aca9c450b5b8d3c9d  stage/static/workshop/archivo-600-latin.woff2  n/a  2026-11-20
+f5bf8a9159adfc5b9c756c85d812a4fd1299b8916fefdf39ad4b24ade6d8d0cf  stage/static/workshop/limelight-400-latin.ttf  n/a  2026-11-20
+ed84482df7b95e6a56a113de1ba2a8d54337f499ba19d54ca697a7e15427ff5f  stage/static/workshop/unbounded-500-latin-ext.woff2  n/a  2026-11-20
+d7f07f8a308ce0a7287d79a65a85cfbc0f4741ef426bf1a3902d24392cc71723  stage/static/workshop/unbounded-500-latin.woff2  n/a  2026-11-20
+ed84482df7b95e6a56a113de1ba2a8d54337f499ba19d54ca697a7e15427ff5f  stage/static/workshop/unbounded-800-latin-ext.woff2  n/a  2026-11-20
+d7f07f8a308ce0a7287d79a65a85cfbc0f4741ef426bf1a3902d24392cc71723  stage/static/workshop/unbounded-800-latin.woff2  n/a  2026-11-20
+1a153a22f4509e292a94e67d6f9b85e8deb25b4988682b7e174c65279d8788e3  stt/fundusapps/stt_server/vad_models/silero_vad.onnx  n/a  2026-11-20

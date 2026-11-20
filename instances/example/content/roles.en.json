@@ -1,0 +1,18 @@
+{"language": "en", "status": "draft", "story_source": "invented placeholder content for the generic example instance, not real session material",
+ "roles": [
+  {"id": "E1", "short": "Keeper of the Ledgers", "given": "Keeper", "seat_order": 1, "name": "Keeper of the Ledgers", "object": "a worn ledger",
+   "points": ["Has worked with paper files for years", "Distrusts new systems", "Knows every exception to the rule"],
+   "story": "You have kept the records of a place that keeps changing for years. Every new rule crosses your desk first, before it applies anywhere else."},
+  {"id": "E2", "short": "Travelling Technician", "given": "Technician", "seat_order": 2, "name": "Travelling Technician", "object": "a tangled cable",
+   "points": ["Travels from place to place", "Fixes what others have given up on", "Prefers clean solutions, no compromises"],
+   "story": "You show up when something is broken that nobody else wants to fix. You stay only as long as the repair takes."},
+  {"id": "E3", "short": "Night Watch", "given": "Watch", "seat_order": 3, "name": "Night Watch", "object": "a flashlight with a weak battery",
+   "points": ["Knows every corner of the place in the dark", "Writes everything into a logbook", "Trusts nobody who was here during the day"],
+   "story": "You are here once everyone else has left. What happens at night, only you see."},
+  {"id": "E4", "short": "New Colleague", "given": "Newcomer", "seat_order": 4, "name": "New Colleague", "object": "a list of questions",
+   "points": ["Has only just started here", "Asks the questions nobody else dares to ask anymore", "Learns faster than everyone expects"],
+   "story": "You are new to this place and notice things nobody else has noticed in a long time."},
+  {"id": "E5", "short": "Oversight", "given": "Oversight", "seat_order": 5, "name": "Oversight", "object": "a stack of signed forms",
+   "points": ["Decides what is allowed", "Knows every rule, even the unwritten ones", "Has the last word -- officially"],
+   "story": "You are responsible for keeping everything here in order. What that means in practice, you decide anew every day."}
+ ]}

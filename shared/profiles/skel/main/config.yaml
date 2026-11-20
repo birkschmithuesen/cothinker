@@ -1,0 +1,11 @@
+# Generic defaults for the "main" role skeleton (repo split Task 5.1).
+# An instance overlay that sets its own top-level `agent:`/`auth:` key fully
+# replaces this one -- shared.profiles.materialize() merges config.yaml
+# key-wise, overlay wins per top-level key. An overlay carrying every key
+# this file has (true for every instance observed so far) is copied
+# verbatim instead, so this file never changes an existing instance's
+# materialized bytes; it only fills a gap for a thinner overlay.
+agent:
+  enabled_toolsets: [file]
+auth:
+  adopt_external_logins: false

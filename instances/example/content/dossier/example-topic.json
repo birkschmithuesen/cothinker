@@ -1,0 +1,8 @@
+{
+  "field": "example-topic",
+  "key_terms": ["example", "placeholder", "generic", "invented"],
+  "facts": [
+    {"text": "This is an invented placeholder fact for the generic example instance, not real research material.",
+     "url": "https://example.org/example-topic", "accessed": "2026-11-14"}
+  ]
+}

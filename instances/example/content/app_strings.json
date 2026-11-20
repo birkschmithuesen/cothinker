@@ -1,0 +1,16 @@
+{
+  "de": {
+    "title": "Beispielwerkstatt",
+    "intro": "Diese Seite zeigt erfundene Platzhalterinhalte fuer die generische Beispielinstanz.",
+    "table": "Gruppe {nn}",
+    "back": "Zurueck",
+    "save": "Als Text speichern"
+  },
+  "en": {
+    "title": "Example Workshop",
+    "intro": "This page shows invented placeholder content for the generic example instance.",
+    "table": "Group {nn}",
+    "back": "Back",
+    "save": "Save as text"
+  }
+}

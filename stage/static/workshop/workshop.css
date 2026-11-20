@@ -1,0 +1,1445 @@
+/* CoThinker — workshop skin (S8; palette replaced by
+   the operator, 2026-10-28 22:52). AGPL-3.0-only.
+   The look of the table phones: styles only the seam named in workshop/static/table.html,
+   never the logic in table.js. Rules every skin keeps (R1-R7): README.md next to this file. */
+[hidden] { display: none !important; }
+
+/* the designer's v0.4 "Lavendel" type (code-v0.4/fonts, SIL OFL: LICENSE-OFL-*.txt next to this file):
+   Unbounded for headings, Archivo for text, local woff2 only (R3). */
+@font-face{font-family:"Archivo";font-style:normal;font-weight:400;font-display:swap;src:url(archivo-400-latin-ext.woff2) format("woff2");unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family:"Archivo";font-style:normal;font-weight:400;font-display:swap;src:url(archivo-400-latin.woff2) format("woff2");unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:"Archivo";font-style:normal;font-weight:500;font-display:swap;src:url(archivo-500-latin-ext.woff2) format("woff2");unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family:"Archivo";font-style:normal;font-weight:500;font-display:swap;src:url(archivo-500-latin.woff2) format("woff2");unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:"Archivo";font-style:normal;font-weight:600;font-display:swap;src:url(archivo-600-latin-ext.woff2) format("woff2");unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family:"Archivo";font-style:normal;font-weight:600;font-display:swap;src:url(archivo-600-latin.woff2) format("woff2");unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:"Unbounded";font-style:normal;font-weight:500;font-display:swap;src:url(unbounded-500-latin-ext.woff2) format("woff2");unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family:"Unbounded";font-style:normal;font-weight:500;font-display:swap;src:url(unbounded-500-latin.woff2) format("woff2");unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+@font-face{font-family:"Unbounded";font-style:normal;font-weight:800;font-display:swap;src:url(unbounded-800-latin-ext.woff2) format("woff2");unicode-range:U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;}
+@font-face{font-family:"Unbounded";font-style:normal;font-weight:800;font-display:swap;src:url(unbounded-800-latin.woff2) format("woff2");unicode-range:U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;}
+
+:root {
+  /* Design Update 3 (23:03)/final palette (22:52): warm greige
+     greys + a violet accent -- replaces the old warm-paper/green-felt skin.
+     Accent hue shifted toward the designer's "Lavendel" style
+     (design mockup code-v0.4/proposals/ds-lav.css) -- darkened from
+     the designer's #6B5BD6 (5.13:1 on white, below R5's 7:1) to #4A3ABF (7.93:1). */
+  --accent: #4A3ABF;
+  --accent-edge: #362B8C;
+  --accent-tint: #ECE8FB;
+  --accent-ink: #ffffff;
+  --bg: #EEECE9;
+  --card-bg: #FAF9F7;
+  --border: #D6D2CC;
+  --card-edge: #BEB8B0;
+  --text: #24211E;
+  --muted: #615B55;
+  --overtime: #B4233C;
+  --serif: Georgia, "Iowan Old Style", "Palatino Linotype", "Book Antiqua", serif;
+  --sans: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --radius: 4px;
+  --gap: 14px;
+  /* P1: the pinned action area's own reserved height -- S4's "Take over sits
+     under the floating Safari address bar" finding (56px, a deliberate fixed allowance on
+     top of env(safe-area-inset-bottom), unchanged) plus a typical single-line button's own
+     min-height (.speak-queue-action: 54px) and a little breathing room either side. Shared
+     between the pinned buttons' own `bottom` offset and #page-scroll's bottom padding, so
+     the scrollable content's last line is never hidden underneath the floating button. */
+  --action-bar-reserve: calc(env(safe-area-inset-bottom, 0px) + 56px + 54px + var(--gap) * 2);
+  --scale: 1.15;
+  --shadow: 0 2px 0 var(--border);
+  /* the designer's v0.2 (design mockup index.html, commit b87d8e0f): one colour per
+     phone job, for recognition only (status line, pick buttons). Contrast on white text,
+     measured: mic 7.83:1, questions 8.89:1, timer 8.29:1, now 8.08:1, all 8.24:1,
+     none (no job yet / neutral header) 8.12:1 -- matches the designer's quoted "8,1:1".
+     independently built a data-panel-keyed duplicate of this same feature
+     (--job-questions/--job-timer/--job-now/--job-all with different hex values, no --job-mic/
+     --job-none, no icons); dropped at merge time (the operator 2026-11-01 05:27) in favour
+     of this already-shipped data-view-keyed version -- data-view vs data-panel goes to the designer as
+     a design question after the GP, not resolved here. */
+  --job-mic: #2E5A4C;
+  --job-questions: #2B4A7A;
+  --job-timer: #5B3F8C;
+  --job-now: #8A2F4F;
+  --job-all: #4A4F57;
+  --job-none: #5C4D3E;
+  --job-icon: url(icon-none.svg);
+
+  /* (W9): the motion token library -- mirrors
+     workshop/static/motion-tokens.css's values by hand (both are
+     the card's own allow-listed token files, tests/test_motion_design_lint.py).
+     Kept inline here, not imported: the skin directory (stage/static/workshop/)
+     is served standalone, one file at a time, no JS, no external @import
+     (workshop/skin.py's own route/lint rules) -- it cannot reach across to
+     workshop/static/ the way wall.html's <link> does. Same values either way,
+     so a phone and the wall never disagree on what "appear"/"glide" mean, even
+     though the two runtimes can't literally share these bytes. Motion only,
+     not colour: the two :root blocks below already diverge on colour (light
+     vs. the designer's ds-lav-dark palette further down) -- motion never does, so it
+     is declared once here, not repeated in the second block. */
+  --motion-tap: 120ms;
+  --motion-state: 200ms;
+  --motion-appear: 450ms;
+  --motion-reveal: 1100ms;
+  --motion-tap-meter: 150ms;
+  --motion-breathe: 1600ms;
+  --motion-pulse: 1000ms;
+  /* MUST 6: mirrors workshop/static/motion-tokens.css's own
+     --motion-reorder by hand, same rule as every other --motion-* value above. */
+  --motion-reorder: 600ms;
+  --ease-out: ease-out;
+  /* (S5b) added these four to motion-tokens.css's :root for the
+     discussion evaluator's W-word answers, but never to this skin's own mirror --
+      (review fix): without its own copy here, every var(--motion-w-*)
+     read on this standalone page resolved to nothing, so the animation/transition
+     shorthand it was used in silently fell back to `none`. Same values as there. */
+  --motion-w-shimmer: 2400ms;
+  --motion-w-arrive: 2000ms;
+  --motion-w-settle: 1800ms;
+  --motion-w-close: 1600ms;
+  /* Phone-only motion with no wall counterpart: the designer's busy ring and writing scene
+     (#ds-make, R6 exception). Values are the literals they replace (W9 token lint). */
+  --motion-busy-spin: 800ms;
+  --motion-make-spin: 700ms;
+  --motion-make-step: 400ms;
+  --motion-make-chip: 500ms;
+  --motion-make-chip-move: 700ms;
+  /* (fb 221): mirrors workshop/static/motion-tokens.css's own
+     --motion-toast by hand, same rule as every other --motion-* value above. */
+  --motion-toast: 700ms;
+  /* (fb 221, the operator 05.11.): the designer's info toast (#ds-toast.k-info) colours,
+     the acceptance tool's own literal values (proposals/ds-parts.js's #ds-toast CSS) --
+     a light-blue pill that reads on every --phase-bg tint this skin has, not one of the
+     palette's own --job-*/--accent* tokens (which are themed per panel/job, not this). */
+  --toast-info-bg: #8CC8FF;
+  --toast-info-ink: #0B1A2A;
+}
+
+/* --- page and generic parts: panels that land later (setting, release) inherit these ---
+   Design Update 18 (23:52): each phase gets its own dezent warm-neutral background, set as
+   --phase-bg by step/panel/release state below (contrast of --muted on every one of them is
+   >= 5.5:1, checked by hand: 5.53-6.36). "pick" (the view picker) and the default (no step
+   yet, i.e. intro+interview) share the plain --bg token's own shade. Re-measured for the designer's
+   v0.2 take-over (--text/--muted on each tint): pick 13.58:1/5.68:1, intro 13.33:1/5.57:1,
+   sort 13.44:1/5.62:1, prologue 13.42:1/5.61:1, release 13.23:1/5.53:1, feedback 13.72:1/5.74:1
+   -- all above the README's R5 floor (--muted on --bg >= 4.5:1) and the card's own >= 4.5:1. */
+/* P1 (Feedback 99, E-X-11): html/body themselves never scroll any more --
+   #page-scroll (table.html) is the one "content container" that does, so the pinned action
+   area below always stays inside the viewport regardless of how long a panel's content
+   gets. The old body padding moves onto #page-scroll verbatim (same 8px/var(--gap) values),
+   since body no longer has any content of its own to pad. */
+html, body { height: 100%; margin: 0; overflow: hidden; }
+/* table.html's own inline <style> (loaded before this file, so it loses on any property
+   this one also sets) still carries `body { padding: 8px; }` from before this card -- body
+   has no content of its own to pad any more, and an uncontested 8px on all four sides was
+   exactly what broke #frame-row's edge-to-edge bleed (its negative margin only ever
+   cancelled THIS file's own #page-scroll padding, never body's). Zeroed here, explicitly,
+   rather than editing the inline block out of table.html for a property this file already
+   owns everywhere else. */
+body { padding: 0; background: var(--phase-bg, var(--bg)); color: var(--text); font: calc(20px * var(--scale))/1.45 var(--sans); }
+#page-scroll { height: 100%; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding: 8px var(--gap) var(--action-bar-reserve); box-sizing: border-box; }
+body[data-panel="pick"] { --phase-bg: #EEECE9; }
+body[data-step="intro"], body[data-step="interview"] { --phase-bg: #ECE9F0; }
+body[data-step="sort"], body[data-step="setting"] { --phase-bg: #E8ECEA; }
+body[data-step="prologue"] { --phase-bg: #F0EAE4; }
+body[data-step="feedback"] { --phase-bg: #F1EDE5; }
+body[data-release="available"], body[data-release="released"], body[data-release="withdrawn"] { --phase-bg: #EDE8EC; }
+/* K7 (SPEC-konsolidiert.md "Prologue / Release / Feedback": "No mic UI on any phone from
+   here on"): the mic-permission seam (#start/#mic-refused) lives outside every panel
+    so it survives a reload into any view -- on these three phases it must
+   not show up regardless, even on the mic view (which now shares #panel-prologue there). */
+body[data-step="prologue"] #mic-grant, body[data-step="feedback"] #mic-grant { display: none; }
+.panel:not([hidden]) { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius);
+  border-bottom: 3px solid var(--card-edge); box-shadow: var(--shadow); padding: var(--gap); margin: 0 0 var(--gap); }
+.panel h2, .panel h3 { font-family: var(--serif); font-weight: normal; line-height: 1.2; margin: 0 0 12px; }
+.panel ul, .panel ol { padding-left: 1.2em; margin: 8px 0; }
+.panel li { margin: 6px 0; }
+button { color: var(--text); background: var(--card-bg); border: 2px solid var(--accent); border-radius: var(--radius); }
+input { color: var(--text); background: var(--card-bg); border: 2px solid var(--border); border-radius: var(--radius); padding: 0 10px; }
+
+/* --- the one primary-action style: Next (interview, setting, sort), the mic start, the
+   prologue retry and the release button all look the same (R-unify: vision review 2026-10-28
+   item 3 -- #setting-next and #sort-next used to fall back to the plain `button{}` rule, a
+   tall narrow pill or an oversized box). Apply via the shared ".next" class, not another id.
+   the designer's v0.2: angular (--radius, no pill), disabled rendered on --accent-tint with --muted
+   text instead of opacity -- measured contrast 5.14:1 (the designer's note: "5,1:1"). */
+#next, #start, #enroll-done, [data-prologue-retry], .next, #login-mic-allow {
+  display: block; width: 100%; min-height: 96px;
+  margin: 12px 0; font: calc(32px * var(--scale))/1.1 var(--serif); color: var(--accent-ink); background: var(--accent); border: 0;
+  border-radius: var(--radius); box-shadow: 0 4px 0 var(--accent-edge); transition: transform var(--motion-tap) var(--ease-out); }
+/* P1 (Feedback 99, E-X-11): pinned to the viewport bottom in every phase --
+   fixed, not the position: sticky the designer's own first attempt used (design inbox finding: that
+   one "lets it leave the zone at the end of the page"). left+right, not width: position:
+   fixed's own width: 100% above would otherwise compute against the viewport, past these
+   two gaps, since a fixed box is no longer sized by its (scrolling) parent at all. Below
+   #room-mode-overlay (999999) and the your-turn overlay (9999), above everything else. */
+#next, #start, #enroll-done, [data-prologue-retry], .next, #login-mic-allow,
+.speak-queue-action {
+  position: fixed; left: var(--gap); right: var(--gap); width: auto; margin: 0;
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 56px); z-index: 40; }
+/* P1 regression (test_workshop_page.py's phase_load): #start (the
+   travelling-phone mic-PERMISSION gesture, #mic-grant, outside every panel) and
+   #enroll-done (the interview-mic panel's own Start/Done, shown as "Start" text whenever
+   audio has not opened yet) can legitimately both be un-hidden at once -- in normal flow
+   they just stacked vertically, harmlessly; pinned to the SAME fixed spot they now overlap
+   and #enroll-done (later in the DOM) steals every click meant for #start.
+   Fix (the rule above was too broad, hiding #enroll-done any time #start was
+   merely un-hidden, which broke the real Start path: table.js renders #start the moment
+   renderMic() has the mic granted, well before #enroll-done has anything to do, and the
+   blanket rule hid the one button that mattered then too).
+   `pointer-events: none`, not `display: none` -- #enroll-done's own layout
+   (MUST 1's full-width locked placeholder, test_workshop_phones.py's case_f1_states) must
+   survive #start also being un-hidden; only its ability to steal the tap is what the
+   original regression needs gone.
+   Two cases actually need it, by `data-kind` (table.js renderInterviewMic(), mirrors
+   micButton()'s mode) and `data-control-state`:
+   - `kind="finish"` ("Fertig"/Done), any state: pressEnrollDone() opens the mic on ANY tap
+     while audio is still null (same `VIEW === "mic" && !audio` guard the `start` mode uses),
+     so a tap here would also send turn_done for a turn nobody locally recorded a byte of
+     (phase_load's own case: a travelling phone that never ran its own mic, dropped straight
+     into a global `turn.state === "answering"`). #start has to win that one outright.
+   - `kind="start"` while `locked` (no turn yet, or the desk/room-wide Go has not come):
+     nothing to tap on #enroll-done yet, but #start's own gesture (open the mic ahead of the
+     turn) still works and must not be swallowed by the inert placeholder sitting on top of it.
+   `kind="start"` while `ready` or `running` is deliberately left out: #enroll-done's own tap
+   already does everything #start's tap would, so it keeps the slot, exactly as before. */
+body:has(#start:not([hidden])) #enroll-done[data-kind="finish"],
+body:has(#start:not([hidden])) #enroll-done[data-kind="start"][data-control-state="locked"] {
+  pointer-events: none;
+}
+#next:active, #start:active, #enroll-done:active, [data-prologue-retry]:active, .next:active,
+#login-mic-allow:active { transform: translateY(3px); }
+#next[data-locked] { background: var(--accent-tint); color: var(--muted); box-shadow: none; }
+#enroll-done:disabled, #login-mic-allow:disabled { background: var(--accent-tint); color: var(--muted); box-shadow: none; }       /* Design Update 7: disabled until RoleEnrolled */
+/* (the designer's v0.5 busy state, ds-parts.js @092a7ac3 lines ~361-362, ported 1:1):
+   every action button shows a spinning ring from the tap until table.js/speak-queue.js clear
+   `[data-busy]` again (the hub's matching reply, or a 3 s safety timeout) -- replaces the
+    "running = pressed look" rule this block used to carry. the operator 02.11. ~19:30:
+   R6's spinner ban is lifted for this one case (README.md R6), the rest of R6 stays. No
+   `@media (prefers-reduced-motion: reduce)` rule of its own is needed: the one at the end of
+   this file already turns every animation off, which leaves this ::after ring in place, just
+   not spinning -- the static busy marker the reduced-motion case asks for. */
+html body button[data-busy] { position: relative; color: transparent !important; }
+html body button[data-busy]::after { content: ""; position: absolute; inset: 0; margin: auto;
+  width: 18px; height: 18px; border-radius: 50%; border: 2.5px solid rgba(255, 255, 255, .35);
+  border-top-color: #fff; animation: dsBusy var(--motion-busy-spin) linear infinite; }
+@keyframes dsBusy { to { transform: rotate(360deg); } }
+/* (MUST 1, design update the designer's v0.5 01.11.: "every action button reacts at
+   once, at most 3 s" -- a spinner in the designer's proposal, which R6 forbids outright here (no
+   spinner at all, not even a brief one) -- so `running` keeps the look of an actively held
+   button instead: full accent colour, pressed down, no raised edge. Source order after the
+   plain :disabled rule above, so a button that is both disabled and running (table.js sets
+   both while micPending) reads as running, never as locked. */
+#next[data-control-state="running"], #enroll-done[data-control-state="running"],
+.speak-queue-action[data-control-state="running"],
+#login-mic-allow[data-control-state="running"] {
+  background: var(--accent); color: var(--accent-ink); box-shadow: none; transform: translateY(3px); }
+/* : the own-state card's action button is always on screen (every step, not
+   just sort/setting, unlike the strip above) -- the designer's own smaller size for it (owncard's
+   .own .btn, 54 px) rather than the giant primary-action style every other button above uses,
+   so it never adds a second near-full-screen button to a panel that already has its own. */
+.speak-queue-action { display: block; width: 100%; min-height: 54px; margin: 8px 0;
+  font: calc(20px * var(--scale)) var(--serif); color: var(--accent-ink); background: var(--accent); border: 0;
+  border-radius: var(--radius); box-shadow: 0 3px 0 var(--accent-edge); transition: transform var(--motion-tap) var(--ease-out); }
+.speak-queue-action:active { transform: translateY(2px); }
+/* fb 265 item 4 (the operator 06.11., pair-q8.png vs the acceptance tool): the tool's own action
+   zone has a thin divider line above the pill button (the designer's design doc, "action area ...
+   line on top, 16 px padding") -- the live Speak/Done button had none. left/right match the
+   button's own fixed left/right bleed (var(--gap) from the viewport edge on both sides, not
+   the reported left-16/right-0 overflow -- see summary). */
+.speak-queue-action::before { content: ""; position: absolute; left: calc(-1 * var(--gap));
+  right: calc(-1 * var(--gap)); top: -16px; height: 1px; background: var(--border); }
+
+/* --- pick: the role-sign buttons before a phone has its job --- */
+#panel-pick button { font-family: var(--serif); background: var(--card-bg); border: 3px solid var(--accent);
+  border-radius: var(--radius); border-bottom: 4px solid var(--card-edge); box-shadow: var(--shadow); }
+/* the designer's v0.2: one colour per job on the pick buttons too (table.js already tags each with
+   its own data-view, the same attribute the assigned phone later carries). */
+#panel-pick button[data-view="mic"] { border-color: var(--job-mic); }
+#panel-pick button[data-view="questions"] { border-color: var(--job-questions); }
+#panel-pick button[data-view="timer"] { border-color: var(--job-timer); }
+#panel-pick button[data-view="now"] { border-color: var(--job-now); }
+#panel-pick button[data-view="all"] { border-color: var(--job-all); }
+
+/* --- status line (Design Update 3, 23:03): mic icon + Recording/Microphone off, every phase,
+   every phone (removed the "move closer" hint this line used to also carry).
+   the designer's v0.2: rendered
+   as a full-bleed band in the phone's own job colour (neutral --job-none before a job is
+   picked, 8.12:1 against white text), with a static Lucide icon per job via ::before
+   (icon-mic/questions/timer/now/all.svg, icon-none.svg before pick -- LICENSE-lucide.txt
+   next to this file, ISC). (regression): the band itself is
+   #frame-row (the full-width flex row, #status's negative side margins moved up onto it),
+   not #status -- #status is only ever as wide as its own icon+label content, so a background
+   on #status alone leaves #frame-header sitting on the page ground beside it, not inside the
+   band.
+   OVERRIDE 2 (the operator 02.11. design check): same #frame-row band, confirmed
+   against table.html's own flex wrapper around #status and #frame-header -- #frame-header
+   ("Theatre 2036") sits inside it, and the band must be flush with the viewport edges. --- */
+#frame-row { color: var(--accent-ink); background: var(--job-none); margin: 0 calc(var(--gap) * -1) 8px;
+  padding: 6px var(--gap); }
+#status { display: flex; align-items: center; gap: 8px; font-size: calc(20px * var(--scale)); }
+#status::before { content: ""; width: 20px; height: 20px; flex: 0 0 auto; background-color: currentColor;
+  mask-image: var(--job-icon); -webkit-mask-image: var(--job-icon);
+  mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-position: center; -webkit-mask-position: center;
+  mask-size: contain; -webkit-mask-size: contain; }
+body[data-view="mic"] #status::before { --job-icon: url(icon-mic.svg); }
+body[data-view="questions"] #status::before { --job-icon: url(icon-questions.svg); }
+body[data-view="timer"] #status::before { --job-icon: url(icon-timer.svg); }
+body[data-view="now"] #status::before { --job-icon: url(icon-now.svg); }
+body[data-view="all"] #status::before { --job-icon: url(icon-all.svg); }
+#status .mic-icon { width: 20px; height: 20px; flex: 0 0 auto; }
+/* MUST 2 part (1), the operator 2026-11-04 feedback 169: the Q1 object's own symbol
+   (icon-object-N.svg, same mask recipe as #vorstellen-icon/.combined-role-icon below) now
+   lives beside #frame-header instead of a text line on #panel-role-finding -- currentColor
+   so it always matches whatever colour #frame-header itself takes on the current band.
+   table.js's renderFrameHeaderIcon() is the only place data-icon is ever set/cleared here,
+   gated on the panel actually being "role-finding" (Q1 itself, never Q1b "Vorstellen"). */
+#frame-header-icon { display: none; width: 14px; height: 14px; flex: 0 0 auto;
+  background-color: currentColor; mask-image: var(--frame-header-icon, none);
+  -webkit-mask-image: var(--frame-header-icon, none); mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat; mask-position: center; -webkit-mask-position: center;
+  mask-size: contain; -webkit-mask-size: contain; }
+#frame-header-icon[data-icon] { display: inline-block; }
+#frame-header-icon[data-icon="object-0"] { --frame-header-icon: url(icon-object-0.svg); }
+#frame-header-icon[data-icon="object-1"] { --frame-header-icon: url(icon-object-1.svg); }
+#frame-header-icon[data-icon="object-2"] { --frame-header-icon: url(icon-object-2.svg); }
+#frame-header-icon[data-icon="object-3"] { --frame-header-icon: url(icon-object-3.svg); }
+#frame-header-icon[data-icon="object-4"] { --frame-header-icon: url(icon-object-4.svg); }
+
+/* --- D3 (mic-level icon, SCOPE UPDATE (a)): the one fixed place, right-
+   aligned in #own-role-line next to the role name, every speaking phase (Q1b/Q3/Q5/Q8).
+   the designer's LUCIDE.mic path (identical to icon-mic.svg); size follows the live level, never
+   its colour/position -- table.js hides the whole svg when this phone's mic is off. --- */
+#own-role-line { display: flex; align-items: center; justify-content: space-between; gap: var(--gap); }
+#own-role-line [data-mic="level"] { width: 20px; height: 20px; flex: 0 0 auto;
+  transform: scale(calc(0.6 + 0.4 * var(--level, 0)));
+  transition: transform var(--motion-tap-meter) var(--ease-out); }
+
+/* --- : phone 1's own status row (D7 status-row.js), >= 20 px (MUST 6) --- */
+#mic-status-row { display: flex; align-items: center; gap: 8px; font-size: calc(22px * var(--scale)); margin: 0 0 4px; }
+#mic-status-row .mic-icon { width: 20px; height: 20px; flex: 0 0 auto; border-radius: 50%;
+  background: var(--accent); transform: scale(var(--level, 1)); transition: transform var(--motion-tap-meter) var(--ease-out); }
+
+/* fb 235/246 (the operator, Session A 22:40 / 06.11.): the repeating "tap Speak" notice -- icon + text
+   in a row, same shape as #mic-status-row above, directly above whichever Speak button is on
+   screen (table.js inserts it as a real DOM sibling, never a fixed-position overlay). No
+   animation at all -- the AC explicitly asks for no blinking. */
+.your-turn-notice { display: flex; align-items: center; gap: 8px; margin: 0 0 8px;
+  font: 600 calc(16px * var(--scale))/1.3 var(--sans); color: var(--text); }
+.your-turn-notice-icon { width: 16px; height: 16px; flex: 0 0 auto; border-radius: 50%;
+  background: var(--accent); }
+
+/* --- mic+timer+role-card (Design Updates 3/5/7/8/9/10/16): the travelling interview phone.
+   State 'ready'/'intro': the role card, large; state 'answer': the draining ring + Done. --- */
+#role-card { background: var(--card-bg); border: 1px solid var(--card-edge); border-radius: var(--radius);
+  border-bottom: 2px solid var(--card-edge); box-shadow: var(--shadow); padding: 6px var(--gap); margin: 0 0 4px; }
+#role-object { font-size: calc(22px * var(--scale)); color: var(--muted); margin: 0; }
+#role-name { font-size: calc(32px * var(--scale)); font-family: var(--serif); margin: 0; }
+/* : bio is an optional short line (hidden when the role has none, true for
+   the researcher's five roles today); it is NOT the text to read aloud -- that is #role-story below.
+   margin-top (not -bottom): a hidden bio/read-aloud/story contributes no box at all, so this
+   never reserves a gap in front of nothing (the F1 "busiest layout" check pins this). */
+#role-bio:not([hidden]) { font-size: calc(20px * var(--scale)); color: var(--muted); line-height: 1.2; margin: 4px 0 0; }
+#role-read-aloud:not([hidden]) { font-size: calc(18px * var(--scale)); color: var(--muted); margin: 4px 0 0; }
+/* (was #role-bio's treatment, SCOPE UPDATE): story is the
+   role's own first-person text, read aloud for the intro -- it scrolls inside the card
+   (never the page) once it is longer than this. */
+#role-story:not([hidden]) { font-size: calc(22px * var(--scale)); line-height: 1.4; margin: 4px 0 0; max-height: 150px; overflow-y: auto; }
+#enroll-line { font-size: calc(20px * var(--scale)); color: var(--muted); margin: 0 0 4px; }
+#enroll-line[data-state="rejected"] { color: var(--overtime); }
+/* bold heading (the operator 2026-10-30): >= 30 px is MUST 6, the weight is new */
+#mic-task { font: bold calc(32px * var(--scale))/1.2 var(--serif); margin: 0 0 4px; }
+#mic-task[data-tone="detected"] { color: var(--accent); }
+#mic-task[data-tone="rejected"] { color: var(--overtime); }
+
+/* --- (mic-screen.css): the one thing to read on this screen is the role's
+   story, so it gets the largest, darkest text; the status row, task line and enroll hint
+   above it become a quiet header. mic-screen.css names this element #role-story -- it does
+   not exist on table.html (the current id is #role-bio); mapped onto #role-bio instead, noted
+   as a deviation. The 180 px scroll box is lifted here on purpose (the designer: "no 150 px
+   scroll box") -- the page itself scrolls for a long story, same as #prologue-narration.
+   mic-task stays >= 30 px and mic-status-row >= 20 px: MUST 6, pinned by a
+   browser check in tests/test_workshop_phones.py (mic_task_px/status_row_px) -- the designer's own
+   mic-screen.css sizes (14/22 px) go below that floor and are not ported. */
+#panel-interview-mic #mic-status-row { font-size: 20px; }
+#panel-interview-mic #mic-task { font: bold 30px/1.25 var(--serif); margin: 0 0 4px; }
+#panel-interview-mic #enroll-line { font-size: 18px; margin: 0 0 10px; }
+#panel-interview-mic #role-card { background: transparent; border: 0; border-top: 1px solid var(--border);
+  border-radius: 0; box-shadow: none; padding: 10px 0 0; }
+#panel-interview-mic #role-object { font-size: 13px; letter-spacing: .06em; text-transform: uppercase;
+  margin: 0 0 2px; }
+#panel-interview-mic #role-name { font: 18px/1.3 var(--sans); color: var(--muted); margin: 0 0 8px; }
+#panel-interview-mic #role-bio { font-size: 24px; line-height: 1.5; color: var(--text);
+  border-left: 4px solid var(--accent); padding: 2px 0 2px 14px; margin: 0 0 10px;
+  max-height: none; overflow: visible; }
+/* P1: the old position: sticky here (the designer's own first attempt, per the
+   design inbox finding) is superseded by the universal position: fixed rule below, which
+   never "leaves the zone at the end of the page" the way sticky inside a scrolling
+   ancestor could -- removed rather than left to lose on specificity. */
+
+/* --- (D7)/: the live transcript strip, fixed ~96 px, fading
+   upward. (the operator 2026-10-30 20:45): no scrolling, auto or manual -- people
+   mistype/tap into it. overflow:hidden plus a bottom-aligned flex column clips old lines off
+   the TOP as new ones arrive at the bottom; there is nothing to scroll, so there is no
+   scrollbar and no scroll handler to attach. No transcript label survives: the speaking
+   seat's own ones went with, #timer-transcript-label with f7a9a190. --- */
+.transcript-strip { height: 96px; overflow: hidden; display: flex; flex-direction: column;
+  justify-content: flex-end; border-top: 1px solid var(--border);
+  padding-top: 6px; margin: 0 0 var(--gap);
+  -webkit-mask-image: linear-gradient(to bottom, transparent, black 24px);
+  mask-image: linear-gradient(to bottom, transparent, black 24px); }
+.transcript-strip .transcript-line { font-size: 18px; color: var(--text); margin: 2px 0;
+  flex-shrink: 0; }   /* else flex would compress every line to fit instead of clipping the old ones */
+/* Dress rehearsal point 6 ("the live transcript switches between italic and roman, a
+   restless text"): one typeface throughout -- provisional (not-yet-final) text differs only
+   in weight/opacity, never switches style mid-sentence. */
+.transcript-strip .transcript-tentative { color: var(--muted); font-style: normal; font-weight: 400;
+  opacity: .65; }
+.transcript-strip .transcript-confirmed { font-style: normal; font-weight: 500; opacity: 1; }
+
+/* --- the draining ring: the answer countdown (Update 16, no mm:ss) and the ambient ring
+   timer placeholder (Update 12/13), both digit-less (Feedback 61: no
+   digits/seconds anywhere on the phone). A single conic-gradient ring; JS only ever sets
+   --ring-frac (0..1 remaining) and the data-overtime/data-pulse attributes below. --- */
+.ring { --ring-size: 260px; --ring-stroke: 18px; width: var(--ring-size); height: var(--ring-size);
+  border-radius: 50%; margin: 24px auto; position: relative; display: flex; align-items: center;
+  justify-content: center;
+  background: conic-gradient(var(--ring-color, var(--accent)) calc(var(--ring-frac, 1) * 360deg),
+              var(--ring-empty, var(--accent-tint)) 0);
+  transition: background var(--motion-state) linear; }
+.ring::before { content: ""; position: absolute; inset: var(--ring-stroke); border-radius: 50%;
+  background: var(--card-bg); }
+/* : overtime (--ring-frac reaches 0, D7's ringDisplay already clamps it
+   there) is an EMPTY bar in the designer's --overtime red, not a sliver of it -- --ring-empty (the
+   unfilled conic-gradient stop above) switches to --overtime too, so the whole ring reads
+   red once time is up, gently blinking via the designer's own closer-blink keyframes (the .closer-hint
+   pattern above), never the pre-overtime ring-pulse scale wobble. */
+.ring[data-overtime="1"] { --ring-color: var(--overtime); --ring-empty: var(--overtime);
+  animation: closer-blink var(--motion-pulse) ease-in-out infinite; }
+.ring[data-pulse="1"]:not([data-overtime="1"]) { animation: ring-pulse var(--motion-pulse) ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) {
+  .ring[data-pulse="1"] { animation: none; }
+  .ring[data-overtime="1"] { animation: none; }
+}
+@keyframes ring-pulse { 50% { transform: scale(1.03); } }
+/* S3 (dress rehearsal finding: "the timer ring takes the top third and is empty inside") --
+   the four ambient, digit-less rings (hintRingFrac's drained-fraction decoration) removed on
+   phones: the designer's prototype has no countdown ring on any phone screen either, and the one time
+   signal they carried duplicates the staged hint banner's own text (renderSettingHintBanner).
+   The per-turn answering countdown (#answer-ring) is the one ring that is "used elsewhere in
+   the UI" with actual content, and stays untouched. */
+#timer-ring, #combined-ring, #mic-block-ring, #setting-check-ring { display: none !important; }
+#interview-last-turn { text-align: center; color: var(--muted); }
+/* (Q1b "Vorstellen", the operator's merge gate verbatim: "a draining BAR without
+   digits, red blink on overtime"): the own-minute bar, read via the exact same --ring-frac/
+   [data-overtime] contract ring.js's renderRing() already writes for the circular .ring
+   above (table.js reuses that function unchanged) -- just drawn as a linear fill instead
+   of a conic one, with no digit child at all (renderRing writes no
+   digits anywhere). Overtime is the same EMPTY-bar-red as the ring above (--ring-empty). */
+.drain-bar { height: 14px; border-radius: 7px; background: var(--ring-empty, var(--accent-tint));
+  margin: 24px auto; max-width: 320px; overflow: hidden; position: relative; }
+.drain-bar::before { content: ""; position: absolute; inset: 0; transform-origin: left center;
+  transform: scaleX(var(--ring-frac, 1)); background: var(--ring-color, var(--accent));
+  transition: transform var(--motion-state) linear; }
+.drain-bar[data-overtime="1"] { --ring-color: var(--overtime); --ring-empty: var(--overtime);
+  animation: closer-blink var(--motion-pulse) ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .drain-bar[data-overtime="1"] { animation: none; } }
+
+/* point 1 (scope correction 2026-10-30): the bold task heading on top of
+   the three plain-text question cards -- no highlight, no dimming, no button any more. */
+#questions-announce { font: bold calc(24px * var(--scale))/1.3 var(--serif); margin: 0 0 12px; }
+/* D4: the asker's own 10 s nudge fades in (table.js sets the opacity
+   itself, start then flipped to 1 on the next frame -- this is just the transition). */
+#questions-announce-hint { transition: opacity var(--motion-appear) var(--ease-out); }
+/* --- questions: three playing cards (Design Update 6: no "for <name>" tags any more) --- */
+#questions .card { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius);
+  border-bottom: 3px solid var(--card-edge); box-shadow: var(--shadow); padding: 18px; margin: 12px 0;
+  font: calc(22px * var(--scale))/1.35 var(--serif); transition: transform var(--motion-tap-meter) var(--ease-out), opacity var(--motion-tap-meter);
+  max-height: 300px; overflow: hidden; }
+/* D5 (the designer's ask-pick.js fade): once the round's own pick is confirmed, every
+   OTHER suggestion fades to 0 opacity, THEN collapses the row -- only the chosen card stays.
+   the operator's motion default for this pair (asker fade + the answerer's own arrival below):
+   "slow and smooth, ~2 s, ease-in-out", --motion-ask-arrive. The collapse properties share
+   the same duration, delayed by it, so the fade finishes before the row starts shrinking. */
+#questions .card[data-picked="0"] { opacity: 0; max-height: 0; margin-top: 0; margin-bottom: 0;
+  padding-top: 0; padding-bottom: 0; border-width: 0;
+  transition: opacity var(--motion-ask-arrive) ease-in-out,
+    max-height var(--motion-ask-arrive) ease-in-out var(--motion-ask-arrive),
+    margin var(--motion-ask-arrive) ease-in-out var(--motion-ask-arrive),
+    padding var(--motion-ask-arrive) ease-in-out var(--motion-ask-arrive),
+    border-width var(--motion-ask-arrive) ease-in-out var(--motion-ask-arrive); }
+.picked { font-size: calc(18px * var(--scale)); color: var(--muted); }
+/* D5: the answerer's own question "arrives" (the designer's @keyframes arrive, defined above) at the
+   same ~2 s, ease-in-out -- table.js re-triggers this class the instant a `.picked` line that
+   was empty first shows text, never on an unrelated re-render of the same pick. */
+.picked.arrive-in { animation: arrive var(--motion-ask-arrive) ease-in-out; }
+
+/* --- now: the role sign of whoever is on, bullets growing underneath ---
+   talk-share list/placeholder and the now-placeholder belong to K7 (phones
+   3/4/5) -- this card does not build that markup, so their CSS lands with it, not here
+   (S1 regression fix, those ids are not on the page yet). */
+#now-name { font: calc(44px * var(--scale))/1.15 var(--serif); text-align: center; margin: 0 0 12px; padding: 16px 8px;
+  background: var(--card-bg); border-top: 6px solid var(--accent); border-bottom: 3px solid var(--card-edge); box-shadow: var(--shadow); }
+#now-name.pulse, #combined-now-name.pulse { outline: 3px solid var(--accent); animation: none; }
+#now-bullets li, #people li, #combined-now-bullets li { font-size: calc(22px * var(--scale)); animation: arrive var(--motion-state) var(--ease-out); }
+@keyframes arrive { from { opacity: 0; transform: translateY(6px); } }
+/* K7 (Phone 4 Now): "below small cards of the persons who already answered". */
+#now-others { display: flex; flex-wrap: wrap; gap: 10px; margin-top: var(--gap); }
+#now-others .now-other { flex: 1 1 140px; background: var(--card-bg); border: 1px solid var(--border);
+  border-radius: var(--radius); border-bottom: 3px solid var(--card-edge); padding: 10px; }
+#now-others .now-other h4 { font: calc(18px * var(--scale))/1.2 var(--serif); margin: 0 0 4px; color: var(--muted); }
+#now-others .now-other li { font-size: calc(16px * var(--scale)); }
+
+/* Q1, the designer v0.3 (design mockup index.html .lv-head/.lv-who/
+   .lv-do): the combined panel's who-speaks-now header -- name large, job below it in the
+   same block (not the #now-name card chrome above, which #panel-now keeps as-is), the ring
+   beside it. Its own rules, not grouped into #now-name's selectors: the layouts differ. */
+#combined-head { display: flex; align-items: center; gap: var(--gap); margin: 0 0 12px; }
+#combined-who { flex: 1 1 auto; min-width: 0; }
+#combined-now-name { font: calc(32px * var(--scale))/1.15 var(--serif); margin: 0; }
+#combined-now-job { font-size: calc(18px * var(--scale)); color: var(--muted); margin: 2px 0 0; }
+#combined-now-doing { font: 600 calc(16px * var(--scale))/1.3 var(--sans); color: var(--accent); margin: 6px 0 0; }
+/* the shared .ring token set, just a smaller size here ("the round ring small beside it") --
+   #answer-ring on phone 1 and #timer-ring on phone 3/5 stay the full 260px countdown ring. */
+#combined-ring { --ring-size: 72px; --ring-stroke: 8px; margin: 0; flex: 0 0 auto; }
+/* (Q1): earlier persons collapse to one line each ("name: first note"),
+   never the #now-others card grid above -- #panel-now's own rotating variant keeps that. */
+#combined-now-others { list-style: none; padding: 0; margin: 8px 0 var(--gap); }
+#combined-now-others li { font-size: calc(18px * var(--scale)); padding: 4px 0; border-top: 1px solid var(--border); }
+#combined-now-others li:first-child { border-top: 0; }
+#combined-now-others .combined-other-name { display: block; color: var(--muted); font-weight: 600; }
+#combined-now-others .combined-other-bullets { list-style: disc; padding-left: 1.2em; margin: 2px 0 0; }
+#combined-now-others .combined-other-bullets li { border-top: 0; padding: 1px 0; font-size: calc(16px * var(--scale)); }
+
+/* (Q3 listener phones, Feedback 143): MUST 2's "Speaking now"/"Already
+   spoke" labels and role icon, per the acceptance tool's own .lbl/icon markup (its
+   `<div class="lbl">Speaking now</div>` / `<div class="lbl">Already spoke</div>`), and the
+   row that icon sits in -- #combined-now-label is Speaking now's own label, reusing the
+   element already built (its text is now that label's wording, replacing
+   the old plain "Now"). */
+#combined-now-label, #combined-others-label { font: 600 calc(13px * var(--scale))/1.2 var(--sans);
+  text-transform: uppercase; letter-spacing: .08em; color: var(--muted); margin: 0 0 4px; }
+#combined-others-label[hidden] { display: none; }
+.combined-row { display: flex; align-items: center; gap: 8px; }
+#combined-now-others li .combined-row { margin-bottom: 2px; }
+/* Same icon-object-N.svg marks .login-who-icon and the speak-queue circles already
+   mask in by person slot -- reused here rather than a second icon set for the same five
+   roles. Speaking-now reads larger (30px, the acceptance tool's iconHTML(1,30)) than an
+   already-spoke row (22px, iconHTML(0/4,22)). */
+.combined-role-icon { display: inline-block; flex: 0 0 auto; width: 22px; height: 22px;
+  background-color: var(--muted); mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat;
+  mask-position: center; -webkit-mask-position: center; mask-size: 90%; -webkit-mask-size: 90%; }
+#combined-who .combined-role-icon { width: 30px; height: 30px; background-color: var(--accent); }
+.combined-role-icon[data-icon="object-0"] { mask-image: url(icon-object-0.svg); -webkit-mask-image: url(icon-object-0.svg); }
+.combined-role-icon[data-icon="object-1"] { mask-image: url(icon-object-1.svg); -webkit-mask-image: url(icon-object-1.svg); }
+.combined-role-icon[data-icon="object-2"] { mask-image: url(icon-object-2.svg); -webkit-mask-image: url(icon-object-2.svg); }
+.combined-role-icon[data-icon="object-3"] { mask-image: url(icon-object-3.svg); -webkit-mask-image: url(icon-object-3.svg); }
+.combined-role-icon[data-icon="object-4"] { mask-image: url(icon-object-4.svg); -webkit-mask-image: url(icon-object-4.svg); }
+/* MUST 6 (the operator 03.11. 23:00 Nachtrag): a row that changed position (an existing
+   already-spoke row reordering, or the just-demoted speaking-now person falling in at the
+   top) glides there, never a jump -- table.js's flipRows() sets the inverted transform/
+   opacity inline, then adds this class one frame later so the transition actually plays.
+   The file-wide `prefers-reduced-motion: reduce` rule at the end of this file already
+   overrides the transition to none; flipRows() also skips the whole measurement under it
+   ("keine Animation", not merely a neutralized one). */
+.combined-row-flip { transition: transform var(--motion-reorder) ease-in-out, opacity var(--motion-reorder) ease-in-out; }
+
+/* point 5: this phone has no task of its own during the interview -- a
+   short bold heading says so, instead of showing nothing. */
+#timer-task, #now-task, #combined-task { font: bold calc(22px * var(--scale))/1.3 var(--serif); margin: 0 0 12px; }
+/* : #timer (the operator's own round-advance digits, table.html) never got a
+   scaled override here the way #now-name above does -- stuck at table.html's functional-
+   layout default (48px), half the README's own R5 floor (`#timer` >= 96 px). max() keeps
+   the hard floor even at PHONE_FIT_MIN_SCALE's smallest --scale, same pattern
+   #setting-check-talk-share-title below already uses. */
+#timer { font: max(96px, calc(96px * var(--scale)))/1.1 var(--serif); }
+/* K7 (Phone 3 Timer/Phone 5, SPEC-konsolidiert.md "Phone 3 Timer"): the talk-share list --
+   "a person appears only once detected ...; others are empty dot placeholders". fb 241/239
+   (the operator 06.11.) retired the combined (listener) panel's own copy of this list entirely --
+   #talk-share-title/#talk-share-list below are phone 3/5's (#panel-timer) own now. */
+#talk-share-title { font: calc(22px * var(--scale))/1.2 var(--serif); margin: 0 0 8px; }
+#talk-share-list { list-style: none; padding: 0; margin: 0 0 var(--gap); }
+.talk-share-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.talk-share-row:not([data-detected]) { opacity: .5; }
+.talk-share-row:not([data-detected])::before { content: ""; width: 10px; height: 10px; border-radius: 50%;
+  border: 2px solid var(--muted); flex: 0 0 auto; }
+.talk-share-name { flex: 1 1 auto; font-size: calc(18px * var(--scale)); }
+.talk-share-bar { flex: 2 1 auto; height: 10px; border-radius: 5px; background: var(--accent-tint);
+  background-image: linear-gradient(to right, var(--accent) calc(var(--share, 0) * 100%), transparent 0); }
+.talk-share-pct { flex: 0 0 auto; font-size: calc(16px * var(--scale)); color: var(--muted); min-width: 2.5em; text-align: right; }
+/* : the feedback round's own-vs-average two-bar block reuses .talk-share-bar
+   as-is for "You" (solid fill, unchanged); "Average" gets this ONE additive modifier for a
+   dashed/striped fill instead -- the base rule's own behaviour for the pre-existing
+   #talk-share-list panel is untouched. */
+.talk-share-bar-dashed { background-image: repeating-linear-gradient(to right,
+  var(--accent) 0, var(--accent) 6px, transparent 6px, transparent 12px);
+  background-size: calc(var(--share, 0) * 100%) 100%; background-repeat: no-repeat; }
+
+/* (the operator 02.11.): the shared Sort+Setting discussion screen, every phone --
+   ring + staged hint banner, no per-seat split any more. The six-question checklist that
+   used to render here (#setting-check-list) was retired by in favour of
+   the researcher's seven-W catalogue (#discussion-catalogue, further down). */
+/* "increasingly prominent": 50 % is a quiet note, 75 % gains a border, 90 % is the loud,
+   red version (spec: "ONLY 'Still open: ...' in red"). */
+#setting-check-hint { padding: 10px 12px; border-radius: var(--radius); margin: 0 0 var(--gap); }
+#setting-check-hint[data-level="1"] { color: var(--muted); }
+#setting-check-hint[data-level="2"] { border: 2px solid var(--accent); color: var(--accent); }
+#setting-check-hint[data-level="3"] { border: 2px solid var(--overtime); color: var(--overtime); font-weight: bold; }
+/* (the operator 03.11., diskussion-konzept.md H7 "Eigener Redeanteil", supersedes the
+   list-of-five above): two bars on one scale, no minutes, no percent -- "Average" (dashed
+   grey) over "You" (solid violet), same --share custom-property pattern as .talk-share-bar. */
+/* (fb 207/245): #setting-check-talk-share-title is a bare <h3> with no
+   font-size rule of its own -- it only ever picks up the browser default (1.17em of
+   whatever it inherits), which is the SAME unreactive flat body size .w-catalogue-text
+   had before this card's cascade-bug fix above; #panel-setting-check only ever shows
+   during Q5 (sort/setting, views.js SORT_SETTING), so fixing it here cannot touch any
+   other, already-passing cue. .talk-share-own-row's 4px/10px were plain px, not --gap --
+   this panel is shared only within Q5 too (Phone 3/5's own #talk-share-title/-list are a
+   different id, untouched). */
+#setting-check-talk-share-title { font-size: max(13px, calc(22px * var(--scale))); margin: 0 0 calc(var(--gap) * 0.3); }
+.talk-share-own { margin: 0 0 calc(var(--gap) * 0.3); }
+.talk-share-own-row { display: flex; align-items: center; gap: calc(var(--gap) * 0.5);
+  padding: calc(var(--gap) * 0.04) 0; }
+.talk-share-own-label { flex: 0 0 auto; font-size: calc(16px * var(--scale)); color: var(--muted); min-width: 5em; }
+.talk-share-own-bar { flex: 1 1 auto; height: 10px; border-radius: 5px; }
+.talk-share-own-bar--average { border: 2px dashed var(--muted);
+  background-image: linear-gradient(to right, var(--muted) calc(var(--share, 0) * 100%), transparent 0); }
+.talk-share-own-bar--you { background: var(--accent-tint);
+  background-image: linear-gradient(to right, var(--accent) calc(var(--share, 0) * 100%), transparent 0); }
+
+/* --- all: one card per role, the current one framed --- */
+#people > [data-person] { background: var(--card-bg); border: 1px solid var(--border); border-radius: var(--radius);
+  border-bottom: 3px solid var(--card-edge); padding: 12px; margin: 10px 0; scroll-margin-top: var(--gap); }
+#people > [data-person][data-current] { border: 3px solid var(--accent); border-bottom-width: 4px; }
+#people .name { font: calc(24px * var(--scale))/1.2 var(--serif); color: var(--text); background: none; border: 0; padding: 0; }
+#people .name.pulse { outline: 3px solid var(--accent); animation: none; }
+#people .words { color: var(--muted); }
+
+
+/* --- prologue (S11): a script page; the waiting state shows the group's setting --- */
+#prologue-state, #prologue-timer-state { font: calc(26px * var(--scale))/1.3 var(--serif); text-align: center; margin: 12px 0; }
+#prologue-hint, #prologue-timer-hint { color: var(--muted); text-align: center; }
+/* --- S11 writing scene (the operator 02.11.): the designer's v0.5 proposal renderMake
+   ported 1:1 (ids/classes kept) -- plays while table.js's advanceMakeScene() reports
+   "writing"/"leave". R6 EXCEPTION (skin.R6_EXEMPT_IDS, see README "R6 exception"): this
+   subtree moves on purpose -- a spinner on the running step, chips flowing in/out, lines
+   growing, a longer fade on leave -- every other id in this file still keeps R6's 300 ms cap.
+   Same CSS variables as the rest of the skin (--card-bg/--text/--border/--accent/--muted/
+   --accent-ink), never the designer's own hardcoded palette. --- */
+#ds-make-heading { margin: 0; font: 800 calc(26px * var(--scale))/1.3 var(--serif); color: var(--text); }
+#ds-make-sub { margin: -4px 0 4px; color: var(--text); }
+#ds-make { display: flex; flex-direction: column; gap: 14px; transition: opacity var(--motion-appear) ease, transform var(--motion-appear) ease; }
+#ds-make.leave { opacity: 0; transform: translateY(-10px); }
+#ds-make .m-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+#ds-make .m-steps li { position: relative; padding-left: 26px; color: var(--muted); transition: color var(--motion-make-step); }
+#ds-make .m-steps li::before { content: ""; position: absolute; left: 0; top: 3px; width: 14px; height: 14px;
+  border-radius: 50%; border: 1.5px solid var(--border); box-sizing: border-box; }
+#ds-make .m-steps li.run { color: var(--text); }
+#ds-make .m-steps li.run::before { border-color: var(--accent); border-top-color: transparent;
+  animation: dsMakeSpin var(--motion-make-spin) linear infinite; }
+#ds-make .m-steps li.done { color: var(--text); }
+#ds-make .m-steps li.done::before { content: "✓"; background: var(--accent); border-color: var(--accent);
+  color: var(--accent-ink); font-size: 9px; line-height: 12px; text-align: center; }
+@keyframes dsMakeSpin { to { transform: rotate(360deg); } }
+#ds-make .m-pool { display: flex; flex-wrap: wrap; gap: 6px; min-height: 64px; }
+#ds-make .m-chip { font-size: 13px; color: var(--text); border: 1px solid var(--border); border-radius: 14px;
+  padding: 4px 10px; opacity: 0; transform: translateY(8px); transition: opacity var(--motion-make-chip) ease, transform var(--motion-make-chip-move) ease; }
+#ds-make .m-chip.in { opacity: 1; transform: none; }
+#ds-make .m-chip.out { opacity: .25; transform: translateY(-6px) scale(.96); }
+/* fb 289: the pool cycles this table's wall terms one at a time (prologue-make.js
+   buildTermCycle): the designer's --motion-appear fade in/out, the text shimmering while it shows. */
+#ds-make .m-pool.m-cycle { justify-content: center; align-items: center; }
+#ds-make .m-chip.m-term { font-size: 15px; transform: none;
+  transition: opacity var(--motion-appear) var(--ease-out); }
+#ds-make .m-chip.m-term.in > span { animation: w-shimmer var(--motion-w-shimmer) ease-in-out infinite; }
+#ds-make .m-lines { display: flex; flex-direction: column; gap: 9px; margin-top: 6px; }
+/* Feedback 179 (3): a placeholder at width:0 shows nothing at all before it grows -- the
+   room read that as "nothing is happening" rather than "still being written". A visible,
+   gently pulsing placeholder (the designer's own --motion-pulse duration, the same token
+   .ring[data-pulse]/#now-name.pulse already use) now fills the wait; .grow switches the
+   pulse off once the line has actually arrived. */
+#ds-make .m-lines i { display: block; height: 10px; border-radius: 5px; background: var(--border); width: 40%;
+  opacity: .4; transition: width var(--motion-reveal) ease, opacity var(--motion-reveal) ease;
+  animation: dsMakeLinePulse var(--motion-pulse) ease-in-out infinite; }
+#ds-make .m-lines i.grow { opacity: 1; animation: none; }
+#ds-make .m-lines i.grow:nth-child(1) { width: 92%; }
+#ds-make .m-lines i.grow:nth-child(2) { width: 78%; }
+#ds-make .m-lines i.grow:nth-child(3) { width: 86%; }
+#ds-make .m-lines i.grow:nth-child(4) { width: 60%; }
+#ds-make .m-lines i.grow:nth-child(5) { width: 72%; }
+@keyframes dsMakeLinePulse { 50% { opacity: .15; } }
+#prologue-setting { border-top: 1px solid var(--border); margin-top: 12px; padding-top: 8px; }
+#prologue-narration { font: italic calc(22px * var(--scale))/1.45 var(--serif); }
+/* K7 (SPEC-konsolidiert.md "Prologue text layout"): speaker name bold on its own line,
+   the spoken text below it -- not "Name: text" inline.
+   S11 : #prologue-lines scrolls its own box rather than growing the panel
+   without bound now that 8-16 lines are possible (a6e3a16) -- height only, never a JS-computed
+   one. */
+#prologue-lines { max-height: 46vh; overflow-y: auto; }
+.prologue-line { margin: 14px 0; }
+/* fb 321 (the operator 06.11., Q6): NAME in capitals (not bold), "(Role)" small + thin, the spoken
+   text at the narration's size; every line the same size, no bold. */
+.prologue-line-name { font: 400 calc(22px * var(--scale))/1.3 var(--serif); margin: 0 0 2px; }
+.prologue-line-who { text-transform: uppercase; letter-spacing: .04em; font-weight: 400; }
+.prologue-line-role { font-size: .72em; font-weight: 300; opacity: .8; }
+.prologue-line-text { font-size: calc(22px * var(--scale)); margin: 0; }
+/* S11 word-by-word reveal (the designer's renderMake/buildReady ported with no blur):
+   opacity only, never filter/transform -- R7 bans blur, R6 caps the transition at 300 ms; the
+   file-wide @media (prefers-reduced-motion: reduce) block below turns this off, so a reduced-
+   motion reader sees every word already placed (table.js's revealWords() also skips the JS
+   stagger itself in that case, never just the CSS). */
+.prologue-word { opacity: 0; transition: opacity var(--motion-state) var(--ease-out); }
+.prologue-word[data-in] { opacity: 1; }
+.prologue-word[data-verbatim] { color: var(--accent); }
+#prologue-ending { color: var(--muted); font-style: italic; margin-top: 12px; }
+
+/* fb 260 (the operator 06.11. ~01:45): the prologue poster's own placeholder/cross-
+   fade -- the slot's structural box (aspect-ratio, position) is table.html's job, this is the
+   look. #prologue-poster-placeholder shows at once (the prologue text showing first is the
+   normal case), a dark flat fill (--border, the vault's own "--line" #3A3350) with the designer's own
+   w-shimmer keyframe (the discussion catalogue's own "busy" cue above, reused rather than a
+   second shimmer primitive) and no text/spinner. table.js's renderPosterSlot() flips the
+   slot's own [data-poster] once the image has loaded ("ready", --motion-appear cross-fade) or
+   once this phone's own retry loop has failed for a while with no success ("failed" -- fb
+   260-5: the placeholder fades out softly, the text never moves up -- the slot keeps its
+   own reserved height either way, only the placeholder's opacity goes to 0). */
+#prologue-poster-placeholder, #prologue-poster-slot #prologue-poster {
+  opacity: 0; transition: opacity var(--motion-appear) var(--ease-out); }
+#prologue-poster-placeholder { background: var(--border); opacity: 1;
+  animation: w-shimmer var(--motion-w-shimmer) ease-in-out infinite; }
+#prologue-poster-slot[data-poster="ready"] #prologue-poster-placeholder,
+#prologue-poster-slot[data-poster="failed"] #prologue-poster-placeholder { opacity: 0; animation: none; }
+#prologue-poster-slot[data-poster="ready"] #prologue-poster { opacity: 1; }
+@media (prefers-reduced-motion: reduce) { #prologue-poster-placeholder { animation: none; } }
+
+/* --- the setting round's recap on the prologue panel (renderSetting(), workshop/static/
+   setting.js's answerTexts()) -- the round's own discuss/query/done panels (setting-ask/
+   -card/-timer) were retired by K7 in favour of the Sort+Setting discussion screen below
+   (now #discussion-catalogue); .setting-q-text/.setting-answer-area/
+   .setting-answer[data-empty] stay, this recap still renders them. */
+.setting-q-text, .setting-answer-area { font: calc(24px * var(--scale))/1.35 var(--serif); }
+.setting-answer[data-empty] { color: var(--muted); font-style: italic; }
+
+/* --- feedback (PH11), K7 (SPEC-konsolidiert.md "Prologue / Release / Feedback": "all five
+   identical, no heading: the project logo on top, poster thumbnail, modest violet text
+   link, small domain text"). One large closing card; its sizes stay those of table.html. --- */
+#feedback-card { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow);
+  padding: 24px; text-align: center; }
+#feedback-logo { font: calc(28px * var(--scale))/1.2 var(--serif); margin: 0 0 var(--gap); }
+#feedback-poster-thumb { width: 220px; max-width: 100%; border-radius: var(--radius); margin: 0 0 var(--gap); }
+#feedback-link { display: flex; align-items: center; justify-content: center; min-height: 44px;
+  font: calc(22px * var(--scale))/1.3 var(--sans); color: var(--accent); margin: 0 0 8px; }
+/* : #feedback-record-link ('s second link) never got
+   #feedback-link's own sizing above -- an inline <a> with no min-height fails R4's 44px
+   tap-target floor. Same treatment as #feedback-link, its sibling. */
+#feedback-record-link { display: flex; align-items: center; justify-content: center; min-height: 44px;
+  font: calc(18px * var(--scale))/1.3 var(--sans); color: var(--accent); margin: 0; }
+#feedback-domain { font-size: calc(15px * var(--scale)); color: var(--muted); margin: 0; }
+
+/* Feedback #133/#135: header band ("Login") + symbol/role-name row, same icon mask
+   technique as the speak-queue circles (icon-object-0..4.svg) -- element order is the
+   acceptance tool's (AGENTS.md), colour/spacing stay the designer's own look. */
+.login-band { font: bold calc(14px * var(--scale))/1.3 var(--sans); text-align: center;
+  color: var(--accent-ink); background: var(--accent); border-radius: var(--radius);
+  padding: 4px 0; margin: 0 0 var(--gap); }
+.login-who { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 0 8px; }
+.login-who-icon { width: 22px; height: 22px; flex: 0 0 auto; background-color: var(--accent);
+  mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-position: center; -webkit-mask-position: center;
+  mask-size: 70%; -webkit-mask-size: 70%; }
+.login-who-icon[data-icon="object-0"] { mask-image: url(icon-object-0.svg); -webkit-mask-image: url(icon-object-0.svg); }
+.login-who-icon[data-icon="object-1"] { mask-image: url(icon-object-1.svg); -webkit-mask-image: url(icon-object-1.svg); }
+.login-who-icon[data-icon="object-2"] { mask-image: url(icon-object-2.svg); -webkit-mask-image: url(icon-object-2.svg); }
+.login-who-icon[data-icon="object-3"] { mask-image: url(icon-object-3.svg); -webkit-mask-image: url(icon-object-3.svg); }
+.login-who-icon[data-icon="object-4"] { mask-image: url(icon-object-4.svg); -webkit-mask-image: url(icon-object-4.svg); }
+.login-who-name { font: bold calc(18px * var(--scale))/1.3 var(--serif); }
+/* fb 265 item 1 (the operator 06.11., pair-q8.png vs the acceptance tool): Q8's own head band is a
+   full, square-cornered band (not a rounded pill like .login-band above), Unbounded 800,
+   uppercase, the function colour -- idle (nobody on this seat's own mic) reads as a neutral
+   dark band (--job-none, same token #frame-row's own idle state already uses), the seat's
+   own room-wide "you speak" moment (table.js renderFeedbackLive()) switches it to the same
+   red (--job-mic) the discussion/interview mic bands already reserve for "live now". Replaces
+   the plain-text .login-band pill table.html used to give this element ;
+   table.html's own body[data-step="feedback"] #frame-row rule now hides the generic status
+   band entirely here, so this is Q8's only head -- never a second one stacked above it. */
+#feedback-live-band { font: 800 16px/1 var(--head); text-align: center; text-transform: uppercase;
+  letter-spacing: 0.3px; color: var(--text); background: var(--job-none); border-radius: 0;
+  padding: 16px var(--gap); margin: 0 calc(var(--gap) * -1) var(--gap); }
+#feedback-live-band[data-speaking="1"] { background: var(--job-mic); }
+/* fb 265 item 5: the who-row name follows the tool's own .ph-who spec (Archivo 600 14px),
+   never .login-who-name's Unbounded 18px bold -- a plain seat name is not a heading. */
+#feedback-live-who-name { font: 600 14px/1.3 var(--sans); }
+/* item 1 (fb 196-1/204): Q5's own override of #frame-who -- no object/name
+   there, a plain mic glyph instead, pulsed by the SAME WAAPI animation
+   setYourTurnButtonPulse() already runs on the Speak/Done button (table.js), never a
+   second animation definition here. */
+.frame-who-mic { width: 22px; height: 22px; flex: 0 0 auto; border-radius: 50%;
+  background-color: var(--accent); transition: transform var(--motion-tap-meter) var(--ease-out); }
+/* fb 241/239 (the operator 06.11., acceptance tool Q3 "turn" mockup BAND.mic="#B82640"): the
+   answerer's own band + icon-and-name row, same layout as .login-band/.login-who above --
+   red instead of the generic role accent, the one colour the designer's tool reserves for "a mic is
+   live right now" (same --overtime red the wake-lock warning and the overtime ring use). */
+.mic-band { font: bold calc(14px * var(--scale))/1.3 var(--sans); text-align: center;
+  color: var(--accent-ink); background: var(--overtime); border-radius: var(--radius);
+  padding: 4px 0; margin: 0 0 var(--gap); }
+.mic-who { display: flex; align-items: center; justify-content: center; gap: 6px; margin: 0 0 8px; }
+.mic-who-icon { width: 22px; height: 22px; flex: 0 0 auto; background-color: var(--accent);
+  mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-position: center; -webkit-mask-position: center;
+  mask-size: 70%; -webkit-mask-size: 70%; }
+.mic-who-icon[data-icon="object-0"] { mask-image: url(icon-object-0.svg); -webkit-mask-image: url(icon-object-0.svg); }
+.mic-who-icon[data-icon="object-1"] { mask-image: url(icon-object-1.svg); -webkit-mask-image: url(icon-object-1.svg); }
+.mic-who-icon[data-icon="object-2"] { mask-image: url(icon-object-2.svg); -webkit-mask-image: url(icon-object-2.svg); }
+.mic-who-icon[data-icon="object-3"] { mask-image: url(icon-object-3.svg); -webkit-mask-image: url(icon-object-3.svg); }
+.mic-who-icon[data-icon="object-4"] { mask-image: url(icon-object-4.svg); -webkit-mask-image: url(icon-object-4.svg); }
+.mic-who-name { font: bold calc(18px * var(--scale))/1.3 var(--serif); }
+/* (Q0b): greeting + mic-permission flow, same text rhythm as the board
+   below it (#board-head is the model: centred, serif heading for the one line that
+   matters, --muted body copy underneath). */
+#login-greeting { font: calc(22px * var(--scale))/1.3 var(--serif); text-align: center; margin: 0 0 8px; }
+#login-mic-intro { color: var(--muted); font-size: calc(16px * var(--scale)); text-align: center;
+  margin: 0 0 var(--gap); }
+#login-mic-allowed { color: var(--accent); font-weight: bold; text-align: center;
+  font-size: calc(18px * var(--scale)); margin: 0 0 4px; }
+#login-mic-blocked { color: var(--overtime); text-align: center; font-size: calc(16px * var(--scale));
+  margin: 0 0 var(--gap); }
+/* (fb 231 items 3/6, Session A decision 2026-11-06): the old
+   5-seats-with-checkmarks board (#board-seats/.board-seat/.board-seat-mic), the wait-all
+   toast and the Start/Wait/other-seat-starts buttons are gone from #panel-board -- only
+   #board-head ("n of 5 connected") and #board-mic-hint are left below the greeting. */
+#board-head { font: calc(22px * var(--scale))/1.3 var(--serif); text-align: center; margin: 0 0 var(--gap); }
+#board-mic-hint { color: var(--muted); font-size: calc(16px * var(--scale)); text-align: center; margin: 0 0 var(--gap); }
+
+/* --- (Q2 table strip + own-state card): workshop/static/speak-queue.js --
+   five circles (initial, sized by talk share) + the own-state card below, the designer's qstrip/
+   owncard(). Yellow (#f2b84b/#24211E) and the breathing violet ring are the designer's exact values
+   (design mockup index.html .qn/.qs.speaking). The five-circle strip is the
+   parent card's own framing, "the speak queue in the open discussion" -- hidden
+   outside sort/setting (same step names VIEW_MAP's SORT_SETTING uses). The own-state card
+   (status/action/leave) stays visible and the action button stays clickable in every step,
+   unchanged from before this card (tests/test_workshop_phones.py's speak_queue_button cases
+   press it from the mic/questions/timer views, not just sort/setting) -- only the circles,
+   tall enough on their own to overflow 390x844 on the busiest intro/interview panels
+   (regression caught by that file's F1 overflow checks), are scoped to the open discussion. */
+body:not([data-step="sort"]):not([data-step="setting"]) .speak-queue-circle { display: none; }
+/* (review of): the border-top used to be unconditional, drawing a
+   line under the own-state card even with the circle strip hidden above -- scoped to the
+   same two steps as the circle-visibility rule so an empty/hidden queue draws no line. */
+/* MUST 2 (feedback 176): sticky on every phase that reuses this one action
+   button (Q5 sort/setting included, not only Q8 feedback below any more) -- same technique
+   as #panel-interview-mic #enroll-done/#vorstellen-speak, so Speak/Done never scrolls out of
+   reach while the content above it (the seven W-questions, the evaluation list) grows. */
+.speak-queue { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: center; gap: 10px;
+  margin-top: var(--gap); position: sticky; bottom: 0; background: var(--bg);
+  padding-top: 8px; padding-bottom: 8px; z-index: 2; }
+body[data-step="sort"] .speak-queue, body[data-step="setting"] .speak-queue {
+  border-top: 1px solid var(--border); }
+.speak-queue-circle { position: relative; display: flex; align-items: center; justify-content: center;
+  flex: 0 0 auto; width: 40px; height: 40px; border-radius: 50%; background: var(--accent-tint);
+  color: var(--accent); font: 700 calc(16px * var(--scale)) var(--sans); }
+.speak-queue-circle-size-1 { width: 48px; height: 48px; }
+.speak-queue-circle-size-2 { width: 56px; height: 56px; }
+.speak-queue-circle-size-3 { width: 64px; height: 64px; }
+.speak-queue-circle-speaking { background: var(--accent); color: var(--accent-ink);
+  box-shadow: 0 0 0 4px var(--accent-tint); animation: speak-queue-breathe var(--motion-breathe) ease-in-out infinite; }
+@keyframes speak-queue-breathe { 50% { transform: scale(1.12); } }
+.speak-queue-circle-queued { background: #f2b84b; color: #24211E; }
+/* S2 interim (dress rehearsal finding: "five circles with 'P' on one phone, 'I E M S P' on
+   another" -- a bare letter fallback once no name is known). speak-queue.js sets data-icon
+   instead of a letter in that case; this masks in the same five object icons the waiting
+   board already uses (icon-object-0..4.svg), by the circle's own fixed slot. */
+.speak-queue-circle[data-icon]::before { content: ""; width: 20px; height: 20px; flex: 0 0 auto;
+  background-color: currentColor; mask-image: var(--speak-icon, none); -webkit-mask-image: var(--speak-icon, none);
+  mask-repeat: no-repeat; -webkit-mask-repeat: no-repeat; mask-position: center; -webkit-mask-position: center;
+  mask-size: 70%; -webkit-mask-size: 70%; }
+.speak-queue-circle[data-icon="object-0"] { --speak-icon: url(icon-object-0.svg); }
+.speak-queue-circle[data-icon="object-1"] { --speak-icon: url(icon-object-1.svg); }
+.speak-queue-circle[data-icon="object-2"] { --speak-icon: url(icon-object-2.svg); }
+.speak-queue-circle[data-icon="object-3"] { --speak-icon: url(icon-object-3.svg); }
+.speak-queue-circle[data-icon="object-4"] { --speak-icon: url(icon-object-4.svg); }
+.speak-queue-own-status { flex: 1 1 100%; font: calc(20px * var(--scale))/1.3 var(--serif); min-height: 1.3em;
+  margin: 10px 0 0; }
+.speak-queue-leave { flex: 1 1 100%; display: block; min-height: 44px; text-align: left; background: none;
+  border: 0; padding: 4px 0; color: var(--muted); text-decoration: underline; font: calc(17px * var(--scale)) var(--serif); }
+/* ===== the designer's v0.4 "Lavendel" look (design mockup branch, code-v0.4/proposals/
+   ds-lav.css + mic-screen.css + passive-muted.css + job-label.css), ported onto the real
+   seams. Deviations from the designer's files, each for a house rule:
+   - sizes keep the R5/MUST-6 floors (body >= 20 px, #now-name >= 40 px, #mic-task >= 30 px,
+     status row >= 20 px); the designer's 14-17 px text sizes are scaled up, the type families are the designer's too.
+   - no `content:` band labels ("Mikrofon", "Zuhören", ...: R2), no fixed action zone (needs
+     the designer's ds-parts.js), #role-story keeps its scroll box (the F1 no-overflow check at 390x844).
+   (the operator, "always dark mode, never system light"): these tokens are now the designer's
+   dark-mode proposal (ds-lav-dark.css) instead of ds-lav.css's light ones -- fixed, not a
+   `prefers-color-scheme` branch (none exists in this file and none is added). `color-scheme:
+   dark` below is what makes native form controls and scrollbars render dark too. The
+   light-on-dark accent (#A99BF5) also clears R5's 7:1 floor for --accent-ink on --accent on
+   its own (7.80:1, checked by tests/check_workshop_contrast.py), so the old darkened-accent
+   deviation this comment used to carry is gone with it. */
+:root {
+  --accent: #A99BF5; --accent-edge: #B9ADF8; --accent-tint: #221D31; --accent-ink: #12101A;
+  --bg: #12101A; --card-bg: #1A1726; --border: #3A3350; --card-edge: #3A3350;
+  --text: #F1EEFA; --muted: #A39CBB;
+  --serif: Unbounded, system-ui, sans-serif; --sans: Archivo, system-ui, sans-serif;
+  --head: Unbounded, system-ui, sans-serif;
+  --radius: 6px; --gap: 16px; --scale: 1; --shadow: none;
+  --band-listen: #6B5BD6;
+  --job-mic: #B82640; --job-questions: #11727A; --job-timer: #1B75A8; --job-now: #A3367C;
+  --job-all: #56702A; --job-none: #221D31;
+  --overtime: #FF6B7A;
+  color-scheme: dark;
+}
+/* one ground for every phase (the designer's ds-lav: --phase-bg = --bg everywhere) */
+body, body[data-step], body[data-panel="pick"], body[data-release] { --phase-bg: var(--bg); }
+body { font: 400 20px/1.5 var(--sans); }
+button { border-radius: var(--radius); font-family: var(--sans); }
+button:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+
+/* 1 head: the function band, Unbounded; listening phones share one lavender band. Card
+   background/colour target #frame-row (the full-width band), not #status --
+   #frame-header inherits the same colour/family from #frame-row now, right-aligned inside it
+   (the designer: tint(headCol)), rather than its own dimmed opacity on the page ground beside it.
+   OVERRIDE 2: same reasoning, dark-mode override. */
+#frame-row { font: 800 20px/24px var(--head); letter-spacing: 0; padding: 14px var(--gap); margin-top: -8px;
+  /* the designer's ds-lav-dark: --text, not --accent-ink -- --accent-ink is dark now (paired with the
+     light --accent of a primary button), which would sit unreadably dark on these mid-dark
+     job-colour bands (tests/check_workshop_contrast.py checks --text on every --job-* instead). */
+  color: var(--text); }
+body:is([data-panel="timer"], [data-panel="now"], [data-panel="all"], [data-panel="combined"]) #status::before {
+  --job-icon: url(icon-now.svg); }
+body[data-view="combined"] #status::before { --job-icon: url(icon-now.svg); }
+
+/* headings in Unbounded 800 */
+.panel h2, .panel h3, #questions-announce, #role-name, #now-name, #combined-now-name,
+#prologue-state, #prologue-timer-state, #mic-task, #timer-task, #now-task, #combined-task, #talk-share-title,
+#board-head {
+  font-family: var(--head); font-weight: 800; letter-spacing: -0.3px; }
+#people .name, #now-others .now-other h4 {
+  font-family: var(--head); font-weight: 800; letter-spacing: 0; }
+/* Feedback 172 (the operator, T2, 2026-11-04 20:45), E-2-03 sharpened: the room-mode transition
+   overlay's phase word (table.js's onRoomMode()) is Unbounded 800 caps, not the plain
+   bold inherited from table.html's own inline #room-mode-word rule (layout/sizing only,
+   this file owns the typeface, same split as wall-theme.css for the wall). The sentence
+   below it already inherits Archivo from body's own font -- no override needed. */
+#room-mode-word { font-family: var(--head); font-weight: 800; text-transform: uppercase; }
+
+/* 2 content straight on the ground, no cards */
+.panel:not([hidden]) { background: transparent; border: 0; box-shadow: none; padding: 0; margin: 0 0 var(--gap); }
+#questions .card, #role-card, #feedback-card, #people > [data-person], #now-others .now-other {
+  background: transparent; border: 0; border-bottom: 1px solid var(--border); border-radius: 0; box-shadow: none; }
+#people > [data-person][data-current] { border: 0; border-left: 4px solid var(--accent); padding-left: 12px; }
+.panel li::marker { color: var(--accent); }
+#now-bullets li, #combined-now-bullets li, #people li { font: 400 20px/1.45 var(--sans); }
+#prologue-ending { font-style: normal; }
+
+/* questions phone (T4): a numbered list on the ground, not playing cards */
+#questions:not([hidden]) { margin: 12px 0 0; border-top: 1px solid var(--border); }
+#questions .card { position: relative; margin: 0; padding: 14px 0 14px 40px;
+  font: 500 22px/1.35 var(--sans); color: var(--text); }
+/* the designer's numbered circle (content: counter(q)) breaks R2 (digits in content): a plain ring instead */
+#questions .card::before { content: ""; position: absolute; left: 0; top: 18px; width: 22px; height: 22px;
+  border-radius: 50%; border: 2px solid var(--job-questions); }
+/* fb 207/245 : this later, same-specificity rule silently cancelled the
+   earlier calc(var(--scale)) rule's font-size/line-height above -- a real --scale cascade
+   bug (table.js's fitPanelToScreen() had nothing to act on for this heading at all). */
+#questions-announce { font-size: calc(26px * var(--scale)); line-height: 1.25; }
+
+/* 3 action: one primary button, Archivo 600, flat (no 3D edge) */
+#next, #start, #enroll-done, [data-prologue-retry], .next, #login-mic-allow {
+  font: 600 22px/1.2 var(--sans); box-shadow: none; min-height: 56px; }
+#next:active, #start:active, #enroll-done:active, [data-prologue-retry]:active, .next:active,
+#login-mic-allow:active { transform: none; background: var(--accent-edge); }
+/* the designer's ds-lav-dark: a dedicated dark disabled shade, not --border (too close to --card-bg
+   for the disabled state to read as its own thing against a dark ground). */
+#next[data-locked], #enroll-done:disabled, #login-mic-allow:disabled {
+  background: #2B2540; color: var(--muted); }
+.speak-queue-action { font: 600 20px/1.2 var(--sans); box-shadow: none; }
+.speak-queue-action:active { transform: none; background: var(--accent-edge); }
+/* : this theme revision's own `:disabled` rule above would otherwise win over
+   the earlier running-state rule (same specificity, later in source order) -- repeated here
+   so `running` still reads as actively held, never folded back into the plain locked look. */
+#next[data-control-state="running"], #enroll-done[data-control-state="running"],
+.speak-queue-action[data-control-state="running"],
+#login-mic-allow[data-control-state="running"] {
+  background: var(--accent-edge); color: var(--accent-ink); transform: none; }
+#panel-pick button { font: 600 22px/1.2 var(--sans); border-bottom-width: 3px; box-shadow: none; }
+
+/* mic-screen.css (T3): the role's story is the one thing to read; the rest is a quiet header */
+#panel-interview-mic #mic-status-row { color: var(--muted); }
+#panel-interview-mic #mic-task { font: 800 30px/1.25 var(--head); letter-spacing: -0.5px; }
+#mic-task[data-tone="rejected"], #enroll-line[data-state="rejected"] { color: var(--overtime); }
+#panel-interview-mic #role-card { padding: 10px 0 0; border-bottom: 0; }
+#panel-interview-mic #role-name { font: 800 26px/1.25 var(--head); letter-spacing: -0.5px; color: var(--text); }
+#role-read-aloud:not([hidden]) { font: 500 18px/1.35 var(--sans); color: var(--muted); }
+#role-story:not([hidden]) { font: 400 22px/1.5 var(--sans); color: var(--text);
+  border-left: 4px solid var(--accent); padding: 2px 0 2px 12px; }
+/* GP 01.11.: the scroll box clips the story mid-line and "Ende" sits right under it, so it
+   read as if the text ended there. A sticky fade pinned to the box's bottom edge fades the
+   cut-off lines out while more text follows; at the real end it rests in its own space
+   below the last line, so the last line is never faded. No text (R2), no filter (R7). */
+#role-story:not([hidden])::after { content: ""; display: block; position: sticky; bottom: -2px;
+  height: 48px; background: linear-gradient(to bottom, transparent, var(--bg) 85%); pointer-events: none; }
+#role-story-end { margin: 12px 0 0; text-align: center; font: 500 14px/20px var(--sans); letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--muted); }
+
+/* (Q1 "Rolle finden", cue Nr. 6-8), ids
+   (#panel-role-finding): same look as #panel-interview-mic's own role card above (the designer's
+   "Du bist Maria" heading + story), new ids since this is its own full-screen panel, not a
+   second #role-card instance -- MUST 2 part (1): the object's own text line
+   (#role-finding-object) is gone, its symbol moved to #frame-header-icon below. fb 233 (card
+   acceptance tool's own Q1 scene): one heading level only
+   (#role-finding-greeting) -- no second #role-finding-name line (the job/role label already
+   shown by #frame-who, renderFrameBand()) and no card/no rule on the role text below, read
+   directly on background (the designer: "text on ground, no rule"). */
+#role-finding-greeting { font: 800 26px/1.25 var(--head); letter-spacing: -0.5px; color: var(--text);
+  margin: 24px 0 16px; }
+#role-finding-bio:not([hidden]) { font-size: 24px; line-height: 1.5; color: var(--text);
+  margin: 0 0 10px; }
+/* cue Nr. 7: the role text reads as paragraphs (roles.*.json's own "\n\n" breaks) -- this is
+   the one thing on screen to read (MUST 1), unlike #role-story's narrow sidebar use above. */
+#role-finding-story { font: 400 22px/1.5 var(--sans); color: var(--text); white-space: pre-wrap; }
+
+/* (Q1b "Vorstellen", cue Nr. 12-15): Steckbrief + Speak/Done, same button
+   look as the discussion's .speak-queue-action (one mic at a time), driven by the fixed
+   seat-order sequencer instead of the tap queue. fb 235(F), : no heading
+   above the icon any more (#vorstellen-prompt is gone) -- the icon's own top margin now
+   gives the panel its top breathing room, same amount #role-finding-greeting's own margin
+   above gives #panel-role-finding. */
+/* the operator 02.11. ~23:45: the designer's own object icon (o0-o4, the person's symbol) instead of a text
+   field -- same mask-image recipe as .login-who-icon/.speak-queue-circle (workshop.css's
+   own icon-object-N.svg set), just sized for the one big profile icon instead of a small dot. */
+#vorstellen-icon { width: 56px; height: 56px; margin: 24px 0 8px;
+  background-color: var(--accent); mask-image: var(--vorstellen-icon, none);
+  -webkit-mask-image: var(--vorstellen-icon, none); mask-repeat: no-repeat;
+  -webkit-mask-repeat: no-repeat; mask-position: center; -webkit-mask-position: center;
+  mask-size: 70%; -webkit-mask-size: 70%; }
+#vorstellen-icon:not([data-icon]) { display: none; }
+#vorstellen-icon[data-icon="object-0"] { --vorstellen-icon: url(icon-object-0.svg); }
+#vorstellen-icon[data-icon="object-1"] { --vorstellen-icon: url(icon-object-1.svg); }
+#vorstellen-icon[data-icon="object-2"] { --vorstellen-icon: url(icon-object-2.svg); }
+#vorstellen-icon[data-icon="object-3"] { --vorstellen-icon: url(icon-object-3.svg); }
+#vorstellen-icon[data-icon="object-4"] { --vorstellen-icon: url(icon-object-4.svg); }
+#vorstellen-name { font: 800 26px/1.25 var(--head); letter-spacing: -0.5px; color: var(--text);
+  margin: 0 0 4px; }
+/* MUST 1: the Steckbrief is a plain bullet list now (<ul>/<li>, no field
+   headings) -- #vorstellen-points replaces the old six-field dt/dd dl. */
+#vorstellen-points { margin: 8px 0 0; padding: 0; list-style: none; }
+#vorstellen-points li { font: 400 17px/1.5 var(--sans); color: var(--text); margin: 8px 0 0;
+  padding: 8px 0 0; border-top: 1px solid var(--border); }
+#vorstellen-points li:first-child { padding-top: 0; border-top: 0; margin-top: 0; }
+/* the operator 02.11.: the Steckbrief's six fields can run longer than the old four bullets --
+   same sticky action zone as #panel-interview-mic #enroll-done (the designer's own component 12:
+   "Aktionszone ... bleibt beim Scrollen stehen"), so Speak/Done never scrolls out of reach. */
+#vorstellen-speak { display: block; width: 100%; min-height: 54px; margin: 16px 0 0;
+  font: 600 20px/1.2 var(--sans); box-shadow: none; position: sticky; bottom: 8px; z-index: 2; }
+#vorstellen-speak:disabled { background: #2B2540; color: var(--muted); }
+#vorstellen-speak[data-control-state="running"] { background: var(--accent-edge); color: var(--accent-ink); }
+
+/* T5 listening phones: small labels uppercase, numbers in Archivo, no dimming by opacity (contrast) */
+.talk-share-row:not([data-detected]) { opacity: 1; color: var(--muted); }
+#talk-share-label, .ticker-label { font: 600 14px/18px var(--sans); letter-spacing: 1.6px;
+  text-transform: uppercase; color: var(--muted); margin: 16px 0 6px; }
+#now-name, #combined-now-name { background: transparent; border: 0; box-shadow: none; padding: 0; text-align: left;
+  font-size: 40px; line-height: 1.15; }
+#now-name.pulse, #combined-now-name.pulse { outline: 0; color: var(--accent); }
+#combined-now-doing { color: var(--accent); }
+
+/* live transcript ticker for the listeners (the operator 31.10.): framed, about three lines, fading upwards */
+.ticker-frame { border: 1px solid var(--border); border-radius: var(--radius);
+  background: var(--card-bg); padding: 6px 10px; margin: 12px 0; }
+.ticker-frame .transcript-strip { height: 66px; margin: 0; border-top: 0; padding-top: 0; }
+.ticker-frame .transcript-line { font-size: 18px; }
+
+/* setting / prologue in the Design System's text style */
+.setting-q-text, .setting-answer-area { font-family: var(--sans); }
+#prologue-state, #prologue-timer-state { text-align: left; }
+#prologue-hint, #prologue-timer-hint { text-align: left; }
+#prologue-narration { font: 400 22px/1.45 var(--sans); font-style: normal; }
+.prologue-line-name { font: 400 22px/1.3 var(--sans); letter-spacing: .3px; }
+.prologue-line-text { font: 400 22px/1.45 var(--sans); }
+#feedback-logo, .speak-queue-own-status, .speak-queue-leave,
+#feedback-link { font-family: var(--sans); }
+#feedback-logo { font-family: var(--head); font-weight: 800; }
+
+/* S4 (dress rehearsal finding: "'Take over' sits under the floating Safari address bar"),
+   now folded into --action-bar-reserve/the pinned-button rules below -- P1
+   makes the action area position: fixed instead of the page's own last, scrolled-to control,
+   so there is no more body padding to reserve for it (#page-scroll's own padding above is
+   the equivalent: it keeps the content scrolled underneath from ever hiding behind it). */
+
+/* point 2 (dress rehearsal observation 2, "many did not notice that the
+   screen scrolls"): a quiet edge fade at the bottom of the viewport, shown only while
+   table.js's scrollCueVisible() says the page is taller than it -- a static gradient, no
+   content (R2), no filter/blur (R7), fades in over <= 300ms (R6). P1: the
+   fade now sits above the pinned action area's own reserve, not flush with the viewport
+   edge -- otherwise it would show right under/behind the floating button instead of at the
+   actual edge of the scrollable content. */
+body[data-scroll-more="1"]::after { content: ""; position: fixed; left: 0; right: 0;
+  bottom: var(--action-bar-reserve);
+  height: 36px; background: linear-gradient(to bottom, transparent, var(--bg) 85%);
+  pointer-events: none; opacity: 1; transition: opacity var(--motion-state) var(--ease-out); }
+/* item 2 (fb 204, Android): on a panel with no pinned action button (e.g.
+   Q1b's #vorstellen-speak, which scrolls with the content instead of reserving space at the
+   bottom), the stripe above must not float at --action-bar-reserve -- nothing there reserves
+   that space, so it would sit mid-text instead of at the true bottom. table.js's own
+   hasVisibleActionButton() (ACTION_BUTTON_SELECTOR, kept in sync with the pinned-button
+   selector above) sets data-no-action-bar; same specificity as the rule above (one
+   attribute selector each on `body`), placed AFTER it so source order decides and this one
+   wins whenever both apply. */
+body[data-scroll-more="1"][data-no-action-bar="1"]::after { bottom: 0; }
+
+/* (fb 221, the operator 05.11.): the designer's own info toast (#ds-toast.k-info, the
+   acceptance tool's own component, proposals/ds-parts.js window.__dsToast) -- the asker's
+   10 s "tap the question" nudge (table.js renderInterviewQuestions()) moves onto this, out
+   of a plain muted line ("fällt nicht auf", the operator's own words). Fixed above the pinned action
+   area, same `bottom: var(--action-bar-reserve)` the scroll-fade hint above already uses.
+   `animation`, not `transition` -- R6's 300 ms cap (README.md) only checks the latter
+   (workshop/skin.py's own _TRANSITION regex), same as --motion-w-arrive's 2 s fade elsewhere
+   in this file; the fade-in itself restarts for free every time [hidden] toggles off, since
+   an unrendered element has no running animation to resume. */
+.ds-toast { position: fixed; left: 50%; bottom: var(--action-bar-reserve);
+  transform: translateX(-50%); max-width: 86%; border-radius: 999px; padding: 7px 14px;
+  text-align: center; font: 600 12px/1.3 var(--sans); box-shadow: 0 4px 14px rgba(0, 0, 0, .35);
+  z-index: 3; animation: ds-toast-in var(--motion-toast) var(--ease-out); cursor: pointer; }
+.ds-toast.k-info { background: var(--toast-info-bg); color: var(--toast-info-ink); }
+@keyframes ds-toast-in {
+  from { opacity: 0; transform: translate(-50%, 6px); }
+  to { opacity: 1; transform: translate(-50%, 0); }
+}
+
+/* merged by : the researcher's seven-question catalogue
+   (renderDiscussionCatalogue(), table.js) with each row's own answers nested right under
+   it (renderDiscussionEval(), item-diff.js's renderItemDiff()) -- one screen, no separate
+   "summary" block any more. "Fixed button, scrolling content above it" (MUST 3) is
+   E-X-11's own layout (vault cue-erwartungen.toml, not landed in this repo yet) -- this
+   list just adds to the page's existing scrollable body (body padding-bottom reserve +
+   scrollCueVisible()'s fade hint above), no new scroll mechanism invented. */
+/* : same cascade-bug fix as .w-catalogue-text above -- the lead sentence
+   ("Do these questions still matter in 2036? ...") is long enough to wrap 3 lines at the
+   flat, unreactive 20px body inherited before this fix (measured 90px on iPhone SE). */
+#discussion-catalogue-intro { font-weight: 600; margin: 0 0 calc(var(--gap) * 0.3); opacity: 1;
+  font-size: max(13px, calc(20px * var(--scale)));
+  transition: opacity var(--motion-appear) var(--ease-out); }   /* table.js's swapDiscussionIntro() */
+/* R6/R7: JS only ever toggles this plain data attribute (no style.filter/transition of
+   its own, same house rule as prologue-words.js's own data-in) -- the single transition
+   rule above already shares one token (--motion-appear) for both the fade-out and the
+   fade back in, matching textSwap()'s own equal-duration halves. */
+#discussion-catalogue-intro[data-text-swap="out"] { opacity: 0; }
+#discussion-catalogue-list { list-style: none; padding: 0; margin: 0 0 calc(var(--gap) * 0.3); }
+/* fb 207/245 : row padding expressed in --gap, not a hardcoded px, so
+   fitPanelToScreen()'s own --gap shrink actually reaches Q5's dominant cost -- seven rows'
+   worth of spacing, not any one row's own font size (which the measured old attempt on the
+   discarded branch found already at its R5-deviation floor).
+    (fb 207/245, still 281-559 px over after group 16): `> li`, not the plain
+   descendant `li` this rule carried before -- a descendant selector also matched every
+   nested answer <li class="item-diff"> inside .w-catalogue-answers (item-diff.js's
+   makeNode()), giving each answer its own border-bottom + calc(--gap*0.7) top/bottom
+   padding on top of the row it already sits inside. Measured: that stray padding+border
+   alone cost ~13px per answer, on every one of the up to 14 answer items a row can show. */
+/* : 0.7 -> 0.35 -> 0.2 (plus the intro/list margins and the li's own
+   column-/row-gap, all trimmed the same way below) -- with the font-size cascade bug
+   above fixed, seven rows' worth of padding (2 * 0.7 * --gap each) became the single
+   largest remaining cost on Q5 (measured ~100px of ~240px still over on iPhone SE).
+   Still a visible divider between rows (border-bottom unchanged), just a tighter one. */
+/* MUST 2 ("answers appear after the question on the same line or one
+   short line below"): flex-wrap, not block -- the question (.w-catalogue-text, flex-shrink:
+   0, its one-line width already fixed by the text itself at the floored font) and the
+   answers block (.w-catalogue-answers) are now two flex items on one wrap line; the answers
+   block sits right after the question when there is room on the first line and the whole
+   block (never a half-rendered one) drops to its own short line only when there is not --
+   plain CSS line-breaking, no new JS measurement needed on top of the font floor above. */
+#discussion-catalogue-list > li { display: flex; flex-wrap: wrap; align-items: baseline;
+  column-gap: calc(var(--gap) * 0.35); row-gap: calc(var(--gap) * 0.06);
+  border-bottom: 1px solid var(--border); padding: calc(var(--gap) * 0.06) 0;
+  transition: background var(--motion-breathe) ease-in-out; }
+/* Override item 5 (fb 196-3): the bold word starts the sentence inline. the operator,
+   Session A (feedback 245-2, 06.11., the acceptance tool's own Q5 phone is binding): the
+   "– explanation" clause moves back INLINE, same line, same size as the question -- never
+   its own smaller second line (that was 's own call, overridden here); only
+   the colour marks it as the quieter half of the one sentence. The per-question answers
+   (.w-catalogue-answers) still follow below as their own wrapping row.
+   an explicit font-size of its own, not the inherited `body` one -- a
+   later, same-specificity `body { font: 400 20px/1.5 ... }` rule further down this file
+   (dark-skin section) silently cancels the earlier calc(20px * var(--scale)) `body` rule
+   above (the exact cascade bug #questions-announce's own comment below already names),
+   so without its own rule this text never reacted to fitPanelToScreen()'s --scale shrink
+   at all -- measured stuck at a flat 20px through the whole shrink loop down to the 0.68
+   floor. max(13px, ...) is MUST 2's own floor, literal. */
+.w-catalogue-text { margin: 0; flex: 0 0 auto; font-size: max(13px, calc(20px * var(--scale))); }
+.w-catalogue-word { font-weight: 600; color: var(--accent); }
+/* fb 245: inline right behind the question, one line per question (table.js). */
+.w-catalogue-explain { color: var(--muted); }
+/* : margin 0, not the old "below the question" top margin -- the li flex
+   row's own column-gap/row-gap above now carries that spacing, whichever line this block
+   actually lands on. flex: 1 1 auto/min-width: 0 is the other half of the li flex-wrap
+   fix above: this block (not the question) is the one allowed to give up its own first-
+   line space and drop whole to the short line below. */
+.w-catalogue-answers { list-style: none; padding: 0; margin: 0; flex: 1 1 auto; min-width: 0;
+  display: flex; flex-wrap: wrap; gap: calc(var(--gap) * 0.3) calc(var(--gap) * 0.7); }
+/* (MUST 2, "answers ... in a smaller size"): scoped to .w-catalogue-answers
+   specifically, not the plain .item-diff class -- that class is also setBulletList()'s
+   interview notes (#bullets-<person>), which this card's scope never touches. Same
+   cascade-reactivity and floor reasoning as .w-catalogue-text above. */
+.w-catalogue-answers .item-diff { font-size: max(13px, calc(16px * var(--scale))); }
+/* MUST 2: a question with nothing confirmed yet pulses gently -- the ONLY "not yet
+   answered" cue, never a text marker (same reasoning as the retired ticks, card
+   's own comment in table.js). Reuses --motion-breathe verbatim (the
+   speak-queue's own "gentle" cadence, workshop.css above), no invented duration. */
+#discussion-catalogue-list li.needs-answer { animation: catalogue-breathe var(--motion-breathe) ease-in-out infinite; }
+@keyframes catalogue-breathe { 50% { background: var(--accent-tint); } }
+
+/* (S5b review fix) / : the discussion evaluator's W-word
+   visuals, now driven by item-diff.js's own class names (.item-diff-*) instead of the
+   retired .w-answer.confirmed/.rejected/.replaced/.arriving -- shapes still verbatim from
+   the vault's own proposal (schaubilder/w-woerter-animation-vorschlag.html). Every
+   duration comes from motion-tokens.css's --motion-w-* tokens, same as before. */
+#discussion-catalogue-list.busy .w-catalogue-explain,
+#discussion-catalogue-list.busy .w-catalogue-text { animation: w-shimmer var(--motion-w-shimmer) ease-in-out infinite; }
+@keyframes w-shimmer { 50% { opacity: .35; } }
+#discussion-catalogue-list.busy li:nth-child(2) .w-catalogue-explain, #discussion-catalogue-list.busy li:nth-child(2) .w-catalogue-text {
+  animation-delay: calc(var(--motion-w-shimmer) / 12); }
+#discussion-catalogue-list.busy li:nth-child(3) .w-catalogue-explain, #discussion-catalogue-list.busy li:nth-child(3) .w-catalogue-text {
+  animation-delay: calc(var(--motion-w-shimmer) / 6); }
+#discussion-catalogue-list.busy li:nth-child(4) .w-catalogue-explain, #discussion-catalogue-list.busy li:nth-child(4) .w-catalogue-text {
+  animation-delay: calc(var(--motion-w-shimmer) / 4); }
+#discussion-catalogue-list.busy li:nth-child(5) .w-catalogue-explain, #discussion-catalogue-list.busy li:nth-child(5) .w-catalogue-text {
+  animation-delay: calc(var(--motion-w-shimmer) / 3); }
+.item-diff { transition: color var(--motion-w-settle) ease-in-out,
+  text-decoration-color var(--motion-w-settle) ease-in-out; }
+/* cue-sheet-feedback row 247/248 (the operator 06.11.): no confirmation step -- a (legacy) confirmed
+   answer and a plain new one render identically, normal weight. */
+.item-diff-confirmed { font-weight: 400; }
+.item-diff-mark { animation: w-mark var(--motion-w-shimmer) ease-in-out; }
+.item-diff-rejected { text-decoration: line-through; text-decoration-color: var(--muted); color: var(--muted); }
+/* the operator feedback 149: a replace op's superseded answer is struck through too (it IS
+   superseded) but in --accent, not --muted -- never reads as the same thing as a plain
+   .item-diff-rejected line (the "(replaced)" marker text itself is composed into the
+   item's own text in table.js, item-diff.js has no marker concept of its own). */
+.item-diff-replaced { text-decoration: line-through; text-decoration-color: var(--accent); color: var(--accent); }
+@keyframes w-mark { 25% { background: var(--accent-tint); } }
+.item-diff-arriving { animation: w-arrive var(--motion-w-arrive) var(--ease-out); }
+@keyframes w-arrive { 0% { opacity: 0; transform: translateY(18px); } 55% { opacity: 1; } 100% { transform: none; } }
+/* MUST 1: the staggered replace retirement's own fade -- --motion-w-close
+   was already a token but had no CSS rule using it at all until now,
+   the exact "today replaced items stay forever" bug this card fixes. */
+.item-diff-fading { animation: w-gone var(--motion-w-close) var(--ease-out) forwards; }
+@keyframes w-gone { to { opacity: 0; transform: translateY(-6px); } }
+
+/* --- motion off on request --- */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+  /* S11 writing scene : the file-wide rule above already drops every
+     transition/animation in #ds-make -- table.js's buildWritingBody() also skips its own
+     stagger in this case, landing every step "done" right away. These two just pin the
+     chip/line END STATE the designer's reduced block fixes too (a chip that flowed in AND out reads as
+     opacity 1 here, never the faded .out value; every line reads one flat width, not its
+     varied final one) -- a static result, never a spinner. */
+  #ds-make .m-chip { opacity: 1; transform: none; }
+  #ds-make .m-lines i { width: 80%; }
+  /* D3: "static icon at full size" -- the blanket transition:none above
+     already stops it animating between levels, but the scale() itself still reads --level
+     on every worklet tick without this; pin it at rest instead. */
+  #own-role-line [data-mic="level"] { transform: none; }
+}
+
+/* ===== Phone frame standard (the operator 06.11. + the designer v0.5 visual contract) -- the ONE place for
+   every frame token. Head: ONE fixed band at the top (the designer: 48 px, full width, function icon +
+   word, Unbounded 800 16 px, text in the light tone of the band's palette), colour = this
+   phone's FUNCTION/state only (body[data-head], table.js renderFrameHeader()), never the
+   interview role/panel (fb 299). Action zone: fixed at the bottom (surface fill, line on top,
+   16 px padding + safe area), max one primary 56 px button; message strip right above the
+   button. Only #page-scroll's content between them scrolls (fb 272/273/276/283). --- */
+:root {
+  --head-h: 48px;
+  --head-mikro: #B82640;    --head-mikro-ink: #FBEDEF;     /* this phone records */
+  --head-fragen: #11727A;   --head-fragen-ink: #EAF7F7;    /* Q3 asker */
+  --head-zeit: #1B75A8;     --head-zeit-ink: #EBF5F9;      /* Q5 setting / W-questions */
+  --head-zuhoeren: #6B5BD6; --head-zuhoeren-ink: #F1EEFA;  /* listening while someone speaks */
+  --head-neutral: #12101A;  --head-neutral-ink: #F1EEFA;   /* waiting, login, prologue, Q9 */
+  --head-prompt: var(--head-neutral); --head-prompt-ink: var(--head-neutral-ink); /* must press Speak */
+  --safe-b: env(safe-area-inset-bottom, 0px);
+  --zone-pad: 16px; --btn-h: 56px; --zone-msg-h: 36px;
+  --zone-h: calc(var(--btn-h) + var(--zone-pad) * 2 + var(--safe-b));
+  --btn-primary: #A99BF5; --btn-primary-ink: #12101A; --btn-pressed: #B9ADF8;
+  --btn-disabled: #2B2540; --btn-disabled-ink: #A39CBB;
+  --msg-ok: #7FE0A4; --msg-ok-ink: #0F1712; --msg-warn: #FFA552; --msg-warn-ink: #181210;
+  --msg-err: #FF8A7A; --msg-err-ink: #180D0B;
+}
+body { --zone-now: 0px; --action-bar-reserve: var(--zone-now); }
+body[data-zone="1"] { --zone-now: var(--zone-h); }
+body[data-zone="1"][data-zone-msg="1"] { --zone-now: calc(var(--zone-h) + var(--zone-msg-h)); }
+#page-scroll { padding: calc(var(--head-h) + 12px) var(--zone-pad) calc(var(--zone-now) + 16px); }
+
+/* 1 head */
+#frame-row, body[data-step] #frame-row, body[data-speaking-now="1"] #frame-row {
+  display: flex !important; position: fixed; top: 0; left: 0; right: 0; z-index: 45;
+  height: var(--head-h); box-sizing: border-box; margin: 0; padding: 0 var(--zone-pad);
+  align-items: center; justify-content: flex-start; gap: 8px;
+  font: 800 16px/20px var(--head); letter-spacing: 0; text-transform: none;
+  background: var(--head-neutral); color: var(--head-neutral-ink); }
+body[data-head="mikro"] #frame-row { background: var(--head-mikro); color: var(--head-mikro-ink); }
+body[data-head="fragen"] #frame-row { background: var(--head-fragen); color: var(--head-fragen-ink); }
+body[data-head="zeit"] #frame-row { background: var(--head-zeit); color: var(--head-zeit-ink); }
+body[data-head="zuhoeren"] #frame-row { background: var(--head-zuhoeren); color: var(--head-zuhoeren-ink); }
+body[data-head="prompt"] #frame-row { background: var(--head-prompt); color: var(--head-prompt-ink); }
+#frame-row #status, #frame-header-icon, #frame-band, .login-band, #login-band, #feedback-live-band,
+#mic-band, .mic-band { display: none !important; }
+#frame-header-group { display: flex; align-items: center; gap: 8px; min-width: 0; }
+#frame-header { font: inherit; color: inherit; margin: 0; white-space: nowrap; overflow: hidden;
+  text-overflow: ellipsis; }
+#frame-header-group::before { content: ""; width: 20px; height: 20px; flex: 0 0 auto;
+  background-color: currentColor; mask: var(--head-icon, url(icon-none.svg)) center / contain no-repeat;
+  -webkit-mask: var(--head-icon, url(icon-none.svg)) center / contain no-repeat; }
+body[data-head="fragen"] #frame-header-group { --head-icon: url(icon-questions.svg); }
+body[data-head="zeit"] #frame-header-group { --head-icon: url(icon-timer.svg); }
+body[data-head="zuhoeren"] #frame-header-group { --head-icon: url(icon-now.svg); }
+body[data-head="mikro"] #frame-header-group::before { display: none; }
+/* the recording mic: size follows the level (mic-level.js ringScale(), one mapping for every
+   level icon), calm -- no blink (the designer). */
+#frame-header-mic { display: none; order: -1; }
+body[data-speaking-now="1"] #frame-header-mic { display: inline-block; width: 16px; height: 16px;
+  flex: 0 0 auto; background-color: currentColor; mask: url(icon-mic.svg) center / contain no-repeat;
+  -webkit-mask: url(icon-mic.svg) center / contain no-repeat;
+  transform: scale(var(--mic-scale, 1)); transition: transform var(--motion-tap-meter) ease-out; animation: none; }
+#own-role-line [data-mic="level"], .frame-who-mic { transform: scale(var(--mic-scale, 1));
+  transition: transform var(--motion-tap-meter) ease-out; }
+
+/* icon (role colour) + first name, under the head -- ONE who row for every panel */
+#frame-who { display: flex; align-items: center; justify-content: flex-start; gap: 8px; margin: 0 0 12px; }
+#frame-who-name { font: 600 16px/1.3 var(--sans); color: var(--text); }
+#frame-who-mic, #own-role-line, #login-who, #mic-who, #feedback-live-who, #vorstellen-icon,
+#vorstellen-name, #goodbye-word { display: none !important; }
+
+/* 2 content on the ground, no cards, no accent rule beside the role text (fb 273(3)) */
+.panel:not([hidden]) { background: transparent; border: 0; box-shadow: none; padding: 0; }
+#role-story:not([hidden]), #panel-interview-mic #role-bio { border-left: 0; padding-left: 0; }
+#role-story:not([hidden])::after { display: none; }
+#goodbye-overlay { top: var(--head-h); }
+/* Q9 goodbye (the operator 06.11. + the designer): the two links are action-zone buttons -- full width, 56 px,
+   stacked 12 px apart at the bottom, both primary (no secondary style), external arrow. */
+#goodbye-overlay { justify-content: flex-end; align-items: stretch; gap: 12px;
+  padding: 0 var(--zone-pad) calc(var(--safe-b) + var(--zone-pad)); background: var(--bg); }
+#goodbye-overlay .goodbye-link { display: flex; align-items: center; justify-content: center;
+  width: auto; max-width: none; margin: 0; height: var(--btn-h); min-height: var(--btn-h);
+  box-sizing: border-box; padding: 0 48px 0 16px; border: 0; border-radius: 6px;
+  font: 600 18px/24px var(--sans); text-decoration: none; color: var(--btn-primary-ink);
+  background: var(--btn-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2312101A' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M7 17 17 7'/%3E%3Cpath d='M8 7h9v9'/%3E%3C/svg%3E") no-repeat right 16px center / 20px 20px; }
+#goodbye-overlay .goodbye-link:active { background-color: var(--btn-pressed); }
+#goodbye-overlay .goodbye-link:focus-visible { outline: 2px solid var(--btn-primary); outline-offset: 3px; }
+/* the queue's own container must not form a stacking context below the zone (its fixed
+   button would sit under #action-zone); the mic-resume tap target sits under the head. */
+.speak-queue, body[data-step] .speak-queue { position: static; z-index: auto; background: none;
+  padding: 0; margin: 0; }
+#mic-resume:not([hidden]) { top: var(--head-h); z-index: 44; }
+/* fb 283: while queued, the place in line is the BUTTON's label -- no second status line */
+body:has(.speak-queue-action[data-control-state="locked"]:not([hidden])) #status-line { display: none; }
+/* Q9 goodbye: nothing to tap but the two links -- no action zone, no Speak (fb 293) */
+body[data-goodbye="1"] :is(#next, #start, #enroll-done, [data-prologue-retry], .next, #login-mic-allow,
+  .speak-queue-action, #vorstellen-speak, .speak-queue-own-status, .your-turn-notice) { display: none !important; }
+
+/* 3 action zone */
+#action-zone { display: none; position: fixed; left: 0; right: 0; bottom: 0; z-index: 38;
+  height: var(--zone-now); box-sizing: border-box; background: var(--card-bg);
+  border-top: 1px solid var(--border); }
+body[data-zone="1"] #action-zone { display: block; }
+#next, #start, #enroll-done, [data-prologue-retry], .next, #login-mic-allow, .speak-queue-action,
+#vorstellen-speak {
+  position: fixed; left: var(--zone-pad); right: var(--zone-pad); bottom: calc(var(--safe-b) + var(--zone-pad));
+  width: auto; margin: 0; z-index: 40; min-height: var(--btn-h); height: var(--btn-h);
+  box-sizing: border-box; padding: 0 48px 0 16px; border: 0; border-radius: 6px; box-shadow: none;
+  font: 600 18px/24px var(--sans); text-align: center;
+  background: var(--btn-primary) url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2312101A' stroke-width='2.2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M5 12h14'/%3E%3Cpath d='m13 6 6 6-6 6'/%3E%3C/svg%3E") no-repeat right 16px center / 20px 20px;
+  color: var(--btn-primary-ink); transform: none; transition: background-position var(--motion-tap) ease-out; }
+#next:active, #start:active, #enroll-done:active, .next:active, #login-mic-allow:active,
+.speak-queue-action:active, #vorstellen-speak:active {
+  background-color: var(--btn-pressed); background-position: right 10px center; transform: none; }
+#next[data-locked], #enroll-done:disabled, #login-mic-allow:disabled, .speak-queue-action:disabled,
+#vorstellen-speak:disabled { background: var(--btn-disabled); color: var(--btn-disabled-ink); }
+#next[data-control-state="running"], #enroll-done[data-control-state="running"],
+.speak-queue-action[data-control-state="running"], #login-mic-allow[data-control-state="running"],
+#vorstellen-speak[data-control-state="running"] { background-color: var(--btn-primary); transform: none; }
+html body button[data-busy] { background-image: none !important; }
+html body button[data-busy]::after { border-color: rgba(18, 16, 26, .35); border-top-color: #12101A; }
+button:focus-visible { outline: 2px solid var(--btn-primary); outline-offset: 3px; }
+/* message strip right above the button, icon first; info = quiet line without fill */
+.your-turn-notice, .speak-queue-own-status:not(:empty) {
+  position: fixed; left: var(--zone-pad); right: var(--zone-pad); z-index: 41; margin: 0;
+  bottom: calc(var(--safe-b) + var(--zone-pad) + var(--btn-h) + 8px); min-height: 0;
+  display: flex; align-items: center; gap: 8px; font: 500 14px/20px var(--sans); color: var(--muted); }
+.speak-queue-own-status:empty { display: none; }
+.your-turn-notice[hidden] { display: none; }
+.ds-msg-ok { background: var(--msg-ok); color: var(--msg-ok-ink); }
+.ds-msg-warn { background: var(--msg-warn); color: var(--msg-warn-ink); }
+.ds-msg-err { background: var(--msg-err); color: var(--msg-err-ink); }
+/* "more below" fade sits above the zone, never over the button */
+body[data-scroll-more="1"]::after, body[data-scroll-more="1"][data-no-action-bar="1"]::after {
+  bottom: var(--zone-now); z-index: 37; }
+
+/* Q5: W answers BELOW the question, indented, smaller, one per line (fb 285) */
+#discussion-catalogue-list > li { display: block; }
+.w-catalogue-answers { display: block; margin: 2px 0 0 10px; }
+.w-catalogue-answers > li { display: block; }
+.w-catalogue-answers .item-diff { font-size: max(12px, calc(15px * var(--scale))); color: var(--text); }
+
+/* --- Phone package (the operator 06.11., the designer v0.5 visual contract; look only, no text/behaviour) ---
+   1. every primary button is the designer's 56 px (the pinned rules above already say so; the older
+      64 px min-height in the dark theme block is gone too, see #next/#start/... above). */
+#seat-taken-retry, #panel-pick button { min-height: 56px; }
+
+/* 2. Q3 asker: the designer's choice cards ("Auswahl", designsystem.js .ds-bq): own surface card,
+   1 px line, 6 px radius, min 56 px, left-aligned, 12 px gap; the tapped card (pick()'s own
+   data-picked="1") gets the accent border, every other one drops to 45 %. No radio ring, no
+   dividers, no collapse any more. */
+#questions:not([hidden]) { display: flex; flex-direction: column; gap: 12px; margin: 12px 0 0; border-top: 0; }
+#questions .card { position: static; display: flex; align-items: center; box-sizing: border-box;
+  min-height: 56px; max-height: none; margin: 0; padding: 12px 14px; text-align: left;
+  background: var(--card-bg); border: 1px solid var(--border); border-radius: 6px; box-shadow: none;
+  font: 500 21px/1.35 var(--sans); color: var(--text); opacity: 1;
+  transition: opacity var(--motion-tap-meter) var(--ease-out), border-color var(--motion-tap-meter); }
+#questions .card::before { display: none; }
+#questions .card > p { margin: 0; }
+#questions .card[data-picked="1"] { border-color: #A99BF5; background: var(--accent-tint, #221D31); }
+#questions .card[data-picked="0"], #questions:has(.card[data-picked="1"]) .card:not([data-picked="1"]) {
+  opacity: .45; max-height: none; margin: 0; padding: 12px 14px; border-width: 1px;
+  transition: opacity var(--motion-tap-meter) var(--ease-out); }
+
+/* 3. Q3 answerer: the prompt heading stays big; the question below it is body text
+   (fb 317, the operator 06.11. D38, reverts Deploy 35's 32 px Unbounded 800): the designer's body font
+   (Archivo), white, normal weight, the same size as the asker's choice cards above --
+   clearly smaller than the heading, still well readable. */
+#panel-interview-mic #mic-picked { font: 500 21px/1.35 var(--sans); font-style: normal;
+  letter-spacing: 0; color: var(--text); margin: 8px 0 0; }
+
+/* 4. the designer's message strips ("Meldung über der Taste", designsystem.js components; colours
+   ds-parts.js): success mint, info = quiet line without surface, warning #FFA552, error
+   poppy red; icon in front. Look only: every message keeps its own trigger, timing,
+   dismissal and position (#mic-resume stays the tap banner under the head). */
+.your-turn-notice, .speak-queue-own-status:not(:empty), #status-line, #enroll-line,
+#panel-interview-mic #enroll-line, #next-reason, #interview-last-turn, #board-mic-hint,
+#login-mic-allowed-hint, #prologue-hint, #prologue-timer-hint, #setting-check-hint[data-level="1"],
+#questions-announce-hint.ds-toast.k-info {
+  display: flex; align-items: center; justify-content: flex-start; gap: 8px; text-align: left;
+  font: 500 14px/20px var(--sans); color: var(--muted); background: transparent; border: 0;
+  border-radius: 0; box-shadow: none; padding: 0; }
+#status-line[data-mode=""] { display: none; }
+#mic-status-row[data-mode=""] { display: none; }   /* fb 335: no Recording row */
+.your-turn-notice-icon, #status-line [data-status-icon] { width: 14px; height: 14px; flex: 0 0 auto;
+  border-radius: 50%; background: var(--btn-primary); }
+#enroll-line::before, #next-reason::before, #interview-last-turn::before, #board-mic-hint::before,
+#login-mic-allowed-hint::before, #prologue-hint:not(:empty)::before, #prologue-timer-hint:not(:empty)::before,
+#setting-check-hint[data-level="1"]::before, #questions-announce-hint.ds-toast.k-info::before {
+  content: ""; width: 14px; height: 14px; flex: 0 0 auto; border-radius: 50%; background: var(--btn-primary); }
+#questions-announce-hint.ds-toast.k-info { width: max-content; max-width: calc(100vw - 2 * var(--zone-pad));
+  margin-bottom: 8px; }
+#login-mic-allowed, #login-mic-blocked, #mic-resume:not([hidden]), #setting-check-hint[data-level="2"],
+#setting-check-hint[data-level="3"] {
+  display: flex; align-items: center; justify-content: flex-start; gap: 8px; text-align: left;
+  font: 600 14px/18px var(--sans); padding: 8px 14px; border: 0; border-radius: 18px; box-shadow: 0 0 0 4px var(--bg); }
+#login-mic-allowed { width: max-content; max-width: 100%; margin: 0 auto 4px;
+  background: var(--msg-ok); color: var(--msg-ok-ink); }
+#mic-resume:not([hidden]), #setting-check-hint[data-level="2"] { background: var(--msg-warn); color: var(--msg-warn-ink); }
+#login-mic-blocked, #setting-check-hint[data-level="3"] { background: var(--msg-err); color: var(--msg-err-ink); }
+#mic-resume:not([hidden]) { min-height: 56px; border-radius: 0 0 18px 18px; padding: 8px var(--zone-pad); }
+#mic-resume:not([hidden])::before, #login-mic-blocked::before, #setting-check-hint[data-level="2"]::before,
+#setting-check-hint[data-level="3"]::before {
+  content: "!"; display: inline-grid; place-items: center; width: 14px; height: 14px; flex: 0 0 auto;
+  border-radius: 50%; font: 800 10px/1 var(--sans); background: currentColor; }
+#mic-resume:not([hidden])::before, #setting-check-hint[data-level="2"]::before { color: var(--msg-warn); background: var(--msg-warn-ink); }
+#login-mic-blocked::before, #setting-check-hint[data-level="3"]::before { color: var(--msg-err); background: var(--msg-err-ink); }

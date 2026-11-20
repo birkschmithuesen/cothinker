@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+# Pre-push gate: blocks a push unless tools/publish_check.py is clean.
+# Install: cp publish/hooks/pre-push .git/hooks/pre-push && chmod +x .git/hooks/pre-push
+# See publish/README.md for --private-list discovery and the --hmac CI mode.
+set -euo pipefail
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+exec python3 "$REPO_ROOT/tools/publish_check.py" --repo "$REPO_ROOT"

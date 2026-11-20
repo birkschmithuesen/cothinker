@@ -1,0 +1,25 @@
+CoThinker
+Copyright (C) the CoThinker contributors
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU Affero General Public License as
+published by the Free Software Foundation, either version 3 of the
+License (AGPL-3.0-only).
+
+See the LICENSE file in this repository for the full licence text, and
+CLA.md for the contributor licence agreement that lets the project also
+offer commercial licences of the same code.
+
+This NOTICE file lists material that is not covered by the project's own
+AGPL-3.0 licence. For the full detail -- which file, which licence, which
+upstream project -- see THIRD_PARTY.md.
+
+  - stt/fundusapps/stt_server/backends/_vendored_whisper_streaming/
+    whisper_online.py -- MIT, Copyright (c) 2023 ÚFAL.
+  - stt/fundusapps/stt_server/vad_models/ (silero_vad.onnx) -- MIT,
+    Copyright (c) 2020-present Silero Team.
+  - stage/static/vendor/ (cytoscape and its layout plugins) -- MIT each.
+  - Lucide icons -- ISC licence.
+  - Archivo, Limelight and Unbounded fonts -- SIL Open Font License 1.1.
+
+Contact: open an issue in this repository on GitHub.

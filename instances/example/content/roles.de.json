@@ -1,0 +1,18 @@
+{"language": "de", "status": "draft", "story_source": "invented placeholder content for the generic example instance, not real session material",
+ "roles": [
+  {"id": "E1", "short": "Hueterin der Akten", "given": "Hueterin", "seat_order": 1, "name": "Hueterin der Akten", "object": "ein abgenutztes Kontobuch",
+   "points": ["Arbeitet seit Jahren mit Papierakten", "Misstraut neuen Systemen", "Kennt jede Ausnahme von der Regel"],
+   "story": "Du verwaltest seit Jahren die Akten eines Ortes, der sich staendig veraendert. Jede neue Regel kommt zuerst ueber deinen Tisch, bevor sie irgendwo sonst gilt."},
+  {"id": "E2", "short": "Reisende Technikerin", "given": "Technikerin", "seat_order": 2, "name": "Reisende Technikerin", "object": "ein verknotetes Kabel",
+   "points": ["Reist von Ort zu Ort", "Repariert, was andere aufgegeben haben", "Mag klare Loesungen, keine Kompromisse"],
+   "story": "Du kommst an, wenn etwas kaputt ist, das niemand sonst reparieren will. Du bleibst nur so lange, wie die Reparatur dauert."},
+  {"id": "E3", "short": "Nachtwache", "given": "Nachtwache", "seat_order": 3, "name": "Nachtwache", "object": "eine Taschenlampe mit schwacher Batterie",
+   "points": ["Kennt jeden Winkel des Ortes bei Dunkelheit", "Schreibt alles in ein Logbuch", "Traut niemandem, der tagsueber hier war"],
+   "story": "Du bist da, wenn alle anderen gegangen sind. Was nachts passiert, siehst nur du."},
+  {"id": "E4", "short": "Neue Kollegin", "given": "Neue", "seat_order": 4, "name": "Neue Kollegin", "object": "eine Liste mit Fragen",
+   "points": ["Erst seit kurzem hier", "Stellt die Fragen, die sich niemand mehr traut zu stellen", "Lernt schneller, als alle erwarten"],
+   "story": "Du bist neu an diesem Ort und siehst Dinge, die allen anderen laengst nicht mehr auffallen."},
+  {"id": "E5", "short": "Aufsicht", "given": "Aufsicht", "seat_order": 5, "name": "Aufsicht", "object": "ein Stapel unterschriebener Formulare",
+   "points": ["Entscheidet, was erlaubt ist", "Kennt alle Regeln, auch die ungeschriebenen", "Hat das letzte Wort -- offiziell"],
+   "story": "Du bist dafuer verantwortlich, dass hier alles seine Ordnung hat. Was das in der Praxis bedeutet, entscheidest du jeden Tag neu."}
+ ]}

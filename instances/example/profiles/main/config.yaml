@@ -1,0 +1,16 @@
+# Neutral placeholder profile for the generic example instance.
+# agent/auth come from shared/profiles/skel/main/config.yaml (repo split
+# Task 5.1) -- this overlay carries only the instance-specific model/
+# provider block; materialize() merges the two key-wise.
+model:
+  default: example-model
+  provider: custom:example_provider
+providers:
+  example_provider:
+    api: https://api.example.org
+    transport: anthropic_messages
+    # key_env names a placeholder env var, never a literal key.
+    key_env: EXAMPLE_PROVIDER_KEY
+    models:
+      example-model:
+        context_length: 100000

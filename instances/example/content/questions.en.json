@@ -1,0 +1,27 @@
+{"language": "en", "status": "draft",
+ "generic": [
+  {"id": "g01", "text": "What is different about this place today compared to ten years ago?"},
+  {"id": "g02", "text": "Who makes the decisions here that nobody sees?"}
+ ],
+ "roles": {
+  "E1": [
+   {"id": "e1-1", "text": "What is your most important tool?"},
+   {"id": "e1-2", "text": "What would you change about your work right away?"}
+  ],
+  "E2": [
+   {"id": "e2-1", "text": "What did you see for the first time today?"},
+   {"id": "e2-2", "text": "What do you respect most?"}
+  ],
+  "E3": [
+   {"id": "e3-1", "text": "What do you see that nobody sees during the day?"},
+   {"id": "e3-2", "text": "Who here do you trust the least?"}
+  ],
+  "E4": [
+   {"id": "e4-1", "text": "Which question do you not yet dare to ask here?"},
+   {"id": "e4-2", "text": "What did you notice for the first time today?"}
+  ],
+  "E5": [
+   {"id": "e5-1", "text": "Which rule did you last enforce?"},
+   {"id": "e5-2", "text": "What does 'order' mean to you?"}
+  ]
+ }}
