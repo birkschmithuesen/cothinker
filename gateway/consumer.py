@@ -1753,10 +1753,10 @@ class MinutesPort:
     def add_entry(self, tag, text, *, stamp=None,
                   names: Iterable[str] | None = None) -> "minutes_block.EntryResult":
         """Never raises; see `blocks.minutes_document.minutes.EntryResult`."""
+        # `names` goes through untouched: the block's own never-raise guard
+        # covers a stray value (not iterable, not a string) in it.
         return self._send("entry", {
-            "tag": tag, "text": text, "stamp": stamp,
-            "names": None if names is None else list(names)
-            if not isinstance(names, (str, bytes)) else names})
+            "tag": tag, "text": text, "stamp": stamp, "names": names})
 
     def open_topic(self, title, stamp=None) -> bool:
         return self._send("topic", {"title": title, "stamp": stamp}).reason == ""
