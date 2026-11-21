@@ -14,6 +14,7 @@ for the manifest format and the contract an entry point class must meet.
 """
 from __future__ import annotations
 
+import fcntl
 import importlib.util
 import json
 import os
@@ -80,6 +81,20 @@ class StateStore:
         except Exception:
             os.unlink(tmp_path)
             raise
+
+    def update(self, name: str, fn: "Callable[[dict], dict]") -> dict:
+        """Read-modify-write under an exclusive lock on `<root>/.<name>.lock`.
+        Closes gap G7 of the InScribe port draft (no lost update when two
+        threads change the same file)."""
+        lock_path = self.root / f".{name}.lock"
+        with open(lock_path, "a+") as lock:
+            fcntl.flock(lock, fcntl.LOCK_EX)
+            try:
+                data = fn(self.read(name))
+                self.write(name, data)
+                return data
+            finally:
+                fcntl.flock(lock, fcntl.LOCK_UN)
 
 
 @dataclass
