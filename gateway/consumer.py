@@ -3631,7 +3631,8 @@ def main() -> int:
     )
     # Participant taps the stage spooled (issue #47). The stage names the
     # spool folder after the folder holding the buehne.json it shows, which
-    # is this run's folder.
+    # is this run's folder. The folder name must equal the stage's
+    # `stage_file().parent.name`.
     actions_reader = ActionsReader(
         Path(a.spool_dir).expanduser() / run_dir.name / "actions.jsonl",
         dispatcher_for(session_blocks), log)
@@ -4340,7 +4341,10 @@ def main() -> int:
         while not stopp.wait(0.5):
             try:
                 bb.tick()
-                actions_reader.poll()
+                try:
+                    actions_reader.poll()
+                except Exception as e:  # noqa: BLE001 -- must not skip the tick's write
+                    log(f"actions: poll failed: {type(e).__name__}")
                 # `tick()` returns exactly what the trace wants: follow-up,
                 # expiry, cleared receipts. It stays the single source of
                 # truth; this only writes it down. At rest it returns

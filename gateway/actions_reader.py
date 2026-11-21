@@ -18,6 +18,7 @@ host's dispatch does not trace payloads either.
 from __future__ import annotations
 
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from typing import Callable
@@ -34,7 +35,7 @@ def _parse(raw: bytes) -> UserAction:
     """Raises ValueError (message = reason, no line content) if invalid."""
     try:
         d = json.loads(raw.decode("utf-8"))
-    except (UnicodeDecodeError, ValueError):
+    except (UnicodeDecodeError, ValueError, RecursionError):
         raise ValueError("not valid JSON") from None
     if not isinstance(d, dict):
         raise ValueError("not a JSON object")
@@ -67,6 +68,10 @@ class ActionsReader:
         """Dispatches every complete new line; returns how many valid ones."""
         try:
             with open(self.path, "rb") as f:
+                if os.fstat(f.fileno()).st_size < self._offset:
+                    self._log(f"actions: {self.path} got shorter; "
+                              "reading from the start")
+                    self._offset = 0
                 f.seek(self._offset)
                 data = f.read()
         except OSError:

@@ -8,11 +8,14 @@
 from __future__ import annotations
 
 import json
+from datetime import datetime, timezone
 
 from gateway.actions_reader import ActionsReader, dispatcher_for
+from gateway import block_host_wiring as bhw
 from gateway.block_host_wiring import build_session_blocks
 from shared.blocks import BLOCK_API_VERSION
 from shared.surface import UserAction
+from shared.templates import load_template
 
 
 def line(intent_id="queue:room", kind="tap", payload=None, person="0123456789abcdef", **over):
@@ -39,6 +42,12 @@ def test_reads_from_offset(tmp_path):
         f.write(line(payload={"op": "done"}))
     assert r.poll() == 1
     assert [a.payload for a in got] == [{"op": "request"}, {"name": "Testperson"}, {"op": "done"}]
+    # the file is rewritten shorter: the next poll reads it from the start
+    path.write_text(line("participant:name", "edit", {"name": "Neu"}))
+    assert r.poll() == 1
+    assert got[-1].payload == {"name": "Neu"}
+    assert len(logs) == 1 and str(path) in logs[0]
+    logs.clear()
     assert isinstance(got[0], UserAction)
     assert (got[0].intent_id, got[0].kind, got[0].person) == (
         "queue:room", "tap", "0123456789abcdef")
@@ -53,6 +62,20 @@ def test_partial_line_waits(tmp_path):
     with open(path, "a") as f:
         f.write(full[20:])
     assert r.poll() == 1
+    assert not logs
+    # a multi-byte name split inside a character across two writes
+    raw = line("participant:name", "edit", {"name": "Zoë Ünal"}).replace(
+        "Zo\\u00eb \\u00dcnal", "Zoë Ünal").encode("utf-8")
+    cut = raw.index("ë".encode("utf-8")) + 1
+    with open(path, "ab") as f:
+        f.write(raw[:cut])
+    assert r.poll() == 0
+    with open(path, "ab") as f:
+        f.write(raw[cut:])
+    assert r.poll() == 1
+    assert got[-1].payload == {"name": "Zoë Ünal"}
+    assert got[-1].at == datetime(2026, 9, 8, 19, 12, 4, 123000,
+                                  tzinfo=timezone.utc).timestamp()
     assert not logs
 
 
@@ -91,8 +114,6 @@ class Echo:
 def test_names_not_in_trace(tmp_path):
     traced, logs = [], []
     echo = Echo()
-    from shared.templates import load_template
-    from gateway import block_host_wiring as bhw
     blocks = build_session_blocks(
         session_dir=tmp_path, sink=lambda i: None, log=logs.append,
         trace=lambda e, f: traced.append((e, dict(f))),
