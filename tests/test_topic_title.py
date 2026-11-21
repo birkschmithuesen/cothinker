@@ -31,8 +31,12 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.append(str(HERE.parent / "gateway"))
 
 from blocks.topics import title as tt  # noqa: E402
+from blocks.topics import TopicsBlock  # noqa: E402
 from gateway.lane_integration import Lanes  # noqa: E402
+from gateway.legacy_stage_sink import make_sink  # noqa: E402
 from gateway.stage_state import StageState  # noqa: E402
+from shared.blocks import BlockContext, BlockHost  # noqa: E402
+from shared.modules import CoreEvent, StateStore  # noqa: E402
 
 FAKE = str(HERE / "fake_worker.py")
 _BAD_NAMES = {"": "empty", None: "none"}
@@ -148,7 +152,7 @@ check("test_content_exports_the_new_title", "content() exports the new title",
       st.content()["history"])
 
 
-print("\nLanes --topic-titles wiring")
+print("\nTopics block (titles = true) -> host -> sink / Lanes.on_topic wiring")
 
 
 class Clock:
@@ -160,7 +164,8 @@ class Clock:
 
 
 class Writer:
-    def __init__(self):
+    def __init__(self, state):
+        self.state = state
         self.writes = 0
 
     def write(self):
@@ -176,31 +181,70 @@ class Writer:
         return ""
 
 
-class Res:
-    def __init__(self, p):
-        self.p = p
+class Rig:
+    """The real topic path: TopicsBlock in a BlockHost; its intents go
+    through the legacy stage sink, its `topic` output to Lanes.on_topic."""
 
-    def by_id(self):
-        return {"neues_thema": {"p": self.p}}
+    def __init__(self, titler_factory, tag):
+        import tempfile
+        self.clock = Clock()
+        self.state = StageState(now=self.clock)
+        self.writer = Writer(self.state)
+        self.lane_logs: list = []
+        self.intents: list = []
+        self.lanes = Lanes(
+            call_command=[sys.executable, FAKE], coach_command=[sys.executable, FAKE],
+            call_session_id=f"tt-call-{tag}", coach_session_id=f"tt-coach-{tag}",
+            project_agenda="P", state=self.state, writer=self.writer, now=self.clock,
+            log=lambda *a: self.lane_logs.append(" ".join(map(str, a))))
+        sink = make_sink(self.writer, lambda s: None)
+        rig = self
+
+        def emit(intent):
+            rig.intents.append(intent)
+            sink(intent)
+
+        class Listener:
+            id = "listener"
+            api_version = 1
+
+            def start(inner, ctx, cfg):
+                pass
+
+            def on_event(inner, ev):
+                if ev.kind == "block_output" and "topic" in ev.payload:
+                    rig.lanes.on_topic(ev.payload["topic"])
+                return ()
+
+            def stop(inner):
+                pass
+
+        tmp = Path(tempfile.mkdtemp(prefix="tt-blocks-"))
+        self.block = TopicsBlock(titler_factory=titler_factory or (lambda *a: None))
+        self.host = BlockHost(
+            [self.block, Listener()],
+            ctx_for=lambda bid: BlockContext(
+                instance=None, session_dir=tmp, state=StateStore(tmp / ".blocks" / bid),
+                agent=None, llm=None, language="de", clock=self.clock,
+                emit=emit, artefact=lambda n, t: None),
+            log=lambda s: None)
+        self.host.start({"topics": {"titles": titler_factory is not None}})
+
+    def decide(self, p, block, previous=""):
+        self.lanes.note_decider_block(block)
+        self.host.dispatch(CoreEvent("block_output", {"decider_result": {
+            "neues_thema": p, "rueckkehr_thema": None,
+            "block": block, "previous": previous}}))
 
 
 def make(titler_factory, tag):
-    clock = Clock()
-    state = StageState(now=clock)
-    writer = Writer()
-    lane_logs: list = []
-    lanes = Lanes(call_command=[sys.executable, FAKE], coach_command=[sys.executable, FAKE],
-                  call_session_id=f"tt-call-{tag}", coach_session_id=f"tt-coach-{tag}",
-                  project_agenda="P", state=state, writer=writer, now=clock,
-                  titler_factory=titler_factory,
-                  log=lambda *a: lane_logs.append(" ".join(map(str, a))))
-    return lanes, state, writer, clock, lane_logs
+    rig = Rig(titler_factory, tag)
+    return rig, rig.state, rig.writer, rig.clock, rig.lane_logs
 
 
-def stop_lanes(lanes):
-    # The lane workers were never started here; only the titler runs.
-    if lanes.titler is not None:
-        lanes.titler.stop()
+def stop_lanes(rig):
+    # The lane workers were never started here; only the block's titler runs.
+    rig.block.stop()
 
 
 release = threading.Event()
@@ -211,14 +255,12 @@ def slow_good(system, user, timeout_s):
     return "Raumplanung im Herbst"
 
 
-lanes, state, writer, clock, lane_logs = make(
+rig, state, writer, clock, lane_logs = make(
     lambda on_title, on_fail: tt.TopicTitler(on_title, on_fail=on_fail,
                                              call=slow_good, timeout_s=3.0,
                                              log=lambda *a: None), "a")
 clock.t += 95
-lanes.on_decider_result(Res(0.9), SimpleNamespace(
-    block="Dann geht ihr wieder raus und wir planen den Raum", previous=["vorher"]),
-    "pause")
+rig.decide(0.9, "Dann geht ihr wieder raus und wir planen den Raum", "vorher")
 check("test_provisional_title_is_up_immediately_nothing_waits_for_the_model", "provisional title is up immediately (nothing waits for the model)",
       state.main.title.startswith("Dann geht ihr") and len(state.history) == 1,
       state.main.title)
@@ -229,37 +271,41 @@ check("test_the_model_title_replaces_it_in_place_same_entry_same_count", "the mo
       and len(state.history) == 1, [h.title for h in state.history])
 check("test_headline_shows_the_new_title", "headline shows the new title", state.headline == "Raumplanung im Herbst")
 check("test_stage_re_written_after_the_swap", "stage re-written after the swap", wait_until(lambda: writer.writes > w0))
-check("test_log_line_topic_title_old_new_ms", "log line 'topic: title <old> -> <new> <ms>'",
-      wait_until(lambda: any(l.startswith("topic: title 'Dann geht ihr")
-                             and "-> 'Raumplanung im Herbst'" in l and l.endswith("ms")
-                             for l in lane_logs)), lane_logs)
-stop_lanes(lanes)
+# The lane log line "topic: title <old> -> <new> <ms>" left with the titler
+# callback; the same fact is now the final `topic:<id>` intent (replaces =
+# the provisional title), which the sink turns into the in-place swap.
+check("test_log_line_topic_title_old_new_ms", "final topic intent: replaces <old> with <new>",
+      wait_until(lambda: any(i.payload.get("replaces", "").startswith("Dann geht ihr")
+                             and i.payload["title"] == "Raumplanung im Herbst"
+                             and i.payload["provisional"] is False
+                             for i in rig.intents)), [i.payload for i in rig.intents])
+stop_lanes(rig)
 
 
 def failing(system, user, timeout_s):
     raise tt.TitleError("timeout")
 
 
-lanes, state, writer, clock, lane_logs = make(
+rig, state, writer, clock, lane_logs = make(
     lambda on_title, on_fail: tt.TopicTitler(on_title, on_fail=on_fail,
                                              call=failing, timeout_s=0.5,
                                              log=lambda *a: lane_logs.append(" ".join(map(str, a)))), "b")
 clock.t += 95
-lanes.on_decider_result(Res(0.9), SimpleNamespace(block="Erster Satz hier"), "pause")
+rig.decide(0.9, "Erster Satz hier")
 time.sleep(0.3)
 check("test_model_failure_keeps_the_provisional_title", "model failure keeps the provisional title",
       state.main.title == "Erster Satz hier", state.main.title)
-stop_lanes(lanes)
+stop_lanes(rig)
 
-lanes, state, writer, clock, lane_logs = make(None, "c")
+rig, state, writer, clock, lane_logs = make(None, "c")
 clock.t += 95
-lanes.on_decider_result(Res(0.9), SimpleNamespace(block="Erster Satz hier"), "pause")
+rig.decide(0.9, "Erster Satz hier")
 # Decision of 2026-11-20: without a titler nobody else sets the headline
 # under --lanes, so it IS the provisional title.
 check("test_switch_off_no_titler_the_headline_is_the_provisional_title", "switch OFF: no titler, the headline is the provisional title",
-      lanes.titler is None and state.main.title == "Erster Satz hier"
+      rig.block._titler is None and state.main.title == "Erster Satz hier"
       and state.headline == "Erster Satz hier", state.headline)
-stop_lanes(lanes)
+stop_lanes(rig)
 
 
 def test_plain_title_passes():

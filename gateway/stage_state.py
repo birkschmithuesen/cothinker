@@ -443,7 +443,7 @@ class StageState:
             return ""
 
     def retitle(self, entry_id: str, old: str, new: str) -> bool:
-        """Replaces a PROVISIONAL title in place (`--topic-titles`).
+        """Replaces a PROVISIONAL title in place (`titles` of the topics block).
 
         Only when the entry still carries `old` -- a title somebody else
         changed meanwhile is never overwritten. When that entry is the one

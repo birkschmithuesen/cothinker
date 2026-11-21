@@ -2239,8 +2239,7 @@ def default_lane_command(*, python_exe: str, worker_py: Path, model: str,
 
 def build_lanes(a, log: Callable[..., None], *, call_command: list,
                 coach_command: list, session_id: str, project_agenda: str,
-                state, writer, folder: Path, path: Path, run_dir: Path,
-                titler_factory: Callable | None = None):
+                state, writer, folder: Path, path: Path, run_dir: Path):
     """The meeting's `lane_integration.Lanes`, including the agent-seam
     wiring for `COTHINKER_AGENT=api`.
 
@@ -2294,9 +2293,6 @@ def build_lanes(a, log: Callable[..., None], *, call_command: list,
                 os.environ.get("COTHINKER_EXTRA_DIRS", ""))),
         history_path=run_dir / "coach-history.jsonl",
         coach_min_delay_s=a.lane_coach_delay,
-        topic_threshold=a.topic_threshold,
-        topic_min_age_s=a.topic_min_s,
-        titler_factory=titler_factory,
         coach_rhythm=a.coach_rhythm,
         call_lane_factory=call_lane_factory,
         coach_lane_factory=coach_lane_factory,
@@ -3201,18 +3197,6 @@ def main() -> int:
                     help="minimum seconds after a confirmed topic start "
                          "before the coach lane may contribute (default: "
                          f"{lane_integration_mod.COACH_MIN_DELAY_S:.0f})")
-    ap.add_argument("--topic-threshold", type=float,
-                    default=lane_integration_mod.THRESHOLD,
-                    help="neues_thema probability (single block) that "
-                         "confirms a topic change -- FINAL per the operator's "
-                         "2026-10-20 measurement across 4 sessions "
-                         f"(default: {lane_integration_mod.THRESHOLD:.2f})")
-    ap.add_argument("--topic-min-s", type=float,
-                    default=lane_integration_mod.MIN_TOPIC_AGE_S,
-                    help="minimum age in seconds of the running topic "
-                         "before a change can be confirmed -- FINAL, same "
-                         "measurement (default: "
-                         f"{lane_integration_mod.MIN_TOPIC_AGE_S:.0f})")
     ap.add_argument("--coach-rhythm", action="store_true",
                     default=os.environ.get("COTHINKER_COACH_RHYTHM") == "1",
                     help="--lanes only: the coach speaks at a topic's START "
@@ -3222,13 +3206,6 @@ def main() -> int:
                          "[SILENT] costs no slot, spoken: >= 8 min apart, "
                          "<= 4/h. Off = the one-shot-per-topic trigger. "
                          "Env COTHINKER_COACH_RHYTHM=1.")
-    ap.add_argument("--topic-titles", action="store_true",
-                    help="--lanes only: a confirmed topic change gets a "
-                         "short model-made title (2-5 words, one "
-                         "claude-haiku-4-5 call over the plan proxy, off "
-                         "the hot path, 4 s budget) that replaces the "
-                         "provisional first-line title in place. Off by "
-                         "default. blocks/topics/title.py.")
     ap.add_argument("--speaker-split", action="store_true",
                     help="--speakers only: an utterance >= 4 s is embedded "
                          "in 1.5 s windows; a speaker change inside it "
@@ -3673,26 +3650,26 @@ def main() -> int:
         # bare participant list.
         project_agenda = project_agenda_text(title, a.participants, agenda)
 
-        def _titler_factory(on_title, on_fail):
-            from blocks.topics.title import TopicTitler
-            log("topic titles on: claude-haiku-4-5 via the plan proxy, 4 s")
-            return TopicTitler(on_title, on_fail=on_fail, log=log)
-
         lanes = build_lanes(
             a, log, call_command=call_command, coach_command=coach_command,
             session_id=session_id, project_agenda=project_agenda,
             state=state, writer=writer, folder=folder, path=path,
-            run_dir=run_dir,
-            titler_factory=(_titler_factory if a.topic_titles else None))
+            run_dir=run_dir)
         if a.coach_rhythm:
             log("coach rhythm on: start / end / long pause, pause >= "
                 f"{lane_integration_mod.COACH_PAUSE_S:.0f} s")
         call_started, coach_started = lanes.start()
         log(f"lanes on: call started={call_started}, "
             f"coach started={coach_started}")
+        # Confirmed topic changes come from the `topics` block (issue #39):
+        # the block's `topic` output reaches the coach lane through the
+        # host listener; the decider callback below is what feeds the block.
+        session_blocks.on_output(
+            lambda payload: lanes.on_topic(payload["topic"])
+            if "topic" in payload else None)
         if decider is not None:
             # Chained, not replaced: --policy's hook (if set above) keeps
-            # running first, the coach's hysteresis feed runs after --
+            # running first, the topics block's feed runs after --
             # both read the same result, neither mutates it.
             previous_on_result = decider.on_result
 
@@ -3700,7 +3677,17 @@ def main() -> int:
                                  _previous=previous_on_result) -> None:
                 if _previous is not None:
                     _previous(result, snap, reason)
-                lanes.on_decider_result(result, snap, reason)
+                by_id = result.by_id()
+                previous = list(getattr(snap, "previous", None) or [])
+                block_text = str(getattr(snap, "block", "") or "")
+                lanes.note_decider_block(block_text)
+                session_blocks.dispatch("block_output", {"decider_result": {
+                    "neues_thema": (by_id.get("neues_thema") or {}).get("p"),
+                    "rueckkehr_thema":
+                        (by_id.get("rueckkehr_thema") or {}).get("p"),
+                    "block": block_text,
+                    "previous": str(previous[-1]) if previous else "",
+                }})
 
             decider.on_result = _lanes_on_result
         else:
