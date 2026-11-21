@@ -14,6 +14,9 @@ malformed line is skipped with one log line that names the file, the byte
 offset and the reason -- never the line itself, because it may carry a
 participant's name. The reader writes nothing to the event trace; the
 host's dispatch does not trace payloads either.
+
+The offset starts at 0 on purpose, so a restarted consumer replays the
+session's actions and rebuilds its state.
 """
 from __future__ import annotations
 
@@ -62,10 +65,13 @@ class ActionsReader:
         self.path = Path(path)
         self._dispatch = dispatch
         self._log = log
+        # Starts at 0 on purpose: a restarted consumer replays the
+        # session's actions to rebuild its state.
         self._offset = 0
 
     def poll(self) -> int:
-        """Dispatches every complete new line; returns how many valid ones."""
+        """Dispatches every complete new line; returns how many reached a
+        block (`dispatch` returned a count of block calls above zero)."""
         try:
             with open(self.path, "rb") as f:
                 if os.fstat(f.fileno()).st_size < self._offset:
@@ -92,11 +98,12 @@ class ActionsReader:
                               f"of {self.path}: {e}")
                 else:
                     try:
-                        self._dispatch(action)
+                        result = self._dispatch(action)
                     except Exception as e:  # noqa: BLE001 -- type only, the message may carry a name
                         self._log(f"actions: dispatch failed for line at byte "
                                   f"{at_offset} of {self.path}: {type(e).__name__}")
                     else:
-                        done += 1
+                        if isinstance(result, int) and result > 0:
+                            done += 1
         self._offset += pos
         return done

@@ -29,7 +29,8 @@ def line(intent_id="queue:room", kind="tap", payload=None, person="0123456789abc
 def make(tmp_path):
     got, logs = [], []
     path = tmp_path / "actions.jsonl"
-    return path, got, logs, ActionsReader(path, got.append, logs.append)
+    return path, got, logs, ActionsReader(
+        path, lambda a: got.append(a) or 1, logs.append)
 
 
 def test_reads_from_offset(tmp_path):
