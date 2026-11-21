@@ -11,7 +11,7 @@
     python3 scripts/measure-turn-cuts.py --pause-s 4.0 --blocks
 
 No audio, no model, no network: the whole thing is text logic over
-tests/turn_fixture.py. It measures gateway/blocks.py as it is today and
+tests/turn_fixture.py. It measures gateway/segmenter.py as it is today and
 changes nothing.
 
 Reading the output: an improvement lowers `early cuts` WITHOUT raising
