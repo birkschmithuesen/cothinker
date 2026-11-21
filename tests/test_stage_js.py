@@ -2744,7 +2744,7 @@ El.prototype.removeAttribute = function(k){ delete this.attrs[k]; };
 El.prototype.focus = function(){ this.focused = true; };
 ['join-dlg','join-form','join-name','join-err','teiln-wort','teiln-fertig',
  'teiln-teilen','teiln-status','share-dlg','share-link','share-qr',
- 'share-close'].forEach(el);
+ 'share-close','join-later'].forEach(el);
 // Both dialogs ship `hidden` in the markup.
 el('join-dlg').attrs.hidden = ''; el('share-dlg').attrs.hidden = '';
 var preset = JSON.parse(process.argv[3] || '{}');
@@ -2892,6 +2892,70 @@ def test_a_401_clears_the_marker_and_reopens_the_name_dialog(part_page):
       out.hidden = el('join-dlg').hasAttribute('hidden');""",
                   {"cothinker-joined-name": "Anna"})
     assert v["marker"] is None and v["hidden"] is False
+
+
+def test_the_dialog_has_a_dismiss_button(part_page):
+    assert 'id="join-later"' in part_page.seite and ">Später<" in part_page.seite
+
+
+def test_the_later_button_dismisses_and_sets_the_marker(part_page):
+    v = _run_part(part_page, """
+      await tap('join-later');
+      out.hidden = el('join-dlg').hasAttribute('hidden');
+      out.marker = sessionStorage.getItem('cothinker-name-dismissed');
+      out.posts = posts.length;""")
+    assert v["hidden"] is True and v["marker"] and v["posts"] == 0
+
+
+def test_escape_dismisses_the_dialog_and_sets_the_marker(part_page):
+    v = _run_part(part_page, """
+      (listeners.keydown || []).forEach(function(fn){ fn({key: 'Escape'}); });
+      out.hidden = el('join-dlg').hasAttribute('hidden');
+      out.marker = sessionStorage.getItem('cothinker-name-dismissed');""")
+    assert v["hidden"] is True and v["marker"]
+
+
+def test_the_dialog_is_not_shown_on_load_once_dismissed(part_page):
+    v = _run_part(part_page,
+                  "out.hidden = el('join-dlg').hasAttribute('hidden');",
+                  {"cothinker-name-dismissed": "1"})
+    assert v["hidden"] is True
+
+
+def test_a_tap_without_a_join_opens_the_dialog_and_posts_after_the_join(part_page):
+    v = _run_part(part_page, """
+      await tap('join-later');
+      await tap('teiln-wort');
+      out.openAfterTap = !el('join-dlg').hasAttribute('hidden');
+      out.postsBefore = posts.length;
+      await submitName('Anna');
+      out.posts = posts.map(function(p){ return {url: p.url, body: p.body}; });
+      out.hidden = el('join-dlg').hasAttribute('hidden');""")
+    assert v["openAfterTap"] is True and v["postsBefore"] == 0
+    assert [p["url"] for p in v["posts"]] == [f"join?t={TEST_TOKEN}",
+                                              f"action?t={TEST_TOKEN}"]
+    assert v["posts"][1]["body"] == {"intent_id": "queue:room", "op": "request"}
+    assert v["hidden"] is True
+
+
+def test_dismissing_drops_the_pending_tap(part_page):
+    v = _run_part(part_page, """
+      await tap('join-later');
+      await tap('teiln-fertig');
+      await tap('join-later');
+      await submitName('Anna');
+      out.ops = posts.map(function(p){ return p.url.split('?')[0]; });""")
+    assert v["ops"] == ["join"]
+
+
+def test_a_401_retries_the_pending_tap_once_after_the_join(part_page):
+    v = _run_part(part_page, """
+      replies.push(401);
+      await tap('teiln-wort');
+      await submitName('Anna');
+      out.ops = posts.map(function(p){ return p.url.split('?')[0]; });""",
+                  {"cothinker-joined-name": "Anna"})
+    assert v["ops"] == ["action", "join", "action"]
 
 
 def test_a_429_is_quiet_and_only_disables_the_buttons_for_a_moment(part_page):

@@ -1907,15 +1907,21 @@ sgBlockAnchorJump();
 // on nor disturbs the polling. The `cothinker_pid` cookie is HttpOnly and
 // invisible here; the sessionStorage entry is the page's own "this
 // browser session has given a name" signal, and a 401 on /action (cookie
-// gone) clears it and asks for the name again.
+// gone) clears it and asks for the name again. The dialog can be put off
+// ("Spaeter" / Escape): a second marker keeps it from reappearing on
+// reload in the same browser session, so a shared display is not blocked.
+// A tap on a queue button without a name opens it again and is sent once
+// after the join.
 (function(){
-  var TOKEN=%TOKEN%, KEY='cothinker-joined-name';
+  var TOKEN=%TOKEN%, KEY='cothinker-joined-name',
+      DKEY='cothinker-name-dismissed', pending=null;
   function $(id){ return document.getElementById(id); }
   var dlg=$('join-dlg'), form=$('join-form'), inp=$('join-name'),
       err=$('join-err'), wort=$('teiln-wort'), fertig=$('teiln-fertig'),
       teilen=$('teiln-teilen'), stat=$('teiln-status'),
       share=$('share-dlg'), shareLink=$('share-link'),
-      shareQr=$('share-qr'), shareClose=$('share-close');
+      shareQr=$('share-qr'), shareClose=$('share-close'),
+      later=$('join-later');
   if(!dlg || !form || !inp) return;
   function post(path, obj){
     var u=TOKEN ? path+'?t='+encodeURIComponent(TOKEN) : path;
@@ -1925,11 +1931,20 @@ sgBlockAnchorJump();
   function joined(){
     try{ return !!sessionStorage.getItem(KEY); }catch(e){ return false; }
   }
+  function dismissed(){
+    try{ return !!sessionStorage.getItem(DKEY); }catch(e){ return false; }
+  }
   function openDlg(){
     dlg.toggleAttribute('hidden', false);
     if(inp.focus) inp.focus();
   }
-  if(!joined()) openDlg();
+  function dismissDlg(){
+    try{ sessionStorage.setItem(DKEY, '1'); }catch(e){}
+    pending=null;
+    dlg.toggleAttribute('hidden', true);
+  }
+  if(!joined() && !dismissed()) openDlg();
+  if(later) later.addEventListener('click', dismissDlg);
   form.addEventListener('submit', async function(ev){
     ev.preventDefault();
     var name=(inp.value||'').trim();
@@ -1940,6 +1955,7 @@ sgBlockAnchorJump();
       try{ sessionStorage.setItem(KEY, name); }catch(e){}
       err.textContent='';
       dlg.toggleAttribute('hidden', true);
+      if(pending){ var p=pending; pending=null; senden(p.op, p.text, true); }
     }catch(e){
       err.textContent='Das hat nicht geklappt. Bitte versuche es noch einmal.';
     }
@@ -1948,13 +1964,19 @@ sgBlockAnchorJump();
   function lock(on){
     btns.forEach(function(b){ if(b) b.toggleAttribute('disabled', on); });
   }
-  async function senden(op, text){
+  async function senden(op, text, retry){
+    if(!joined()){
+      pending={op:op, text:text};
+      openDlg();
+      return;
+    }
     lock(true);
     var wait=false;
     try{
       var r=await post('action',{intent_id:'queue:room', op:op});
       if(r.status===401){
         try{ sessionStorage.removeItem(KEY); }catch(e){}
+        if(!retry) pending={op:op, text:text};
         openDlg();
       } else if(r.status===429){
         wait=true;                      // too quick: a brief pause, no message
@@ -1996,7 +2018,10 @@ sgBlockAnchorJump();
   if(teilen) teilen.addEventListener('click', shareOpen);
   if(shareClose) shareClose.addEventListener('click', shareShut);
   document.addEventListener('keydown', function(ev){
-    if(ev && ev.key==='Escape') shareShut();
+    if(ev && ev.key==='Escape'){
+      shareShut();
+      if(!dlg.hasAttribute('hidden')) dismissDlg();
+    }
   });
 })();
 (function(){
@@ -2681,7 +2706,8 @@ PARTICIPATE_HTML = """
 <label id="join-titel" for="join-name">Wie heißt du?</label>
 <input id="join-name" type="text" maxlength="40" required>
 <div id="join-err" aria-live="polite"></div>
-<button type="submit">Los</button></form></div>
+<button type="submit">Los</button>
+<button type="button" id="join-later">Später</button></form></div>
 <div id="share-dlg" role="dialog" aria-modal="true" aria-label="Link teilen" hidden>
 <div class="teiln-box"><div id="share-qr"></div>
 <div id="share-link"></div>
