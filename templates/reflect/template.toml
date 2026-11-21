@@ -25,6 +25,13 @@ id = "condense"
 id = "minutes-document"
 [[blocks]]
 id = "mirroring-coach"
+# The coach flags of the session host, same defaults: seconds after a
+# confirmed topic before the coach may contribute; start/end/long-pause
+# rhythm instead of one contribution per topic; a worker command that
+# replaces the one built from --model/--provider ("" = built).
+lane_coach_delay = 45.0
+coach_rhythm = false
+lane_coach_worker_command = ""
 [[blocks]]
 id = "knowledge-link"
 [[blocks]]

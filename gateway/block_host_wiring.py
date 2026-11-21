@@ -20,10 +20,12 @@ line, rather than failing the whole session.
 from __future__ import annotations
 
 import re
+import sys
 import time
 from pathlib import Path
 from typing import Callable, Mapping, Optional
 
+from blocks.mirroring_coach.coach import MirroringCoach, resolve_config
 from gateway.sync_safe import atomic_write_text
 from shared.blocks import BLOCK_API_VERSION, Block, BlockContext, BlockHost
 from shared.modules import CoreEvent, StateStore
@@ -33,7 +35,9 @@ from shared.templates import load_template, merged_block_config
 REFLECT_TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "reflect" / "template.toml"
 
 # One line per block, added by the pull request that builds it.
-REGISTRY: dict[str, Callable[[], Block]] = {}
+REGISTRY: dict[str, Callable[[], Block]] = {
+    "mirroring-coach": MirroringCoach,
+}
 
 HOST_LISTENER_ID = "session-host"
 
@@ -189,3 +193,106 @@ def feed_utterance(protocol, blocks: SessionBlocks, text: str,
         blocks.dispatch("utterance", payload)
     except Exception as e:  # noqa: BLE001 -- belt and suspenders, dispatch() already never raises
         blocks.log(f"feed_utterance: dispatch failed: {type(e).__name__}: {e}")
+
+
+# ------------------------------------------------------------ agent lanes
+COACH_TURN_TIMEOUT_S = 60.0
+
+
+class LaneQueuePort:
+    """A `shared.lane_port.LanePort` over one agent lane: today's
+    `lanes.LaneQueue` around a `worker.WorkerClient`, or -- with a lane
+    factory (`COTHINKER_AGENT=api`, `gateway/agent_lane.py`) -- the agent
+    seam, same lane API either way.
+
+    `submit` wraps the prompt into a `Job` carrying its own callbacks, so one
+    port serves one block and every job answers to its own submitter. The
+    lane keeps its rule: one running, one waiting, newest wins. `start`,
+    `stop` and `on_roll` go beyond the port: the session host starts the
+    worker at once (never lazily on the first job) and a seam lane opens a
+    fresh session after a window roll.
+    """
+
+    def __init__(self, *, command: list, session_id: str,
+                 turn_timeout_s: float = COACH_TURN_TIMEOUT_S,
+                 lane_factory: Optional[Callable] = None, briefing: str = "",
+                 log: Callable[..., None] = print) -> None:
+        gateway_dir = str(Path(__file__).resolve().parent)
+        if gateway_dir not in sys.path:
+            sys.path.insert(0, gateway_dir)
+        import lanes as _lanes
+        self._lanes = _lanes
+        self.turn_timeout_s = turn_timeout_s
+        self.log = log
+        # Newest wins -- a superseded request is simply obsolete, nobody
+        # waits for it.
+        if lane_factory is not None:
+            self.lane = lane_factory(
+                session_id, on_result=self._on_result,
+                on_dropped=self._on_dropped, briefing=briefing)
+        else:
+            from worker import WorkerClient
+            self.lane = _lanes.LaneQueue(
+                WorkerClient(command=command, session_id=session_id, log=log),
+                on_result=self._on_result, on_dropped=self._on_dropped,
+                log=log)
+
+    def submit(self, job_id: str, prompt: str, *,
+               on_result: Callable[[dict, float], None],
+               on_dropped: Callable[[], None]) -> None:
+        self.lane.submit(self._lanes.Job(
+            id=job_id, prompt=prompt, timeout=self.turn_timeout_s,
+            meta={"on_result": on_result, "on_dropped": on_dropped}))
+
+    def stats(self) -> dict:
+        return dict(self.lane.stats())
+
+    def start(self) -> bool:
+        return self.lane.start()
+
+    def stop(self) -> None:
+        self.lane.stop()
+
+    def on_roll(self) -> None:
+        on_roll = getattr(self.lane, "on_roll", None)
+        if on_roll is not None:
+            on_roll()
+
+    def _on_result(self, job, result: dict, duration: float) -> None:
+        result = dict(result)
+        if self._lanes.TIMEOUT_MARKER in str(result.get("error") or ""):
+            result["timed_out"] = True
+        try:
+            job.meta["on_result"](result, duration)
+        except Exception as e:                # noqa: BLE001 -- the lane lives on
+            self.log("agent lane: result callback failed:", repr(e))
+
+    def _on_dropped(self, job) -> None:
+        try:
+            job.meta["on_dropped"]()
+        except Exception as e:                # noqa: BLE001
+            self.log("agent lane: dropped callback failed:", repr(e))
+
+
+def coach_block_config(template_path: Path = REFLECT_TEMPLATE) -> dict:
+    """The mirroring coach's block configuration: the template's keys over
+    the block's defaults (the former coach command-line flags)."""
+    template = load_template(template_path)
+    return resolve_config(merged_block_config(template, None).get("mirroring-coach"))
+
+
+def make_agent_for(*, coach_command: list, session_id: str,
+                   lane_factory: Optional[Callable] = None,
+                   coach_briefing: str = "",
+                   log: Callable[..., None] = print) -> Callable[[str], object]:
+    """`build_session_blocks(agent_for=...)`: the `LanePort` each block gets
+    as `BlockContext.agent`. Only the mirroring coach has an agent lane; it
+    is built the way the coach lane always was -- its own worker process
+    and session id (`<session>-coach`)."""
+    def agent_for(block_id: str):
+        if block_id == "mirroring-coach":
+            return LaneQueuePort(
+                command=coach_command, session_id=f"{session_id}-coach",
+                lane_factory=lane_factory, briefing=coach_briefing, log=log)
+        return None
+    return agent_for

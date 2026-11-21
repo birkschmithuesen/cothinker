@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# CoThinker — per-lane context window, stable -> volatile
+# CoThinker — blocks/mirroring_coach/context.py: per-lane context window, stable -> volatile
 # Copyright (C) 2026 Birk Schmithuesen
 #
 # This program is free software: you can redistribute it and/or modify it
@@ -27,7 +27,7 @@ A roll was originally meant to also be the moment a
 lane starts a FRESH worker session (a new session id), with this class
 only tracking WHEN that moment is (`add_utterance()`'s return value).
 That path was rejected -- restarting a worker costs ~19s
-(`gateway/lane_integration.py`'s point 3), and a roll can fire every
+(point 3 of the lane design), and a roll can fire every
 `roll_every` utterances, far too often for that cost. Instead
 `gateway/worker.py` is told (`--no-history`) to never replay its
 per-session store at all, so the window THIS class builds is the
@@ -95,7 +95,7 @@ class LaneContext:
 
     def add_utterance(self, speaker: str, text: str) -> bool:
         """Appends one utterance. Returns True if the window just rolled
-        -- the caller logs this (gateway/lane_integration.py) rather than
+        -- the caller logs this rather than
         acting on it, see the module docstring above."""
         self._utterances.append(Utterance(speaker, text))
         overflow_end = len(self._utterances) - self.window_size

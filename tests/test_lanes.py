@@ -280,7 +280,7 @@ def _run_taskslot_1_running_1_waiting_newest_wins_no_workerclient(check) -> None
 
 def _run_order_latency_is_independent_of_batch_size_two_separate(check) -> None:
     """ORDER latency is independent of batch size -- two separate LaneQueues (two separate worker processes), (an ORDER waited behind a running batch turn in the serial single-worker queue)"""
-    # The production shape: gateway/lane_integration.py's call lane and the
+    # The production shape: gateway/call_lane.py's call lane and the
     # batch path never share a WorkerClient, so an ORDER's own lane is never
     # occupied by however long the OTHER lane's job happens to take. Proven
     # here against REAL (fake) worker subprocesses, not mocked timing: the

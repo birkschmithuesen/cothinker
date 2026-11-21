@@ -51,7 +51,7 @@ tables below are built from.
 | decisions / tasks / open questions | Capture | `gateway/decide.py` 569, `decider.py` 424, `openrouter_jev.py` 269, `policy.py` 668, `policy_runner.py` 567, `proposals.py` 68, `questions.py` 191 — 2756 | Reflect | 1× |
 | minutes document | Condense + write | `shared/minutes_format.py` 441 | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
-| mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
+| mirroring / coach question | Agent behaviour | `blocks/mirroring_coach/context.py` 130, `coach.py` 588 (the call lane in `gateway/call_lane.py` and scheduling in `lanes.py`/`agent_lane.py` belong to the Agent API) — 718 | Reflect | 1× |
 | knowledge link (vault) | Agent behaviour | `gateway/wiki.py` 424, `shared/wiki_names.py` 49, `graph/__init__.py` 5, `graph_build.py` 89, `neighbours.py` 90, `ring_select.py` 110, `seed_note.py` 84, `vault_notes.py` 239 — 1090 | Reflect | 1× |
 | status line | Show + share | `gateway/status_line.py` 164 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
@@ -121,6 +121,9 @@ surfaces/`, every `*.py` outside a `tests/` directory, at `HEAD`.
 
 ```inventory cothinker
 blocks/__init__.py                                                                core:session
+blocks/mirroring_coach/__init__.py                                                block:mirroring-coach
+blocks/mirroring_coach/coach.py                                                   block:mirroring-coach
+blocks/mirroring_coach/context.py                                                 block:mirroring-coach
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
 gateway/conflict_triage.py                                                        core:session
@@ -133,8 +136,7 @@ shared/events.py                                                                
 gateway/infomaniak_chat.py                                                        core:llm
 gateway/infomaniak_embed.py                                                       core:llm
 gateway/infomaniak_limiter.py                                                     core:llm
-gateway/lane_context.py                                                           block:mirroring-coach
-gateway/lane_integration.py                                                       block:mirroring-coach
+gateway/call_lane.py                                                              core:agent
 gateway/lanes.py                                                                  core:agent
 gateway/legacy_stage_sink.py                                                      core:session
 gateway/openrouter_jev.py                                                         block:decisions-tasks-questions
@@ -174,6 +176,7 @@ shared/__init__.py                                                              
 shared/agent.py                                                                   core:agent
 shared/blocks.py                                                                  core:module
 shared/instance.py                                                                core:instance
+shared/lane_port.py                                                               core:agent
 shared/modules.py                                                                 core:module
 shared/phases.py                                                                  core:session
 shared/profiles.py                                                                core:instance
@@ -181,6 +184,7 @@ shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py              
 shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py                block:write-text
 shared/speechmatics.py                                                           stt:engine-speechmatics
 shared/surface.py                                                                 core:module
+shared/templates.py                                                               core:module
 shared/text.py                                                                    surface:stage
 shared/utterance.py                                                              stt:engine-speechmatics
 shared/wake_word.py                                                               block:segment

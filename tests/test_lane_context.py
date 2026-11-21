@@ -19,7 +19,7 @@ import pytest  # noqa: E402
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gateway"))
-from lane_context import LaneContext  # noqa: E402
+from blocks.mirroring_coach.context import LaneContext  # noqa: E402
 
 
 _RESULTS: dict = {}

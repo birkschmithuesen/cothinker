@@ -1,4 +1,10 @@
 #!/usr/bin/env python3
+# CoThinker — tests/lane_fake_worker.py: worker stand-in for the lane tests
+# Copyright (C) 2026 Birk Schmithuesen
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License, version 3.
+# It is provided WITHOUT ANY WARRANTY. See LICENSE.
 """A worker stand-in. Speaks the protocol, never imports Hermes.
 
     python3 tests/lane_fake_worker.py --session-id X [--mode MODE]
