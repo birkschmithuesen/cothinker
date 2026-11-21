@@ -30,7 +30,12 @@ from check_collector import Checks  # noqa: E402
 
 _C = Checks()
 check = _C.check
-from gateway import wiki  # noqa: E402
+import blocks.knowledge_link.wiki as wiki  # noqa: E402
+
+
+def attach_wiki(writer, layer):
+    """Hands the writer's knowledge-link block a wiki layer (or a stand-in)."""
+    writer.knowledge_link._wiki = layer
 
 tmp = Path(tempfile.mkdtemp(prefix="cothinker-wiki-"))
 projekt = tmp / "obstwiese"
@@ -241,7 +246,7 @@ schreiber = consumer.StageWriter(sitzung, zst, log=lambda *a: None,
                                  proposals=sitzung / "vorschlag.jsonl",
                                  events=_events.EventLog(sitzung / "events.jsonl"))
 schreiber.protocol = prot
-schreiber.wiki = wiki.WikiLayer(projekt)
+attach_wiki(schreiber, wiki.WikiLayer(projekt))
 with (sitzung / "vorschlag.jsonl").open("a", encoding="utf-8") as fh:
     fh.write(json.dumps({"action": "topic", "title": "Kosten und Finanzen",
                          "markdown": "## Kosten"}) + "\n")
@@ -271,7 +276,7 @@ schreiber2 = consumer.StageWriter(d2, zst2, log=lambda *a: None,
                                   proposals=d2 / "vorschlag.jsonl",
                                   events=_events.EventLog(d2 / "events.jsonl"))
 schreiber2.protocol = consumer.Protocol(p2, tmp)
-schreiber2.wiki = Kaputt()
+attach_wiki(schreiber2, Kaputt())
 with (d2 / "vorschlag.jsonl").open("a", encoding="utf-8") as fh:
     fh.write(json.dumps({"action": "topic", "title": "Kosten",
                          "markdown": "## Kosten"}) + "\n")
@@ -279,11 +284,11 @@ schreiber2.ingest()
 check("the block is written without links",
       re.search(r"^### \d\d:\d\d Kosten$", p2.read_text(encoding="utf-8"),
                 re.M) is not None)
-check("the writer has no wiki by default",
+check("the writer's block has no vault by default",
       consumer.StageWriter(d2, StageState(), log=lambda *a: None,
-                           proposals=d2 / "vorschlag.jsonl").wiki is None)
+                           proposals=d2 / "vorschlag.jsonl").knowledge_link.has_vault is False)
 check("the consumer builds the wiki layer from the project folder",
-      "WikiLayer(folder)" in Path(consumer.__file__).read_text(encoding="utf-8"))
+      "knowledge_link.use_project(folder)" in Path(consumer.__file__).read_text(encoding="utf-8"))
 check("`links` is a numeric event field",
       "links" in _events.NUMERIC_FIELDS)
 
@@ -405,7 +410,7 @@ z_w = consumer.StageWriter(z_dir, z_st, log=lambda *a: None,
                            proposals=z_dir / "vorschlag.jsonl",
                            events=_events.EventLog(z_dir / "events.jsonl"))
 z_w.protocol = consumer.Protocol(z_prot, tmp)
-z_w.wiki = wiki.WikiLayer(projekt)
+attach_wiki(z_w, wiki.WikiLayer(projekt))
 logs: list = []
 
 
@@ -446,6 +451,7 @@ class _RoherTitel:
 class _Stub:
     protocol = _RoherTitel()
     state = z_st
+    knowledge_link = z_w.knowledge_link
 
 
 roh = consumer.StageWriter.page_title(_Stub())
@@ -663,7 +669,7 @@ s_w = consumer.StageWriter(z_dir, StageState(), log=lambda *a: None,
                            proposals=z_dir / "vorschlag-suffix.jsonl",
                            events=_events.EventLog(z_dir / "events-suffix.jsonl"))
 s_w.protocol = consumer.Protocol(z_prot, tmp)
-s_w.wiki = wiki.WikiLayer(projekt)
+attach_wiki(s_w, wiki.WikiLayer(projekt))
 with (z_dir / "vorschlag-suffix.jsonl").open("a", encoding="utf-8") as fh:
     fh.write(json.dumps({"action": "topic", "title": "Ausgaben",
                          "markdown": "## Ausgaben"}) + "\n")
@@ -702,7 +708,7 @@ e_w = consumer.StageWriter(e_dir, e_st, log=lambda *a: None,
                            proposals=e_dir / "vorschlag.jsonl",
                            events=_events.EventLog(e_dir / "events.jsonl"))
 e_w.protocol = consumer.Protocol(e_prot, tmp)
-e_w.wiki = wiki.WikiLayer(projekt)
+attach_wiki(e_w, wiki.WikiLayer(projekt))
 lint_0 = wiki_lint.lint_project(projekt)
 
 # 1. The topic action: the protocol's block title carries the links.
@@ -745,7 +751,7 @@ check("e2e Zuruf: type topic, the session protocol as source",
       in e_page_text, e_page_text)
 check("e2e Zuruf: >= 2 links, each an existing unique project note",
       len(e_links) >= 2
-      and all(e_w.wiki._edges()[0].resolve(s) is not None for s in e_links),
+      and all(e_w.knowledge_link._wiki._edges()[0].resolve(s) is not None for s in e_links),
       str(e_links))
 e_text = e_prot.read_text("utf-8").split("## Rohtranskript")[0]
 check("e2e Zuruf: the backlink sits in the CURRENT topic block",
