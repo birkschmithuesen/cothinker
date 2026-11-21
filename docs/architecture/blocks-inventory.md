@@ -120,7 +120,9 @@ Scope: `gateway/ stage/ shared/ stt/ graph/ modules/ blocks/ templates/
 surfaces/`, every `*.py` outside a `tests/` directory, at `HEAD`.
 
 ```inventory cothinker
+blocks/__init__.py                                                                core:session
 gateway/agent_lane.py                                                             core:agent
+gateway/block_host_wiring.py                                                      core:session
 gateway/blocks.py                                                                 block:segment
 gateway/conflict_triage.py                                                        core:session
 gateway/consumer.py                                                               core:session
@@ -135,6 +137,7 @@ gateway/infomaniak_limiter.py                                                   
 gateway/lane_context.py                                                           block:mirroring-coach
 gateway/lane_integration.py                                                       block:mirroring-coach
 gateway/lanes.py                                                                  core:agent
+gateway/legacy_stage_sink.py                                                      core:session
 gateway/openrouter_jev.py                                                         block:decisions-tasks-questions
 gateway/policy.py                                                                 block:decisions-tasks-questions
 gateway/policy_runner.py                                                          block:decisions-tasks-questions

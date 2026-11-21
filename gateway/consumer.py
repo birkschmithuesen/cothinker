@@ -103,6 +103,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from graph.graph_build import GraphSource            # noqa: E402
 from graph.seed_note import find_or_create_seed      # noqa: E402
 from graph.vault_notes import DEFAULT_EXCLUDE        # noqa: E402
+from gateway.block_host_wiring import build_session_blocks, feed_utterance  # noqa: E402
+from gateway.legacy_stage_sink import make_sink      # noqa: E402
 
 ENTITIES = Path(os.environ.get(
     "COTHINKER_ENTITIES", Path.home() / "vault/entities"))
@@ -3612,6 +3614,16 @@ def main() -> int:
             f"{a.thought_end_threshold:.2f}")
     state = StageState()
     writer = StageWriter(run_dir, state, proposals=proposals_path, events=trace)
+    # The session host's block host (ADR 0008, issue #38): built from the
+    # Reflect template (ADR 0010), fed every session event below, its
+    # view intents routed to this same StageWriter through the interim
+    # legacy stage sink (replaced as a whole by the Wave C stage surface).
+    session_blocks = build_session_blocks(
+        session_dir=run_dir,
+        sink=make_sink(writer, log),
+        log=log,
+        trace=lambda event, fields: trace.record(event, **fields),
+    )
     # Diarization-label attribution: names a Speechmatics
     # label (S1, S2, ...) from what is said, independent of --speakers'
     # voice-embedding path above (no audio, no SPEAKER_EMBED_URL needed).
@@ -4173,6 +4185,7 @@ def main() -> int:
     # emitted -- used to correlate a "wake" or "length" cut with the
     # utterance that caused it (see there).
     letzte_bloecke: list[Block] = []
+    segment_counter = [0]
 
     def block_done(b: Block) -> None:
         # Captured BEFORE anything below, not after: trace.record(),
@@ -4186,6 +4199,14 @@ def main() -> int:
         # suggest, breaking monotonicity against the utterance timestamp
         # (captured even earlier, before bb.sentence() is called).
         jetzt_block = datetime.now().astimezone()
+        segment_counter[0] += 1
+        # gateway/blocks.Block carries no per-speaker breakdown yet, so
+        # "speakers" stays empty until that lands.
+        session_blocks.dispatch("segment", {
+            "id": segment_counter[0], "text": b.text, "speakers": [],
+            "wake_word": b.wake_word, "reason": b.reason,
+            "at": jetzt_block.timestamp(),
+        })
         if lanes is not None:
             # --lanes: a separate code path entirely, never touching
             # `queue`/`call_outs` -- Spur 4 (the raw protocol) needs no
@@ -4304,6 +4325,7 @@ def main() -> int:
         cheap because `write()` only touches the file when the rendered
         content actually changed -- at rest the folder stays untouched.
         """
+        last_block_tick = [0.0]
         while not stopp.wait(0.5):
             try:
                 bb.tick()
@@ -4317,6 +4339,16 @@ def main() -> int:
                     lanes.mirror_tick()
                     if a.coach_rhythm:
                         lanes.coach_tick()
+                # Once per second, not every 0.5 s wakeup -- the block
+                # host's own clock, not this thread's poll interval.
+                now_mono = time.monotonic()
+                if now_mono - last_block_tick[0] >= 1.0:
+                    last_block_tick[0] = now_mono
+                    session_blocks.dispatch("tick", {
+                        "at": time.time(),
+                        "components": {"queue_backlog": queue.backlog(),
+                                       "open_block_chars": bb.open_chars},
+                    })
             except Exception as e:        # noqa: BLE001
                 log("ticker error (continuing):", repr(e))
 
@@ -4544,9 +4576,13 @@ def main() -> int:
                     try:
                         if turns:
                             for turn in turns:
-                                prot.append_raw(turn.text, turn.name)
+                                feed_utterance(prot, session_blocks, turn.text, turn.name,
+                                              {"t_start": turn.t_start, "t_end": turn.t_end,
+                                               "at": time.time()})
                         else:
-                            prot.append_raw(text, spk)
+                            feed_utterance(prot, session_blocks, text, spk,
+                                          {"t_start": t_start, "t_end": t_end,
+                                           "at": time.time()})
                     except Exception as e:         # noqa: BLE001
                         log("raw line not written:", repr(e))
                     # RAW FIRST, always: the line above is the evidence,
@@ -4729,6 +4765,10 @@ def main() -> int:
     except KeyboardInterrupt:
         log("aborted — the raw transcript is complete, processing is not.")
     worker.stop()
+    try:
+        session_blocks.stop()
+    except Exception as e:                # noqa: BLE001
+        log("block host shutdown:", repr(e))
     if lanes is not None:
         try:
             lanes.stop()
