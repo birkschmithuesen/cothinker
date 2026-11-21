@@ -186,6 +186,8 @@ shared/__init__.py                                                              
 shared/agent.py                                                                   core:agent
 shared/blocks.py                                                                  core:session
 shared/instance.py                                                                core:instance
+shared/language_guard.py                                                          core:module
+shared/llm.py                                                                     core:module
 shared/modules.py                                                                 core:module
 shared/phases.py                                                                  core:session
 shared/profiles.py                                                                core:instance
