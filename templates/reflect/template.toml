@@ -21,6 +21,7 @@ id = "topics"
 id = "decisions-tasks-questions"
 [[blocks]]
 id = "condense"
+prompt = "prompts/condense.{lang}.md"
 [[blocks]]
 id = "minutes-document"
 [[blocks]]

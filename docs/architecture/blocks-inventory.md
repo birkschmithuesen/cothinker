@@ -108,6 +108,7 @@ surface:stage                surface — meeting web view (stage)
 block:segment                block — utterance batching / turn boundaries
 block:topics                 block — topic change
 block:decisions-tasks-questions  block — decisions / tasks / open questions
+block:condense               block — condense (per-topic text, verbatim quotes)
 block:minutes-document       block — minutes document
 block:mirroring-coach        block — mirroring / coach question
 block:knowledge-link         block — knowledge link (vault notes)
@@ -126,6 +127,9 @@ surfaces/`, every `*.py` outside a `tests/` directory, at `HEAD`.
 
 ```inventory cothinker
 blocks/__init__.py                                                                core:session
+blocks/condense/__init__.py                                                       block:condense
+blocks/condense/coverage.py                                                       block:condense
+blocks/condense/quotes.py                                                         block:condense
 blocks/speaking_share/__init__.py                                                 block:speaking-share
 blocks/speaking_share/room_talk_time.py                                           block:speaking-share
 blocks/speaking_share/talk_share.py                                               block:speaking-share
