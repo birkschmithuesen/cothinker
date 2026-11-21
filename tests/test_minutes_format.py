@@ -577,3 +577,15 @@ def test_hidden_paths_are_excluded(tree):
 
 def test_a_non_existent_folder_yields_an_empty_list_no_exception(tree):
     assert pd.project_md_names(tree / "does-not-exist") == []
+
+
+def test_split_raw_cuts_at_the_raw_heading():
+    text = "head\n\n## Themen\n\n## Rohtranskript\n- **10:00** a\r\n"
+    head, tail = pd.split_raw(text)
+    assert head + tail == text
+    assert head == "head\n\n## Themen\n\n"
+    assert tail == "## Rohtranskript\n- **10:00** a\r\n"
+
+
+def test_split_raw_without_the_heading_has_an_empty_tail():
+    assert pd.split_raw("only a head\n") == ("only a head\n", "")
