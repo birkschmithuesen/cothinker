@@ -1819,6 +1819,36 @@ summary{cursor:pointer;padding:.4rem 0;color:var(--akz);font-size:.94rem}
    into. */
 .graf-stub{padding:1.4rem;color:var(--dim);font-size:.9rem;
  background:#0e1116;border:1px solid var(--lin);border-radius:6px}
+
+/* --- Participant parts (join dialog, queue buttons, share view) ------
+   The button bar sits bottom right under the image overlay (#bild, 50);
+   the two dialogs sit above everything (60), so a participant who still
+   has to give a name is never blocked by an image. */
+#teiln{position:fixed;right:.8rem;bottom:.8rem;z-index:40;display:flex;
+ flex-wrap:wrap;gap:.4rem;align-items:center;justify-content:flex-end;
+ max-width:calc(100vw - 1.6rem);font-size:.85rem}
+#teiln button{font:inherit;color:#e8e8e8;background:#1d2128;
+ border:1px solid #3a4150;border-radius:6px;padding:.45rem .8rem;cursor:pointer}
+#teiln button:disabled{opacity:.5;cursor:default}
+#teiln-status{color:var(--dim);font-size:.8rem}
+#join-dlg,#share-dlg{position:fixed;top:0;left:0;width:100vw;height:100vh;
+ z-index:60;background:rgba(10,12,14,.94);display:flex;align-items:center;
+ justify-content:center;padding:2vmin;box-sizing:border-box}
+#join-dlg[hidden],#share-dlg[hidden]{display:none}
+.teiln-box{background:#171a1f;border:1px solid #3a4150;border-radius:8px;
+ padding:1.2rem 1.4rem;max-width:min(26rem,94vw);color:#e8e8e8;
+ display:flex;flex-direction:column;gap:.7rem;align-items:stretch}
+.teiln-box input{font:inherit;padding:.5rem;border-radius:6px;
+ border:1px solid #3a4150;background:#0e1116;color:#e8e8e8}
+.teiln-box button{font:inherit;color:#e8e8e8;background:#1d2128;
+ border:1px solid #3a4150;border-radius:6px;padding:.5rem .9rem;cursor:pointer}
+#join-err{color:var(--warn);font-size:.85rem}
+#join-err:empty{display:none}
+#share-link{word-break:break-all;font-family:monospace;font-size:.8rem;
+ user-select:all}
+#share-qr{background:#fff;padding:.6rem;border-radius:4px;align-self:center;
+ line-height:0}
+/* --- end participant parts --- */
 """
 
 # No location.reload(): only the changed section is swapped.
@@ -1872,6 +1902,103 @@ function sgBlockAnchorJump(){
 }
 window.SG_BLOCKS = null;
 sgBlockAnchorJump();
+// --- Participant parts: name dialog, queue buttons, share view -------
+// Its own closure ahead of the page script below, so it neither depends
+// on nor disturbs the polling. The `cothinker_pid` cookie is HttpOnly and
+// invisible here; the sessionStorage entry is the page's own "this
+// browser session has given a name" signal, and a 401 on /action (cookie
+// gone) clears it and asks for the name again.
+(function(){
+  var TOKEN=%TOKEN%, KEY='cothinker-joined-name';
+  function $(id){ return document.getElementById(id); }
+  var dlg=$('join-dlg'), form=$('join-form'), inp=$('join-name'),
+      err=$('join-err'), wort=$('teiln-wort'), fertig=$('teiln-fertig'),
+      teilen=$('teiln-teilen'), stat=$('teiln-status'),
+      share=$('share-dlg'), shareLink=$('share-link'),
+      shareQr=$('share-qr'), shareClose=$('share-close');
+  if(!dlg || !form || !inp) return;
+  function post(path, obj){
+    var u=TOKEN ? path+'?t='+encodeURIComponent(TOKEN) : path;
+    return fetch(u,{method:'POST',credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},body:JSON.stringify(obj)});
+  }
+  function joined(){
+    try{ return !!sessionStorage.getItem(KEY); }catch(e){ return false; }
+  }
+  function openDlg(){
+    dlg.toggleAttribute('hidden', false);
+    if(inp.focus) inp.focus();
+  }
+  if(!joined()) openDlg();
+  form.addEventListener('submit', async function(ev){
+    ev.preventDefault();
+    var name=(inp.value||'').trim();
+    if(!name){ err.textContent='Bitte gib einen Namen ein.'; return; }
+    try{
+      var r=await post('join',{name:name});
+      if(!r.ok) throw new Error('join '+r.status);
+      try{ sessionStorage.setItem(KEY, name); }catch(e){}
+      err.textContent='';
+      dlg.toggleAttribute('hidden', true);
+    }catch(e){
+      err.textContent='Das hat nicht geklappt. Bitte versuche es noch einmal.';
+    }
+  });
+  var btns=[wort, fertig];
+  function lock(on){
+    btns.forEach(function(b){ if(b) b.toggleAttribute('disabled', on); });
+  }
+  async function senden(op, text){
+    lock(true);
+    var wait=false;
+    try{
+      var r=await post('action',{intent_id:'queue:room', op:op});
+      if(r.status===401){
+        try{ sessionStorage.removeItem(KEY); }catch(e){}
+        openDlg();
+      } else if(r.status===429){
+        wait=true;                      // too quick: a brief pause, no message
+      } else if(r.ok){
+        if(stat) stat.textContent=text;
+      } else if(stat){
+        stat.textContent='Nicht gesendet.';
+      }
+    }catch(e){ if(stat) stat.textContent='Nicht gesendet.'; }
+    if(wait) setTimeout(function(){ lock(false); }, 600); else lock(false);
+  }
+  if(wort) wort.addEventListener('click', function(){
+    senden('request','Wortmeldung gesendet'); });
+  if(fertig) fertig.addEventListener('click', function(){
+    senden('done','Fertig gemeldet'); });
+  // The shared link: the stage root with its token, as a participant has
+  // to open it -- no fragment, nothing page- or person-specific.
+  function shareUrl(){
+    try{
+      var u=new URL(document.baseURI || location.href);
+      u.hash=''; u.search='';
+      if(TOKEN) u.searchParams.set('t', TOKEN);
+      return u.href;
+    }catch(e){ return location.href; }
+  }
+  function shareOpen(){
+    if(!share) return;
+    var u=shareUrl();
+    if(shareLink) shareLink.textContent=u;
+    if(shareQr){
+      if(typeof qrcode==='function'){
+        var q=qrcode(0,'M'); q.addData(u); q.make();
+        shareQr.innerHTML=q.createSvgTag(5,2);   // own output, not user text
+      } else { shareQr.textContent='QR-Code nicht verfügbar'; }
+    }
+    share.toggleAttribute('hidden', false);
+  }
+  function shareShut(){ if(share) share.toggleAttribute('hidden', true); }
+  if(teilen) teilen.addEventListener('click', shareOpen);
+  if(shareClose) shareClose.addEventListener('click', shareShut);
+  document.addEventListener('keydown', function(ev){
+    if(ev && ev.key==='Escape') shareShut();
+  });
+})();
 (function(){
   var mark=%MARK%, halt=false,
       punkt=document.getElementById('punkt'),
@@ -2542,6 +2669,26 @@ sgBlockAnchorJump();
 """
 
 
+# The participant parts' markup (issue #47): name dialog, queue buttons,
+# share view. Static; the script above the page script drives it.
+PARTICIPATE_HTML = """
+<div id="teiln"><span id="teiln-status" aria-live="polite"></span>
+<button type="button" id="teiln-wort">Wortmeldung</button>
+<button type="button" id="teiln-fertig">Fertig</button>
+<button type="button" id="teiln-teilen">Link teilen</button></div>
+<div id="join-dlg" role="dialog" aria-modal="true" aria-labelledby="join-titel" hidden>
+<form id="join-form" class="teiln-box" autocomplete="off">
+<label id="join-titel" for="join-name">Wie heißt du?</label>
+<input id="join-name" type="text" maxlength="40" required>
+<div id="join-err" aria-live="polite"></div>
+<button type="submit">Los</button></form></div>
+<div id="share-dlg" role="dialog" aria-modal="true" aria-label="Link teilen" hidden>
+<div class="teiln-box"><div id="share-qr"></div>
+<div id="share-link"></div>
+<button type="button" id="share-close">Schließen</button></div></div>
+"""
+
+
 def page(titel: str, kopf: str, rumpf: str, mark_json: str, inhalt: str,
          wurzel: str = "./") -> bytes:
     """A page. `wurzel` is the path from HERE to the root of the stage.
@@ -2588,7 +2735,7 @@ def page(titel: str, kopf: str, rumpf: str, mark_json: str, inhalt: str,
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <base href="{wurzel}">
 <title>{titel}</title><style>{STYLE}</style>{vendor}</head><body>
-{kopf}{rumpf}
+{kopf}{rumpf}{PARTICIPATE_HTML}
 <script>{script}</script></body></html>""").encode()
 
 

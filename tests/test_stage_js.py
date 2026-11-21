@@ -2728,3 +2728,221 @@ def test_reduced_motion_the_label_stands_at_once_with_dots(pending):
 def test_reduced_motion_gone_means_gone_no_flash(pending):
     r = pending.r
     assert r["leaving"] == [] and r["leavingTimeouts"] == 0, str(r["leaving"])
+
+
+# ------------------------------------------- name dialog, queue taps, share
+# The participant parts of the page (issue #47): the real page is fetched
+# from a real stage, its script runs under node against the DOM stand-in of
+# HARNESS (prelude only), extended by what these parts need -- element
+# listeners, sessionStorage, a scripted fetch for the POSTs and a fake QR
+# encoder. Every scenario is its own node run, so sessionStorage starts
+# empty (or preset) each time.
+PART_PRELUDE = r"""
+El.prototype.addEventListener = function(t, fn){
+  this.ev = this.ev || {}; (this.ev[t] = this.ev[t] || []).push(fn); };
+El.prototype.removeAttribute = function(k){ delete this.attrs[k]; };
+El.prototype.focus = function(){ this.focused = true; };
+['join-dlg','join-form','join-name','join-err','teiln-wort','teiln-fertig',
+ 'teiln-teilen','teiln-status','share-dlg','share-link','share-qr',
+ 'share-close'].forEach(el);
+// Both dialogs ship `hidden` in the markup.
+el('join-dlg').attrs.hidden = ''; el('share-dlg').attrs.hidden = '';
+var preset = JSON.parse(process.argv[3] || '{}');
+var store = {};
+Object.keys(preset).forEach(function(k){ store[k] = preset[k]; });
+global.sessionStorage = {
+  getItem: function(k){ return k in store ? store[k] : null; },
+  setItem: function(k, v){ store[k] = String(v); },
+  removeItem: function(k){ delete store[k]; }
+};
+global.document.baseURI = 'http://buehne.example/';
+var posts = [], replies = [];
+var plainFetch = global.fetch;
+global.fetch = async function(u, o){
+  if(o && o.method === 'POST'){
+    posts.push({url: u, body: JSON.parse(o.body), opts: o});
+    var status = replies.length ? replies.shift() : 200;
+    return {status: status, ok: status >= 200 && status < 300,
+            json: async function(){ return {ok: true}; }};
+  }
+  return plainFetch(u, o);
+};
+var qrCalls = [];
+global.qrcode = function(type, level){
+  var q = {data: null};
+  qrCalls.push(q);
+  q.addData = function(s){ q.data = s; };
+  q.make = function(){};
+  q.createSvgTag = function(){ return '<svg data-fake-qr="1"></svg>'; };
+  return q;
+};
+function ev(id, type, extra){
+  var e = Object.assign({preventDefault: function(){}, target: el(id)}, extra);
+  ((el(id).ev || {})[type] || []).forEach(function(fn){ fn(e); });
+}
+function settle(){ return new Promise(function(r){ setImmediate(r); }); }
+async function submitName(name){
+  el('join-name').value = name; ev('join-form', 'submit'); await settle();
+}
+async function tap(id){ ev(id, 'click'); await settle(); }
+var out = {};
+process.on('uncaughtException', function(e){
+  console.error('UNCAUGHT', (e && e.stack) || e); process.exit(3); });
+"""
+
+
+@pytest.fixture(scope="module")
+def part_page(tmp_path_factory):
+    projekt = tmp_path_factory.mktemp("cothinker-part")
+    (projekt / "buehne.json").write_text(
+        json.dumps({"status": STATUS}), encoding="utf-8")
+    server, port = _start_stage(projekt)
+    try:
+        seite = _get(port) or ""
+        qr_js = _get(port, "static/vendor/qrcode.js") or ""
+    finally:
+        _stop(server)
+    return SimpleNamespace(seite=seite, skript=_script_of(seite),
+                           qr_js=qr_js, dir=projekt)
+
+
+def _run_part(part_page, treiber: str, preset: dict | None = None) -> dict:
+    assert part_page.skript, "the page carries no script"
+    laeufer = part_page.dir / "part.js"
+    laeufer.write_text(
+        VOR_SKRIPT + PART_PRELUDE + part_page.skript + "\n(async function(){\n"
+        + treiber + "\nconsole.log(JSON.stringify(out));\n})();\n",
+        encoding="utf-8")
+    run = subprocess.run(
+        [shutil.which("node") or "node", str(laeufer), "[]",
+         json.dumps(preset or {})], capture_output=True, text=True, timeout=60)
+    assert run.returncode == 0, _out(run)
+    return _last_json(run)
+
+
+def test_the_page_carries_the_participant_markup(part_page):
+    for ident in ("join-dlg", "join-form", "join-name", "teiln-wort",
+                  "teiln-fertig", "teiln-teilen", "share-dlg", "share-link",
+                  "share-qr", "share-close"):
+        assert f'id="{ident}"' in part_page.seite, ident
+    assert 'maxlength="40"' in part_page.seite
+    assert "Wie heißt du?" in part_page.seite
+    assert ">Wortmeldung<" in part_page.seite and ">Fertig<" in part_page.seite
+    assert ">Link teilen<" in part_page.seite
+
+
+def test_the_name_dialog_shows_when_the_session_has_no_marker(part_page):
+    v = _run_part(part_page, "out.hidden = el('join-dlg').hasAttribute('hidden');")
+    assert v["hidden"] is False
+
+
+def test_the_name_dialog_stays_closed_when_the_marker_is_there(part_page):
+    v = _run_part(part_page,
+                  "out.hidden = el('join-dlg').hasAttribute('hidden');",
+                  {"cothinker-joined-name": "Anna"})
+    assert v["hidden"] is True
+
+
+def test_submitting_a_name_posts_join_sets_the_marker_and_closes(part_page):
+    v = _run_part(part_page, """
+      await submitName('  Anna Beispiel ');
+      out.posts = posts.map(function(p){ return {url: p.url, body: p.body,
+        cred: p.opts.credentials}; });
+      out.marker = sessionStorage.getItem('cothinker-joined-name');
+      out.hidden = el('join-dlg').hasAttribute('hidden');""")
+    assert v["posts"] == [{"url": f"join?t={TEST_TOKEN}",
+                           "body": {"name": "Anna Beispiel"},
+                           "cred": "same-origin"}]
+    assert v["marker"] == "Anna Beispiel" and v["hidden"] is True
+
+
+def test_a_failed_join_keeps_the_dialog_with_an_inline_message(part_page):
+    v = _run_part(part_page, """
+      replies.push(400);
+      await submitName('Anna');
+      out.marker = sessionStorage.getItem('cothinker-joined-name');
+      out.hidden = el('join-dlg').hasAttribute('hidden');
+      out.err = el('join-err').textContent;""")
+    assert v["marker"] is None and v["hidden"] is False and v["err"]
+
+
+def test_an_empty_name_is_not_posted(part_page):
+    v = _run_part(part_page, """
+      await submitName('   ');
+      out.n = posts.length; out.err = el('join-err').textContent;""")
+    assert v["n"] == 0 and v["err"]
+
+
+@pytest.mark.parametrize("button,op", [("teiln-wort", "request"),
+                                       ("teiln-fertig", "done")])
+def test_the_buttons_post_the_right_queue_op(part_page, button, op):
+    v = _run_part(part_page, f"""
+      await tap('{button}');
+      out.posts = posts.map(function(p){{ return {{url: p.url, body: p.body}}; }});""",
+                  {"cothinker-joined-name": "Anna"})
+    assert v["posts"] == [{"url": f"action?t={TEST_TOKEN}",
+                           "body": {"intent_id": "queue:room", "op": op}}]
+
+
+def test_a_401_clears_the_marker_and_reopens_the_name_dialog(part_page):
+    v = _run_part(part_page, """
+      replies.push(401);
+      await tap('teiln-wort');
+      out.marker = sessionStorage.getItem('cothinker-joined-name');
+      out.hidden = el('join-dlg').hasAttribute('hidden');""",
+                  {"cothinker-joined-name": "Anna"})
+    assert v["marker"] is None and v["hidden"] is False
+
+
+def test_a_429_is_quiet_and_only_disables_the_buttons_for_a_moment(part_page):
+    v = _run_part(part_page, """
+      var timers = [];
+      global.setTimeout = function(fn){ timers.push(fn); return 1; };
+      replies.push(429);
+      await tap('teiln-wort');
+      out.disabled = el('teiln-wort').hasAttribute('disabled');
+      out.dlgHidden = el('join-dlg').hasAttribute('hidden');
+      out.status = el('teiln-status').textContent;
+      timers.forEach(function(fn){ fn(); });
+      out.after = el('teiln-wort').hasAttribute('disabled');""",
+                  {"cothinker-joined-name": "Anna"})
+    assert v["disabled"] is True and v["after"] is False
+    assert v["dlgHidden"] is True and v["status"] == ""
+
+
+def test_the_share_view_shows_the_link_with_token_and_its_qr_code(part_page):
+    v = _run_part(part_page, """
+      out.before = el('share-dlg').hasAttribute('hidden');
+      await tap('teiln-teilen');
+      out.open = !el('share-dlg').hasAttribute('hidden');
+      out.link = el('share-link').textContent;
+      out.qr = el('share-qr').innerHTML;
+      out.qrData = qrCalls.map(function(q){ return q.data; });
+      await tap('share-close');
+      out.closed = el('share-dlg').hasAttribute('hidden');""",
+                  {"cothinker-joined-name": "Anna"})
+    link = f"http://buehne.example/?t={TEST_TOKEN}"
+    assert v["before"] is True and v["open"] is True and v["closed"] is True
+    assert v["link"] == link and v["qrData"] == [link]
+    assert "data-fake-qr" in v["qr"]
+
+
+def test_the_share_link_drops_fragment_and_foreign_query_bits(part_page):
+    v = _run_part(part_page, """
+      document.baseURI = 'http://buehne.example/sub/?x=1#frag';
+      await tap('teiln-teilen');
+      out.link = el('share-link').textContent;""")
+    assert v["link"] == f"http://buehne.example/sub/?t={TEST_TOKEN}"
+
+
+def test_the_vendored_encoder_renders_the_link_as_svg(part_page, tmp_path):
+    enc = tmp_path / "qr.js"
+    enc.write_text(part_page.qr_js, encoding="utf-8")
+    drv = tmp_path / "drv.js"
+    drv.write_text(
+        "var qrcode = require(process.argv[2]);"
+        "var q = qrcode(0, 'M'); q.addData('http://buehne.example/?t=abc');"
+        "q.make(); console.log(q.createSvgTag(4, 4));", encoding="utf-8")
+    run = subprocess.run([shutil.which("node") or "node", str(drv), str(enc)],
+                         capture_output=True, text=True, timeout=30)
+    assert run.returncode == 0 and run.stdout.lstrip().startswith("<svg"), _out(run)
