@@ -49,7 +49,7 @@ tables below are built from.
 | segment (utterance batching) | Capture | `gateway/segmenter.py` 356, `shared/wake_word.py` 67 — 423 | core | 1× |
 | topic change | Capture | `gateway/topic_detect.py` 571, `topic_hysteresis.py` 95, `topic_laya_worker.py` 138, `topic_title.py` 202 — 1006 | Reflect | 1× |
 | decisions / tasks / open questions | Capture | `gateway/decide.py` 569, `decider.py` 424, `openrouter_jev.py` 269, `policy.py` 668, `policy_runner.py` 567, `proposals.py` 68, `questions.py` 191 — 2756 | Reflect | 1× |
-| minutes document | Condense + write | `shared/minutes_format.py` 441, `blocks/minutes_document/__init__.py`, `blocks/minutes_document/minutes.py` (the session host's `gateway/raw_transcript.py` writes the file) | Reflect | 1× |
+| minutes document | Condense + write | `shared/minutes_format.py` 454, `blocks/minutes_document/__init__.py` 130, `blocks/minutes_document/minutes.py` 235 (the session host's `gateway/raw_transcript.py` writes the file) | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
 | mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
 | knowledge link (vault) | Agent behaviour | `gateway/wiki.py` 424, `shared/wiki_names.py` 49, `graph/__init__.py` 5, `graph_build.py` 89, `neighbours.py` 90, `ring_select.py` 110, `seed_note.py` 84, `vault_notes.py` 239 — 1090 | Reflect | 1× |
@@ -77,7 +77,7 @@ repository yet.
 | STT — thought end | 1594 | `stt/fundusapps/stt_server/thought_end.py` 514; `gateway/thought_end.py` 260, `thought_end_live.py` 402, `thought_end_laya_worker.py` 148, `smart_turn_worker.py` 270 | core |
 | STT — speaker labels | 1566 | `gateway/speaker_enroll.py` 606, `speaker_split.py` 423, `speaker_label.py` 278, `speaker_label_llm.py` 259 | core |
 | STT — correction | 858 | `gateway/correction.py` 733, `correction_prefilter.py` 125 | core |
-| core — session runtime | 5422 | `gateway/consumer.py` 4651, `shared/events.py`, `sync_safe.py`, `timing.py`, `conflict_triage.py`; `shared/__init__.py` | core |
+| core — session runtime | 5934 | `gateway/consumer.py` 4653, `shared/events.py` 179, `gateway/raw_transcript.py` 172, `sync_safe.py` 204, `timing.py` 207, `conflict_triage.py` 186, `block_host_wiring.py` 195, `legacy_stage_sink.py` 46; `shared/phases.py` 82, `shared/__init__.py` 1, `blocks/__init__.py` 9 | core |
 | core — Agent API | 1660 | `shared/agent.py` 387, `gateway/worker.py` 576, `lanes.py` 447, `agent_lane.py` 250 | core |
 | core — model clients | 614 | `gateway/infomaniak_chat.py` 178, `infomaniak_embed.py` 124, `infomaniak_limiter.py` 312 | core |
 | core — Instance API | 211 | `shared/instance.py` 128, `shared/profiles.py` 83 | core |
