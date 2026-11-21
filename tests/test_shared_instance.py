@@ -89,3 +89,38 @@ def test_shared_modules_and_profiles_import():
     r = subprocess.run([sys.executable, "-c", "import shared.modules, shared.profiles"],
                        cwd=REPO, capture_output=True, text=True)
     assert r.returncode == 0, r.stderr
+
+
+def test_example_has_no_template_or_block_or_module_tables(cfg):
+    assert cfg.template_name() is None
+    assert cfg.block_config("timer") == {}
+    assert cfg.module_config("example_echo") == {}
+
+
+def _instance_dir_with_tables(tmp_path):
+    (tmp_path / "instance.toml").write_text(
+        '[instance]\nname = "x"\ntimezone = "UTC"\nlanguages = ["en"]\n'
+        'app_format = "x/1"\nposter_format = "x/1"\n'
+        '[template]\nname = "reflect"\n'
+        '[blocks.timer]\ndefault_minutes = 45\n'
+        '[modules.example_echo]\nvolume = 3\n',
+        encoding="utf-8",
+    )
+    return tmp_path
+
+
+def test_template_name_reads_template_table(tmp_path):
+    cfg = si._from_dir(_instance_dir_with_tables(tmp_path))
+    assert cfg.template_name() == "reflect"
+
+
+def test_block_config_reads_blocks_table(tmp_path):
+    cfg = si._from_dir(_instance_dir_with_tables(tmp_path))
+    assert cfg.block_config("timer") == {"default_minutes": 45}
+    assert cfg.block_config("missing") == {}
+
+
+def test_module_config_reads_modules_table(tmp_path):
+    cfg = si._from_dir(_instance_dir_with_tables(tmp_path))
+    assert cfg.module_config("example_echo") == {"volume": 3}
+    assert cfg.module_config("missing") == {}
