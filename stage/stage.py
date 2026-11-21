@@ -2733,6 +2733,10 @@ class H(BaseHTTPRequestHandler):
                 last = _last_action.get(pid)
                 limited = last is not None and now - last < MIN_ACTION_GAP_S
                 if not limited:
+                    if len(_last_action) >= 1024:
+                        for k in [k for k, t in _last_action.items()
+                                  if now - t >= MIN_ACTION_GAP_S]:
+                            del _last_action[k]
                     _last_action[pid] = now
             if limited:
                 return self._send(429, b"slow down", "text/plain")
