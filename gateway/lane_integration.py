@@ -52,7 +52,7 @@ from correction_prefilter import prefilter
 from lane_context import ROLL_EVERY, WINDOW_SIZE, LaneContext
 from lanes import TIMEOUT_MARKER, Job, LaneQueue
 import stage_image
-from stage_state import derived_title, one_line
+from shared.text import derived_title, one_line
 from topic_hysteresis import MIN_TOPIC_AGE_S, THRESHOLD, TopicHysteresis
 from worker import WorkerClient
 
