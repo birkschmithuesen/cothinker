@@ -52,7 +52,7 @@ tables below are built from.
 | minutes document | Condense + write | `shared/minutes_format.py` 441 | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
 | mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
-| knowledge link (vault) | Agent behaviour | `gateway/wiki.py` 424, `graph/__init__.py` 5, `graph_build.py` 89, `neighbours.py` 90, `ring_select.py` 110, `seed_note.py` 84, `vault_notes.py` 239 — 1041 | Reflect | 1× |
+| knowledge link (vault) | Agent behaviour | `gateway/wiki.py` 424, `shared/wiki_names.py`, `graph/__init__.py` 5, `graph_build.py` 89, `neighbours.py` 90, `ring_select.py` 110, `seed_note.py` 84, `vault_notes.py` 239 — 1041 | Reflect | 1× |
 | status line | Show + share | `gateway/status_line.py` 164 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
 
@@ -79,7 +79,7 @@ repository yet.
 | core — model clients | 614 | `gateway/infomaniak_chat.py` 178, `infomaniak_embed.py` 124, `infomaniak_limiter.py` 312 | core |
 | core — Instance API | 211 | `shared/instance.py` 128, `shared/profiles.py` 83 | core |
 | core — Module API | 213 | `shared/modules.py` 169, `modules/example_echo/module.py` 44 | core |
-| surface — stage | 4678 | `stage/stage.py` 2953, `gateway/stage_state.py` 1618, `stage_image.py` 107 | core |
+| surface — stage | 4678 | `stage/stage.py` 2953, `gateway/stage_state.py` 1618, `shared/text.py`, `stage_image.py` 107 | core |
 | retire | 1924 | STT engines dropped by decision 25: `stt_server/backends/infomaniak_whisper_backend.py` 475, `vosk_backend.py` 78, `whisper_streaming_backend.py` 303, `_vendored_whisper_streaming/` 980, `test_vosk.py` 88 | — |
 
 ## Targets
@@ -181,8 +181,10 @@ shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py              
 shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py                block:write-text
 shared/speechmatics.py                                                           stt:engine-speechmatics
 shared/surface.py                                                                 core:module
+shared/text.py                                                                    surface:stage
 shared/utterance.py                                                              stt:engine-speechmatics
 shared/wake_word.py                                                               block:segment
+shared/wiki_names.py                                                              block:knowledge-link
 stage/session_graph.py                                                           block:graph
 stage/stage.py                                                                   surface:stage
 stt/fundusapps/__init__.py                                                       stt:server

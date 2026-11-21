@@ -39,7 +39,7 @@ from typing import Optional, Sequence
 
 from shared.wake_word import WAKE_NOT
 from shared.minutes_format import DEFAULT_MODE, MODES
-from stage_state import MAX_PENDING_LABEL
+from shared.text import MAX_PENDING_LABEL
 
 ACTIONS = ("topic_block", "tag_entry", "stage_decision", "ask", "research",
            "document", "wake")

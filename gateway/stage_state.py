@@ -31,11 +31,16 @@ reverse order does not exist and the two cannot deadlock.
 from __future__ import annotations
 
 import re
+import sys
 import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Callable
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from shared.text import MAX_PENDING_LABEL, derived_title, one_line  # noqa: E402,F401
 
 # STILL 2, although the history is new. `content()` only GAINED a key:
 # `main` is unchanged and still carries the displayed surface, so an old
@@ -89,9 +94,6 @@ TOPIC_WINDOW_S = 60.0        # ... and inside one window at most
 TOPIC_MAX_PER_WINDOW = 1     #     this many automatic changes happen
 MAX_HISTORY = 20             # how many surfaces stay reachable
 
-# A title is one line and a history label, not a paragraph.
-MAX_TITLE_CHARS = 80
-
 NOTICE_KINDS = {"value_conflict", "decision_breach", "speaker_conflict"}
 
 # --- the announcement: "gleich kommt was" ------------------------------------
@@ -113,8 +115,6 @@ IMAGE_TTL_S = 300.0
 # The page shows at most three; the state keeps no more than it shows, so
 # nothing is announced that nobody can see. The OLDEST gives way.
 MAX_PENDING = 3
-# One line on the page, not a paragraph.
-MAX_PENDING_LABEL = 60
 # Which accepted action keeps which announcement. A graph is the same
 # movement as a topic change (see `_brake()`), so it keeps a topic
 # announcement. `research` and `document` have no action today: they end
@@ -146,7 +146,6 @@ TOO_MANY = "too many"
 PARKED = "parked"
 
 _WHITESPACE = re.compile(r"\s+")
-_HEADING = re.compile(r"^\s*#{1,6}\s+(.*\S)\s*$")
 # The characters an agent wraps a quotation in. Stripping them is not
 # tolerance for invention: they delimit the quote, they are not part of
 # what was said.
@@ -191,38 +190,6 @@ def _text(value: object) -> str | None:
         return None
     cleaned = scrub(value).strip()
     return cleaned or None
-
-
-def one_line(text: str) -> str:
-    """A value that has to be ONE line, collapsed and capped.
-
-    Collapsed, not cut at the first newline: a title that arrives with a
-    line break still says what it says, and dropping everything after the
-    break would silently shorten the one label the history has.
-    """
-    return _WHITESPACE.sub(" ", text).strip()[:MAX_TITLE_CHARS]
-
-
-def derived_title(markdown: str) -> str:
-    """A history label DERIVED from the surface -- never invented.
-
-    A call-out has no title: the round ordered a surface, not a topic. The
-    history needs a label for every entry anyway, and the only honest
-    source is what is on the surface -- its first heading, otherwise its
-    first non-empty line. Writing a title the agent never wrote and nobody
-    said would put invention on the stage, which is the one thing this
-    whole module refuses to do (see `quote_is_spoken`). An empty label is
-    better than a made-up one; the page falls back to the identity.
-    """
-    for line in markdown.split("\n"):
-        heading = _HEADING.match(line)
-        if heading is not None:
-            return one_line(heading.group(1))
-        if line.strip():
-            # A list item is the common first line. The bullet is markup,
-            # not text -- the rest of the line is quoted as it stands.
-            return one_line(line.strip().lstrip("-*>").strip()) or one_line(line)
-    return ""
 
 
 def _normalised(text: str) -> str:
