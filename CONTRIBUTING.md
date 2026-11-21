@@ -31,36 +31,40 @@ A CI check enforces this trailer automatically on every pull request
 (`.github/workflows/dco.yml`, `scripts/check_dco.py`): a pull request
 whose commits are missing the trailer fails CI.
 
-## 3. Commit identity on agent-authored commits -- no real address
+## 3. Commit identity on agent-authored commits -- one allow-listed address
 
 `tools/publish_check.py` (the publish gate, now also running on every pull
 request) flags any email address that is not a documentation placeholder
 (`publish/denylist-public.txt`'s `email-real` class: everything except
-`*.example.*`, `*.invalid`, `*.test`). The DCO check above needs a real
-`Signed-off-by:` line on every commit. Both are satisfied together only if
-the `Signed-off-by:` identity itself uses a placeholder address -- a real
-operator or assistant mailbox in that trailer, or in author/committer
-metadata, or in a `Co-Authored-By:` trailer, fails the publish gate on its
-own commit.
+`*.example.*`, `*.invalid`, `*.test`) and does not match a class in
+`publish/allow-public.txt`. The DCO check above needs a real
+`Signed-off-by:` line on every commit. Both are satisfied together because
+the factory's own `Signed-off-by:` identity is a GitHub-issued no-reply
+address, and that address *shape* -- not one literal address -- is what
+`publish/allow-public.txt` allow-lists; any *other* real operator or
+assistant mailbox in that trailer, or in author/committer metadata, or in
+a `Co-Authored-By:` trailer, still fails the publish gate on its own
+commit.
 
 For the factory's own agent-authored commits in this repository (not a
 human contributor's), the fixed identity is:
 
 ```
-Signed-off-by: CoThinker Agent <agent@cothinker.invalid>
+Signed-off-by: Robo <8000653+birkschmithuesen@users.noreply.github.com>
 ```
 
 matching the author/committer identity used by `git commit -s --author`
 or the equivalent `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_NAME`/
-`GIT_COMMITTER_EMAIL` environment overrides. Do not add a `Co-Authored-By:`
-trailer naming any assistant's own real mailbox -- a real vendor domain in
-that trailer is exactly the kind of address the publish gate flags, on its
-own commit, every time. If the authoring tool needs to be credited, name
-it in prose in the commit body instead of in a trailer with an email
-address.
+`GIT_COMMITTER_EMAIL` environment overrides (`FACTORY.yaml`'s
+`commit_identity`). Do not add a `Co-Authored-By:` trailer naming any
+OTHER real address, including an assistant's own real mailbox -- a real
+vendor domain in that trailer is exactly the kind of address the publish
+gate flags, on its own commit, every time. If the authoring tool needs to
+be credited, name it in prose in the commit body instead of in a trailer
+with an email address.
 
 A human contributor signs off with their own real name and address, as the
-DCO intends -- the placeholder above is only for commits the factory itself
+DCO intends -- the identity above is only for commits the factory itself
 authors in this repository, never for a human's contribution.
 
 ## Questions

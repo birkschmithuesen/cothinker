@@ -37,6 +37,7 @@ import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent.parent
 PUBLIC_DENYLIST = HERE / "publish" / "denylist-public.txt"
+ALLOWLIST = HERE / "publish" / "allow-public.txt"
 DEFAULT_PRIVATE_LIST_GLOB = str(pathlib.Path.home() / ".config" / "cothinker" / "denylist.d" / "*.txt")
 CANARY = "cothinker" + "canary"
 TOKEN_RE = re.compile(r"[^a-z0-9]+")
@@ -44,12 +45,13 @@ COMMIT_MARK = "\x01COTHINKER-COMMIT "
 
 
 class PatternList:
-    def __init__(self, ident, literals=(), regexes=(), hmacs=None, key=None):
+    def __init__(self, ident, literals=(), regexes=(), hmacs=None, key=None, allow=frozenset()):
         self.ident = ident
         self.literals = list(literals)
         self.regexes = list(regexes)
         self.hmacs = hmacs
         self.key = key
+        self.allow = allow
 
     def is_empty(self):
         return not (self.literals or self.regexes or self.hmacs)
@@ -60,7 +62,8 @@ class PatternList:
             if lit in lower:
                 return True
         for rx in self.regexes:
-            if rx.search(line):
+            m = rx.search(line)
+            if m and m.group(0).lower() not in self.allow:
                 return True
         if self.hmacs:
             tokens = [t for t in TOKEN_RE.split(lower) if t]
@@ -75,7 +78,7 @@ def _hmac(key, text):
     return hmac.new(key, text.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def load_list(path, ident):
+def load_list(path, ident, allow=frozenset()):
     literals, regexes = [], []
     for raw in pathlib.Path(path).read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -85,7 +88,37 @@ def load_list(path, ident):
             regexes.append(re.compile(line[3:]))
         else:
             literals.append(line.lower())
-    return PatternList(ident, literals, regexes)
+    return PatternList(ident, literals, regexes, allow=allow)
+
+
+class AllowList:
+    """Values (literal or `re:` class) that an otherwise-matching regex in
+    the same denylist must not flag. Checked with `in`, same as a
+    frozenset, against the regex's own matched substring (group 0), not
+    the whole scanned line. See publish/allow-public.txt."""
+
+    def __init__(self, literals=frozenset(), regexes=()):
+        self.literals = literals
+        self.regexes = tuple(regexes)
+
+    def __contains__(self, value):
+        return value in self.literals or any(rx.fullmatch(value) for rx in self.regexes)
+
+
+def load_allow(path):
+    path = pathlib.Path(path)
+    if not path.exists():
+        return AllowList()
+    literals, regexes = set(), []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("re:"):
+            regexes.append(re.compile(line[3:], re.IGNORECASE))
+        else:
+            literals.add(line.lower())
+    return AllowList(frozenset(literals), regexes)
 
 
 def load_hmac_list(path, key):
@@ -213,7 +246,7 @@ def main(argv=None):
     if o.hmac_generate:
         return hmac_generate(o.hmac_generate)
 
-    lists = [load_list(PUBLIC_DENYLIST, "public")]
+    lists = [load_list(PUBLIC_DENYLIST, "public", allow=load_allow(ALLOWLIST))]
     private_paths = _expand_private_list(o.private_list) if o.private_list else \
         sorted(glob.glob(DEFAULT_PRIVATE_LIST_GLOB))
     for i, p in enumerate(private_paths):
