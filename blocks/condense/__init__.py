@@ -90,13 +90,16 @@ def condense(segments: Sequence[Mapping], topics: Sequence[Mapping], language: s
              llm: LlmPort, *, system: Optional[str] = None,
              log: Optional[Callable[[str], None]] = None) -> Condensed:
     """Condenses `segments` (mappings with "id", "text") per topic (mappings
-    with "id", "title"). Raises whatever `llm.complete` raises."""
+    with "id", "title"). Raises whatever `llm.complete` raises. `log` gets
+    event names only (`condense_quote_dropped`, `condense_wrong_language`),
+    never conversation text. The language check ignores the topic's
+    verbatim quotes."""
     system = system if system is not None else load_prompt(language)
     seg_texts = [s["text"] for s in segments]
     ids = [t["id"] for t in topics]
     got: dict[str, TopicCondensed] = {}
     pending = list(topics)
-    for attempt in (1, 2):                     # first try + exactly one retry
+    for _attempt in (1, 2):                   # first try + exactly one retry
         if not pending:
             break
         raw = llm.complete(system, _user_message(segments, pending, language))
@@ -105,13 +108,15 @@ def condense(segments: Sequence[Mapping], topics: Sequence[Mapping], language: s
             item = parsed.get(t["id"])
             if not item or not item["text"]:
                 continue
-            if not matches_language(item["text"], language):
+            kept = verbatim_quotes(item["quotes"], seg_texts, log)
+            prose = item["text"]
+            for q in kept:                     # a quote stays as spoken: not language-checked
+                prose = prose.replace(q, " ")
+            if not matches_language(prose, language):
                 if log:
-                    log(f"condense: topic {t['id']} text not in {language!r} (attempt {attempt})")
+                    log("condense_wrong_language")
                 continue
-            got[t["id"]] = TopicCondensed(
-                t["id"], item["text"],
-                tuple(verbatim_quotes(item["quotes"], seg_texts, log)))
+            got[t["id"]] = TopicCondensed(t["id"], item["text"], tuple(kept))
         pending = [t for t in topics if t["id"] in missing_topics(ids, got)]
     covered = [i for i in ids if i in got]
     quotes: list = []
@@ -142,6 +147,8 @@ class CondenseBlock:
             ctx.language, str(config.get("prompt", DEFAULT_PROMPT)),
             Path(template_dir) if template_dir else None)
         self._open, self._segments = None, []
+        if ctx.llm is None:                    # e.g. no API key: make it visible
+            self._trace("condense_no_llm", {})
 
     def on_event(self, ev: CoreEvent) -> Sequence[CoreEvent]:
         if ev.kind == "segment":
@@ -183,10 +190,14 @@ class CondenseBlock:
         try:
             res = condense(segments, [topic], ctx.language, ctx.llm,
                            system=self._system,
-                           log=lambda m: self._trace("condense.log", {"msg": m}))
+                           log=lambda event: self._trace(event, {"id": topic["id"]}))
         except Exception as e:  # noqa: BLE001 -- LLM failure: emit nothing
-            self._trace("condense.llm_failed", {"topic_id": topic["id"], "error": f"{type(e).__name__}: {e}"})
+            # Only allow-listed, token-shaped fields reach the trace file
+            # (shared/events.py); never conversation text.
+            self._trace("condense_llm_failed", {"id": topic["id"], "kind": type(e).__name__})
             return ()
+        if res.not_condensed:
+            self._trace("condense_not_condensed", {"id": topic["id"], "count": len(res.not_condensed)})
         item = res.by_topic.get(topic["id"])
         if item is not None:
             ctx.emit(ViewIntent(

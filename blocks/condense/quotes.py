@@ -21,5 +21,5 @@ def verbatim_quotes(quotes: Iterable[object], segment_texts: Iterable[str],
             if q not in kept:
                 kept.append(q)
         elif log is not None:
-            log(f"condense: dropped non-verbatim quote {q!r}")
+            log("condense_quote_dropped")      # never the quote text (target.md §9)
     return kept

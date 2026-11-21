@@ -11,6 +11,7 @@ import json
 
 from blocks.condense import CondenseBlock, condense, load_prompt
 from shared.blocks import BlockContext
+from shared.events import EventLog
 from shared.language_guard import detect_language
 from shared.llm import LlmPort
 from shared.modules import CoreEvent, StateStore
@@ -50,6 +51,14 @@ def test_german_speech_english_quotes_gives_german_text():
     assert detect_language(res.text) == "de"
     assert res.quotes == ["we need more budget for the new project"]
     assert res.topics_covered == ["t1"] and res.not_condensed == []
+    # a German text embedding an English quote is accepted without a retry
+    quote = "we need more budget for the project, and that is the plan."
+    segs = SEGMENTS + [{"id": 4, "text": f"Anna sagte: {quote}"}]
+    de_with_quote = f"Anna sagte, dass wir mehr Budget brauchen: {quote}"
+    assert detect_language(de_with_quote) == "en"      # the raw detector is fooled
+    llm = FakeLlm(reply(("t1", de_with_quote, [quote])))
+    res = condense(segs, [{"id": "t1", "title": "Budget"}], "de", llm)
+    assert len(llm.calls) == 1 and res.text == de_with_quote and res.quotes == [quote]
     # wrong-language text is rejected, retried once, the German retry is accepted
     en_text = "The team talks about the budget and the plan for next year is still open."
     llm = FakeLlm(reply(("t1", en_text, [])), reply(("t1", DE_TEXT, [])))
@@ -76,7 +85,7 @@ def test_hallucinated_quote_dropped():
     llm = FakeLlm(reply(("t1", DE_TEXT, ["we need more budget", "we need a lot more budget"])))
     res = condense(SEGMENTS, [{"id": "t1", "title": "Budget"}], "de", llm, log=logged.append)
     assert res.quotes == ["we need more budget"]
-    assert any("we need a lot more budget" in m for m in logged)
+    assert logged == ["condense_quote_dropped"]        # the event name, never the quote
 
 
 def test_five_topics_five_covered():
@@ -114,11 +123,13 @@ def test_missing_topic_retried_then_listed():
 
 def test_llm_failure_emits_nothing(tmp_path):
     emitted, traced = [], []
+    trace_file = EventLog(tmp_path / "trace.jsonl")
     llm = FakeLlm(RuntimeError("down"))
     ctx = BlockContext(instance=None, session_dir=tmp_path, state=StateStore(tmp_path / "s"),
                        agent=None, llm=llm, language="de",
                        clock=lambda: 0.0, emit=emitted.append, artefact=lambda n, t: None,
-                       trace=lambda event, fields: traced.append((event, fields)))
+                       trace=lambda event, fields: (traced.append((event, fields)),
+                                                    trace_file.record(event, **fields)))
     block = CondenseBlock()
     block.start(ctx, {"prompt": "prompts/condense.{lang}.md"})
     assert "JSON" in load_prompt("en")
@@ -127,4 +138,8 @@ def test_llm_failure_emits_nothing(tmp_path):
     out = block.on_event(CoreEvent("block_output", {"topic": {"id": "t1", "closed": True}}))
     assert out == () and emitted == []
     assert len(llm.calls) == 1
-    assert [e for e, _ in traced] == ["condense.llm_failed"]
+    assert [e for e, _ in traced] == ["condense_llm_failed"]
+    # the line really lands in the trace file, without any conversation text
+    rows = [json.loads(line) for line in (tmp_path / "trace.jsonl").read_text().splitlines()]
+    assert [(r["event"], r["id"], r["kind"]) for r in rows] == [
+        ("condense_llm_failed", "t1", "RuntimeError")]
