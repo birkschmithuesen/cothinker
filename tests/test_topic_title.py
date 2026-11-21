@@ -16,7 +16,9 @@ test function asserts the recorded result of its check.
 """
 from __future__ import annotations
 
+import atexit
 import re
+import shutil
 import sys
 import threading
 import time
@@ -220,6 +222,8 @@ class Rig:
                 pass
 
         tmp = Path(tempfile.mkdtemp(prefix="tt-blocks-"))
+        self.tmp = tmp
+        atexit.register(shutil.rmtree, tmp, True)
         self.block = TopicsBlock(titler_factory=titler_factory or (lambda *a: None))
         self.host = BlockHost(
             [self.block, Listener()],
@@ -245,6 +249,7 @@ def make(titler_factory, tag):
 def stop_lanes(rig):
     # The lane workers were never started here; only the block's titler runs.
     rig.block.stop()
+    shutil.rmtree(rig.tmp, ignore_errors=True)
 
 
 release = threading.Event()
