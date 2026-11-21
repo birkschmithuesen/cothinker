@@ -26,6 +26,15 @@ from shared.surface import ViewIntent
 HANDLERS: dict[str, Callable[[object, ViewIntent], None]] = {}
 
 
+def _log_only(writer: object, intent: ViewIntent) -> None:
+    """Today's stage has no place for this intent: it stays on the intent
+    board (and in the trace); nothing is drawn."""
+
+
+# Keyed on the block-id prefix, i.e. "condense" for ids "condense:<topic>".
+HANDLERS["condense"] = _log_only
+
+
 def _prefix(intent_id: str) -> str:
     return intent_id.split(":", 1)[0]
 
