@@ -2046,6 +2046,11 @@ def test_a_vendored_bundle_is_served(hole):
     assert code == 200 and len(js) > 10000
 
 
+def test_the_qr_encoder_is_served_and_keeps_its_licence_header(hole):
+    code, js = hole("/static/vendor/qrcode.js")
+    assert code == 200 and "createSvgTag" in js and "MIT license" in js
+
+
 def test_an_unknown_static_name_is_refused(hole):
     assert hole("/static/vendor/../../stage.py")[0] == 404
 
@@ -2055,8 +2060,8 @@ def test_every_bundle_is_named_with_its_licence():
         encoding="utf-8")
     assert all(n in lizenz for n in ("cytoscape.min.js", "layout-base.js",
                                      "cose-base.js", "cytoscape-fcose.js",
-                                     "cytoscape-layout-utilities.js")) \
-        and lizenz.count("MIT") >= 5
+                                     "cytoscape-layout-utilities.js", "qrcode.js")) \
+        and lizenz.count("MIT") >= 6
 
 
 # --- a graph surface, rendered defensively

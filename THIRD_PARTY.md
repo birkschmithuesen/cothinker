@@ -15,6 +15,7 @@ the vendor READMEs next to the bundles.
 | `stage/static/vendor/cose-base.js` | cose-base | MIT | cose-base |
 | `stage/static/vendor/cytoscape-fcose.js` | cytoscape-fcose layout plugin | MIT | cytoscape-fcose |
 | `stage/static/vendor/cytoscape-layout-utilities.js` | cytoscape-layout-utilities | MIT | cytoscape-layout-utilities |
+| `stage/static/vendor/qrcode.js` | qrcode-generator 1.4.4, QR code encoder for the share link, Copyright (c) 2009 Kazuhiko Arase | MIT | qrcode-generator |
 | `workshop/static/icons/LICENSE-lucide.txt`, `stage/static/workshop/LICENSE-lucide.txt` | Lucide icon set | ISC | lucide |
 | `stage/static/workshop/LICENSE-OFL-Archivo.txt` | Archivo font | SIL Open Font License 1.1 | Archivo |
 | `stage/static/workshop/LICENSE-OFL-Limelight.txt` | Limelight font | SIL Open Font License 1.1 | Limelight |

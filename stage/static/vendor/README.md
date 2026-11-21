@@ -14,11 +14,13 @@ of CoThinker (AGPL-3.0-only); each keeps its own licence.
 | `cose-base.js` | cose-base | 2.2.0 | `coseBase` | MIT |
 | `cytoscape-fcose.js` | cytoscape-fcose | 2.2.0 | `cytoscapeFcose` | MIT |
 | `cytoscape-layout-utilities.js` | cytoscape-layout-utilities | 1.1.1 | `cytoscapeLayoutUtilities` | MIT |
+| `qrcode.js` | qrcode-generator (Kazuhiko Arase) | 1.4.4 | `qrcode` | MIT |
 
 **Load order matters** — these UMD bundles resolve their dependencies off
 `window` when there is no module loader:
 `cytoscape` → `layout-base` → `cose-base` → `cytoscape-fcose` →
-`cytoscape-layout-utilities`.
+`cytoscape-layout-utilities`. `qrcode.js` stands alone (share-link QR code on
+the stage page; upstream https://github.com/kazuhikoarase/qrcode-generator).
 
 Refresh with `npm pack <package>` and copy `package/<name>.js` out of the
 tarball.

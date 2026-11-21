@@ -165,7 +165,8 @@ def append_action(pid: str, intent_id: str, kind: str, payload: dict) -> None:
 # Read once, at import: the list is a deployment fact, and a directory
 # listing per request would be a file system call in front of a room.
 VENDOR_FILES = ("cytoscape.min.js", "layout-base.js", "cose-base.js",
-                "cytoscape-fcose.js", "cytoscape-layout-utilities.js")
+                "cytoscape-fcose.js", "cytoscape-layout-utilities.js",
+                "qrcode.js")
 VAULT_TTL = 60.0                 # the vault changes slowly, the stage polls fast
 # (timestamp, (NoteIndex | None, HardEdges | None, rel -> Path, digest)):
 # ONE scan feeds both the `/vault/` allow-list and the graph tab's ring 1
