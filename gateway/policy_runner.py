@@ -43,7 +43,7 @@ from typing import Callable, Optional
 import decide as d
 import policy as pol
 import wiki
-from events import is_token
+from shared.events import is_token
 from questions import CONFIRM_ID, CONFIRM_QUESTIONS, MODE_ID, MODE_QUESTIONS
 
 # The signal token of a page ordered by Zuruf (MM-G D7), for the trace.

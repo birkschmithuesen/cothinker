@@ -37,8 +37,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from events import is_token                                  # noqa: E402
-from protocol_doc import clean_line                          # noqa: E402
+from shared.events import is_token                                  # noqa: E402
+from shared.minutes_format import clean_line                          # noqa: E402
 from graph.neighbours import HardEdges                       # noqa: E402
 from graph.vault_notes import Note, NoteIndex, scan_vault    # noqa: E402
 

@@ -24,7 +24,7 @@ hash (`questions_hash()`) also catches an edit nobody remembered to bump
 -- a question's wording changed and the version did not, which would
 otherwise mix two different question sets under one version number in
 the event trace. Both go into `stage-events.jsonl` (text-free, per
-gateway/events.py) as the measurement basis for later cards: which
+shared/events.py) as the measurement basis for later cards: which
 questions actually separate anything (bench) is only comparable across
 sessions if the trace also says which exact wording was asked.
 
@@ -32,7 +32,7 @@ IDS ARE GERMAN, deliberately: they ride along in the JSON object sent to
 the LLM backend as literal question keys (see `gateway/topic_detect.py`,
 `JEV_NOUL_ID = "neues_thema"`), and AGENTS.md's naming convention puts
 anything that "goes into a prompt" in German, not English. They are also
-ASCII-only tokens (`gateway/events.py`'s `is_token()`): no umlaut, so a
+ASCII-only tokens (`shared/events.py`'s `is_token()`): no umlaut, so a
 question id can be written into the text-free event trace unchanged.
 
 Question texts phrase `vorher` (the preceding blocks) and `neu` (the
@@ -143,7 +143,7 @@ def questions_hash(questions: Sequence[Question] = QUESTIONS) -> str:
     Truncated to 16 hex characters: short enough for a compact event
     trace line, long enough that a collision between two DIFFERENT
     question sets is not a realistic worry for a handful of sessions.
-    16 lowercase hex characters also satisfy `gateway/events.py`'s
+    16 lowercase hex characters also satisfy `shared/events.py`'s
     `is_token()`, so this value can be written into the text-free trace
     unchanged, the same way `EventLog.hash_quote()` already does for a
     call-out quote.
@@ -169,7 +169,7 @@ QUESTIONS_HASH = questions_hash()
 # set. These are asked only while level 2 needs them -- a question open on
 # the stage, or the first minutes of the meeting -- by
 # gateway/policy_runner.py through decide.decide().
-MEETING_MODES = ("sitzung", "arbeit", "folge")   # == protocol_doc.MODES
+MEETING_MODES = ("sitzung", "arbeit", "folge")   # == shared.minutes_format.MODES
 CONFIRM_ID = "rueckfrage_bejaht"
 MODE_ID = "termin_art"
 

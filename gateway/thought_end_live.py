@@ -19,7 +19,7 @@ NO TEXT IN THE TRACE. Laya needs the utterance and the text before it;
 both stay in memory and go to the worker's stdin only. What is written is
 an allow-list of numbers and tokens (`ROW_KEYS`), and log lines carry
 numbers and exception type names only -- same rule and same reason as
-gateway/events.py and gateway/correction.py.
+shared/events.py and gateway/correction.py.
 
 THE SSE READER IS NEVER BLOCKED. `enqueue()` and `smart_turn()` take a
 lock for a dict or queue operation and return; the Laya call, the wait

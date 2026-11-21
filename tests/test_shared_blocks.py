@@ -11,7 +11,7 @@ from pathlib import Path
 
 import pytest
 
-from shared import blocks as sb
+import shared.blocks as sb
 from shared.modules import CoreEvent, StateStore
 
 
