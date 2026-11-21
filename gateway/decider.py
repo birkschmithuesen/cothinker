@@ -42,15 +42,17 @@ from __future__ import annotations
 import json
 import queue
 import re
+import sys
 import threading
 import time
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-import decide as d
-from shared.events import is_number, is_token
-from questions import QUESTIONS, QUESTIONS_HASH, QUESTIONS_VERSION
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import decide as d  # noqa: E402
+from shared.events import is_number, is_token  # noqa: E402
+from questions import QUESTIONS, QUESTIONS_HASH, QUESTIONS_VERSION  # noqa: E402
 
 # Version of the LINE layout below, not of the question set. Task 4 (the
 # bench) reads it; bump it when a key changes meaning.

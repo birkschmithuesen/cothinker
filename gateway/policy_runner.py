@@ -33,6 +33,7 @@ order, and a deadlock against the ticker. Holding `StageWriter._lock`
 """
 from __future__ import annotations
 
+import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -40,11 +41,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-import decide as d
-import policy as pol
-from shared.events import is_token
-from shared.wiki_names import page_path, page_slug
-from questions import CONFIRM_ID, CONFIRM_QUESTIONS, MODE_ID, MODE_QUESTIONS
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+import decide as d  # noqa: E402
+import policy as pol  # noqa: E402
+from shared.events import is_token  # noqa: E402
+from shared.wiki_names import page_path, page_slug  # noqa: E402
+from questions import CONFIRM_ID, CONFIRM_QUESTIONS, MODE_ID, MODE_QUESTIONS  # noqa: E402
 
 # The signal token of a page ordered by Zuruf (MM-G D7), for the trace.
 ZURUF_SIGNAL = "zuruf_seite"

@@ -54,6 +54,7 @@ from types import SimpleNamespace
 from typing import Callable, Iterable, Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from segmenter import Block, BlockBuilder  # noqa: E402
 from correction import (CorrectionWorker, Corrector, MODEL_CHAIN,  # noqa: E402
                         build_glossary)
