@@ -1,0 +1,47 @@
+# CoThinker — Reflect: a method in CoThinker (ADR 0010)
+# Copyright (C) 2026 Birk Schmithuesen
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License, version 3.
+# It is provided WITHOUT ANY WARRANTY. See LICENSE.
+#
+# Template format: blocks + phases + rules, no code (ADR 0009).
+[template]
+name = "reflect"
+api_version = 1
+surfaces = ["stage"]
+optional_surfaces = ["external-display"]
+rules = ["grounding", "add-dont-restructure"]
+
+[[blocks]]
+id = "capture-bullets"
+[[blocks]]
+id = "topics"
+[[blocks]]
+id = "decisions-tasks-questions"
+[[blocks]]
+id = "condense"
+[[blocks]]
+id = "minutes-document"
+[[blocks]]
+id = "mirroring-coach"
+[[blocks]]
+id = "knowledge-link"
+[[blocks]]
+id = "timer"
+[[blocks]]
+id = "speaker-queue"
+[[blocks]]
+id = "speaking-share"
+[[blocks]]
+id = "status-line"
+[[blocks]]
+id = "graph"
+
+[[phases]]
+id = "session"
+titles = { de = "Sitzung", en = "Session" }
+blocks = ["capture-bullets", "topics", "decisions-tasks-questions", "condense",
+          "minutes-document", "mirroring-coach", "knowledge-link", "timer",
+          "speaker-queue", "speaking-share", "status-line", "graph"]
+surfaces = ["stage"]
