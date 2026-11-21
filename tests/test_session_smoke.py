@@ -37,12 +37,16 @@ def test_stage_serves_the_consumers_stage_file(tmp_path):
              "demo", "--no-token", "--host", "127.0.0.1", "--port", str(port)],
             env=env, stdout=subprocess.DEVNULL, stderr=err)
         try:
-            url = f"http://127.0.0.1:{port}/parts"
+            root_url = f"http://127.0.0.1:{port}/"
+            parts_url = f"http://127.0.0.1:{port}/parts"
+            root_status = None
             body = None
             for _ in range(50):
                 assert proc.poll() is None, errlog.read_text()
                 try:
-                    with urllib.request.urlopen(url, timeout=5) as r:
+                    with urllib.request.urlopen(root_url, timeout=5) as r:
+                        root_status = r.status
+                    with urllib.request.urlopen(parts_url, timeout=5) as r:
                         assert r.status == 200
                         body = json.loads(r.read().decode("utf-8"))
                     break
@@ -50,6 +54,7 @@ def test_stage_serves_the_consumers_stage_file(tmp_path):
                     raise
                 except OSError:
                     time.sleep(0.2)
+            assert root_status == 200, errlog.read_text()
             assert body is not None, errlog.read_text()
             mirror = (run.stage_json or {}).get("mirror")
             assert mirror, run.stage_json
