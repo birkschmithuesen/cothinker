@@ -1,4 +1,4 @@
-# CoThinker — shared/surface.py: Surface API types and intent board
+# CoThinker — tests for the Surface API types and intent board
 # Copyright (C) 2026 Birk Schmithuesen
 #
 # This program is free software: you can redistribute it and/or modify it
@@ -48,19 +48,25 @@ def test_put_replaces_existing_id_in_place_without_reordering():
 def test_expired_intent_is_dropped_from_current():
     now = [100.0]
     board = su.IntentBoard(clock=lambda: now[0])
-    board.put(make_intent("a", expires_at=100.0))
-    now[0] = 100.0
-    assert board.current() == []
+    expiring = make_intent("a", expires_at=150.0)
+    lasting = make_intent("b", expires_at=200.0)
+    board.put(expiring)
+    board.put(lasting)
+    assert board.current() == [expiring, lasting]
+    now[0] = 150.0
+    assert board.current() == [lasting]
 
 
 def test_for_surface_drops_kinds_not_in_surface_and_returns_empty_when_nothing_matches():
     now = [100.0]
     board = su.IntentBoard(clock=lambda: now[0])
-    board.put(make_intent("a", kind="prompt"))
+    prompt = make_intent("a", kind="prompt")
+    timer = make_intent("b", kind="timer")
+    board.put(prompt)
+    board.put(timer)
     logged = []
-    result = board.for_surface(frozenset({"timer"}), log=logged.append)
-    assert result == []
-    assert len(logged) == 1
+    assert board.for_surface(frozenset({"timer"}), log=logged.append) == [timer]
+    assert board.for_surface(frozenset({"graph"}), log=logged.append) == []
 
 
 def test_for_surface_logs_unrenderable_id_exactly_once():
