@@ -46,6 +46,13 @@ additively.
   template, which blocks configured how, which surfaces, which STT engine and
   pipeline stages). Instances live in private repositories (ADR 0015).
 
+**Network seams**: every process boundary (STT server, stage, workshop web
+app, External Display) is rebuilt on **FastAPI** when it is touched. Today
+`stage/stage.py` uses `http.server`, the STT server uses Flask, and the
+workshop hub uses websockets directly; each moves to FastAPI the next time it
+changes. Blocks, templates and the phase engine stay in-process behind the
+block host and never gain a network hop of their own (ADR 0017).
+
 A session is an episode of an instance, not its lifespan: state that spans
 sessions (an InScribe piece across three workshop days, a Kollektivgedächtnis
 graph across two days) belongs to the instance's project, not to the session.
@@ -402,4 +409,5 @@ Telegram is not a target surface (ADR 0013).
 | [0014](../adr/0014-licence-agpl-cla-dco-modules-own-licence.md) | Licence: AGPL core, CLA and DCO; modules may carry their own licence | §1 |
 | [0015](../adr/0015-public-repo-fresh-export-private-instances.md) | Public repository from a fresh export, private instance repositories | §1 |
 | [0016](../adr/0016-public-repo-issues-and-prs.md) | Work in the public repository through issues and pull requests | — |
+| [0017](../adr/0017-network-seams-fastapi-blocks-in-process.md) | Network seams on FastAPI, blocks stay in-process | §1 |
 | [0018](../adr/0018-product-names-interaction-migration-rules.md) | Product names, interaction and migration rules | §1, §2.2, §2.3, §7, §8 |
