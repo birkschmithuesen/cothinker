@@ -17,7 +17,7 @@ from __future__ import annotations
 import re
 import sys
 import threading
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Callable, Iterable
@@ -47,6 +47,9 @@ class EntryResult:
     reason: str = ""
     links_seen: int = 0
     links_dead: int = 0
+    # False when the entry failed BEFORE any write was attempted (a stray
+    # `names` value): the host must not report that as an unwritable file.
+    attempted: bool = field(default=True, compare=False)
 
 
 _HHMM_RE = re.compile(r"\A([01]\d|2[0-3]):[0-5]\d\Z")
@@ -146,7 +149,7 @@ class MinutesDocument:
             when = _stamp_or_now(stamp)
         except Exception as e:            # noqa: BLE001 -- see the docstring
             log("entry not prepared:", repr(e))
-            return EntryResult("not written", seen, dead)
+            return EntryResult("not written", seen, dead, attempted=False)
         if not clean:
             return EntryResult("no text", seen, dead)
 

@@ -281,6 +281,17 @@ def test_port_reports_a_failed_write_as_not_written(tmp_path):
     assert reports == [False, False]
 
 
+def test_port_does_not_report_a_failure_before_any_write(tmp_path):
+    p = _doc(tmp_path)
+    reports = []
+    port = k.open_minutes(p, report=reports.append, session_dir=tmp_path / "sess")
+    res = port.add_entry("notiz", "a", names=42)      # not iterable
+    assert res.reason == "not written"
+    assert reports == []
+    assert port.add_entry("notiz", "b", stamp="10:00").reason == ""
+    assert reports == [True]
+
+
 def test_port_on_a_v1_file(tmp_path):
     p = _doc(tmp_path, V1)
     port = k.open_minutes(p, session_dir=tmp_path / "sess")

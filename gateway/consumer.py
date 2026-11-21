@@ -1412,6 +1412,8 @@ class MinutesPort:
                 res = minutes_block.EntryResult(
                     "not written", res.links_seen, res.links_dead)
         ok = {"": True, "not written": False}.get(res.reason)
+        if not getattr(res, "attempted", True):
+            ok = None       # failed before any write: nothing to report
         if ok is not None:
             try:
                 self.file.report(ok)
