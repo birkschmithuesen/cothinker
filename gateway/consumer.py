@@ -103,6 +103,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from graph.graph_build import GraphSource            # noqa: E402
 from graph.seed_note import find_or_create_seed      # noqa: E402
 from graph.vault_notes import DEFAULT_EXCLUDE        # noqa: E402
+from gateway.actions_reader import ActionsReader, dispatcher_for  # noqa: E402
 from gateway.block_host_wiring import build_session_blocks, feed_utterance  # noqa: E402
 from gateway.legacy_stage_sink import make_sink      # noqa: E402
 
@@ -3447,6 +3448,10 @@ def main() -> int:
                          "3 s budget per utterance, on timeout or error "
                          "the single name stays. Off by default. "
                          "gateway/speaker_split.py.")
+    ap.add_argument("--spool-dir", default="~/.local/state/cothinker/spool",
+                    help="where the stage spools participant actions "
+                         "(<spool>/<session-folder>/actions.jsonl); must "
+                         "match the stage's --spool-dir")
     a = ap.parse_args()
     install_sigterm_handler()
 
@@ -3624,6 +3629,12 @@ def main() -> int:
         log=log,
         trace=lambda event, fields: trace.record(event, **fields),
     )
+    # Participant taps the stage spooled (issue #47). The stage names the
+    # spool folder after the folder holding the buehne.json it shows, which
+    # is this run's folder.
+    actions_reader = ActionsReader(
+        Path(a.spool_dir).expanduser() / run_dir.name / "actions.jsonl",
+        dispatcher_for(session_blocks), log)
     # Diarization-label attribution: names a Speechmatics
     # label (S1, S2, ...) from what is said, independent of --speakers'
     # voice-embedding path above (no audio, no SPEAKER_EMBED_URL needed).
@@ -4329,6 +4340,7 @@ def main() -> int:
         while not stopp.wait(0.5):
             try:
                 bb.tick()
+                actions_reader.poll()
                 # `tick()` returns exactly what the trace wants: follow-up,
                 # expiry, cleared receipts. It stays the single source of
                 # truth; this only writes it down. At rest it returns
