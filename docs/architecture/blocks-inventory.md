@@ -12,16 +12,16 @@ Diagram: [blocks-inventory.png](blocks-inventory.png) (source
 against the code (see "Corrections against the draft").
 
 **Measured on:** cothinker `fe3351d4` (this repository), interview-theater
-(the InScribe application) at tag `example-production-2026-final`, kollektivgedaechtnis at
+(the InScribe application) at tag `example-instance-2026-final`, kollektivgedaechtnis at
 `HEAD` of 2026-11-20. Line counts are newline counts of the blob at that ref
 (`git show <ref>:<path> | wc -l`), produced by `inventory_check.py --table`.
 
 **Users:** M = meeting (today's `gateway/`, `stage/`, `graph/`, becomes the
-Reflect template), W = one-day workshop (`workshop/`, an example one-day-workshop instance),
-I = InScribe long format (interview-theater, an example production instance),
+Reflect template), W = one-day workshop (`workshop/`, the Assistant instance),
+I = InScribe long format (interview-theater, the Example-Instance instance),
 K = Kollektivgedächtnis (kollektivgedaechtnis). **Built** = in how many of
 the four code bases the function exists as separate code (2× / 3×).
-**Reflect** = part of the Reflect template (12 blocks).
+**Reflect** = part of the Reflect template (12 blocks, confirmed by Birk).
 
 ## How to check it
 
@@ -52,7 +52,7 @@ Expected output:
 
 ```
 cothinker@HEAD: 187 source files, 187 mapped, 0 unmapped, 0 stale, 0 unknown targets
-interview-theater@example-production-2026-final: 103 source files, 103 mapped, 0 unmapped, 0 stale, 0 unknown targets
+interview-theater@example-instance-2026-final: 103 source files, 103 mapped, 0 unmapped, 0 stale, 0 unknown targets
 kollektivgedaechtnis@HEAD: 41 source files, 41 mapped, 0 unmapped, 0 stale, 0 unknown targets
 OK
 ```
@@ -113,8 +113,8 @@ tables below are built from.
 InScribe paths are relative to `interview_theater/`; Kollektivgedächtnis
 paths are given with their top directory.
 
-**Reflect check:** the yellow cells are exactly the 12 blocks confirmed
-for Reflect — capture bullets, topic change, decisions / tasks /
+**Reflect check:** the yellow cells are exactly the 12 blocks Birk
+confirmed for Reflect — capture bullets, topic change, decisions / tasks /
 open questions, condense, minutes document, mirroring / coach question,
 knowledge link, timer, speaker queue, speaking share, status line, session
 graph. Four of them have no meeting code today: condense, timer, speaker
@@ -432,7 +432,7 @@ workshop/wall_theme_layout.py             surface:external-display
 workshop/wall_themes.py                   block:contrast-pairs
 ```
 
-## File mapping — InScribe (interview-theater, tag `example-production-2026-final`)
+## File mapping — InScribe (interview-theater, tag `example-instance-2026-final`)
 
 Scope: `interview_theater/`. Operator scripts (`scripts/`, 68 files) and
 the simulator (`simulation/`, 38 files) are tooling, not runtime, and are

@@ -55,7 +55,7 @@ INVENTORY = HERE / "blocks-inventory.md"
 # repo -> (ref, top-level directories in scope)
 SCOPES: dict[str, tuple[str, tuple[str, ...]]] = {
     "cothinker": ("HEAD", ("gateway", "stage", "workshop", "shared", "stt", "graph", "modules")),
-    "interview-theater": ("example-production-2026-final", ("interview_theater",)),
+    "interview-theater": ("example-instance-2026-final", ("interview_theater",)),
     "kollektivgedaechtnis": ("HEAD", ("kg", "kg2", "mirror", "stt_backends")),
 }
 
