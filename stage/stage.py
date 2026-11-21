@@ -1652,7 +1652,8 @@ summary{cursor:pointer;padding:.4rem 0;color:var(--akz);font-size:.94rem}
 .frisch{animation:auf .5s ease-out}
 @keyframes auf{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.frisch{animation:none}.punkt{transition:none}
- #pending .pending-line.resting,#pending .pending-line.leaving{animation:none}}
+ #pending .pending-line.resting,#pending .pending-line.leaving{animation:none}
+ #share .share-bar-fill{transition:none}}
 @media(max-width:640px){main{padding:1.2rem}body{font-size:16px}}
 
 /* ---- The stage, in the layout approved on 2026-09-08: sidebar left as
@@ -1733,6 +1734,28 @@ summary{cursor:pointer;padding:.4rem 0;color:var(--akz);font-size:.94rem}
 #agenda .agenda-next,#agenda .agenda-who{color:var(--dim)}
 #agenda .agenda-meeting{color:var(--dim);font-variant-numeric:tabular-nums}
 #agenda .agenda-meeting.agenda-over{color:#f85149}
+/* The speaker queue and the speaking share (ADR 0010, ADR 0018 intent
+   kinds `queue`/`share`): as quiet as #agenda above, same font size and
+   `var(--dim)` for the quiet text. `var(--akz)` marks the one notable
+   state each -- here, the person currently speaking. */
+#queue{margin-top:.3rem;font-size:.8rem;line-height:1.5}
+#queue:empty{display:none}
+#queue .queue-lab{color:var(--dim);margin-right:.35rem}
+#queue .queue-speaking{color:var(--akz)}
+#queue .queue-empty{color:var(--dim)}
+#share{margin-top:.3rem;font-size:.8rem;line-height:1.5}
+#share:empty{display:none}
+#share .share-row{display:flex;align-items:center;gap:.5rem;margin:.2rem 0}
+#share .share-name{color:var(--dim);flex:0 0 auto;min-width:5em;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The bar: `var(--akz)` on `var(--lin)` as its track, as every progress
+   bar on the stage must. */
+#share .share-bar{flex:1;height:6px;background:var(--lin);border-radius:3px;
+ overflow:hidden}
+#share .share-bar-fill{display:block;height:100%;background:var(--akz);
+ transition:width .3s}
+#share .share-pct{color:var(--dim);font-variant-numeric:tabular-nums;
+ min-width:3em;text-align:right}
 #head #headline{color:var(--fg);font-size:.9rem;font-weight:600;
  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
 #head #headline:empty{display:none}
@@ -2486,6 +2509,47 @@ sgBlockAnchorJump();
   }
   setInterval(agendaPaint, 1000);
 
+  // ---- The speaker queue and the speaking share (ADR 0010, ADR 0018
+  // intent kinds `queue`/`share`). Unlike `agenda` above, both ride the
+  // fingerprint (see `fingerprint()` and `stage_parts()` in stage.py) and
+  // their names arrive already HTML-escaped (`queue_part()`/
+  // `share_part()`), so they are built here via a fixed structure plus
+  // the escaped text interpolated into it, the same posture `decisions`/
+  // `notices` already have server-side -- and like those, `queueApply()`/
+  // `shareApply()` only run from inside the mark-gated block of `tick()`
+  // below, never on every poll.
+  var queueEl=document.getElementById('queue');
+  var shareEl=document.getElementById('share');
+  function queueApply(data){
+    if(!queueEl) return;
+    if(!data || typeof data!=='object'){ queueEl.innerHTML=''; return; }
+    var speaking=(data.speaking||[]);
+    var waiting=(data.waiting||[]);
+    var leer='<span class="queue-empty">–</span>';
+    queueEl.innerHTML=
+      '<div class="queue-row"><span class="queue-lab">Spricht</span> '
+      +(speaking.length
+        ? '<span class="queue-speaking">'+speaking.join(', ')+'</span>' : leer)
+      +'</div>'
+      +'<div class="queue-row"><span class="queue-lab">Wartet</span> '
+      +(waiting.length ? waiting.join(', ') : leer)+'</div>';
+  }
+  function shareApply(data){
+    if(!shareEl) return;
+    if(!data || typeof data!=='object' || !data.shares || !data.shares.length){
+      shareEl.innerHTML=''; return;
+    }
+    shareEl.innerHTML='<div class="lab">Redeanteil</div>'+data.shares.map(
+      function(s){
+        var anteil=Math.max(0, Math.min(1, s.share||0));
+        var pct=Math.round(anteil*1000)/10;
+        return '<div class="share-row"><span class="share-name">'+s.person
+          +'</span><span class="share-bar"><span class="share-bar-fill" '
+          +'style="width:'+(anteil*100)+'%"></span></span>'
+          +'<span class="share-pct">'+pct+'%</span></div>';
+      }).join('');
+  }
+
   async function tick(){
     if(halt) return;
     try{
@@ -2534,6 +2598,8 @@ sgBlockAnchorJump();
       swapQuiet(document.getElementById('decisions'), j.decisions||'');
       swapQuiet(document.getElementById('notices'),
                 (j.notices||'')+(j.question||'')+(j.parked||''));
+      queueApply(j.queue);
+      shareApply(j.share);
       // The protocol column has ITS OWN scroll container (#protokoll-col,
       // overflow-y:auto) -- replacing only #protokoll-content's innerHTML
       // never resets that container's scrollTop, so a reader who scrolled
@@ -2785,6 +2851,7 @@ class H(BaseHTTPRequestHandler):
                         "notices": "", "question": "", "parked": "",
                         "links": "", "history": [], "protokoll": "",
                         "pending": [], "image": None, "agenda": None,
+                        "queue": None, "share": None,
                         "age_visible_after_s": 20, "follow_up_after_s": 120}
             else:
                 t, m = stage_parts_cached()
@@ -2955,6 +3022,12 @@ class H(BaseHTTPRequestHandler):
                  # next text and runs the live countdown off numbers it
                  # is handed, never off a server-rendered string.
                  f'<div id="agenda"></div>'
+                 # Empty on purpose too: unlike #agenda, built from `queue`/
+                 # `share` only when `mark` changes (both ride the
+                 # fingerprint -- see `fingerprint()`), by `queueApply()`/
+                 # `shareApply()` in SCRIPT.
+                 f'<div id="queue"></div>'
+                 f'<div id="share"></div>'
                  f'<div id="warn">{t["warning"]}</div>'
                  f'<div id="mirror">{t["mirror"]}</div>'
                  f'<div id="call-answer">{t["call_answer"]}</div>'
