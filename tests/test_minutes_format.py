@@ -15,8 +15,8 @@ from pathlib import Path
 import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from gateway import protocol_doc as pd  # noqa: E402
-from gateway.protocol_doc import Entry, Topic  # noqa: E402
+from shared import minutes_format as pd  # noqa: E402
+from shared.minutes_format import Entry, Topic  # noqa: E402
 
 # The empty v2 document a freshly created file (and its first re-render)
 # must look like.

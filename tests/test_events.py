@@ -36,7 +36,7 @@ REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "gateway"))
 sys.path.insert(0, str(REPO / "stage"))
-from gateway.events import EventLog  # noqa: E402
+from shared.events import EventLog  # noqa: E402
 
 
 class Speaks:

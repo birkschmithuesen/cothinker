@@ -382,7 +382,7 @@ Telegram is not a target surface (ADR 0013).
 - The STT wire is additive only; a running recording machine is never
   restarted by the software.
 - One writer per session file; the stage file has exactly one writer.
-- No conversation text in the event trace (`gateway/events.py` filter).
+- No conversation text in the event trace (`shared/events.py` filter).
 - The raw transcript section of a minutes document is written only by the
   session host.
 - No automatic fallback to a US service for speech recognition; text models

@@ -38,7 +38,7 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 from shared.wake_word import WAKE_NOT
-from protocol_doc import DEFAULT_MODE, MODES
+from shared.minutes_format import DEFAULT_MODE, MODES
 from stage_state import MAX_PENDING_LABEL
 
 ACTIONS = ("topic_block", "tag_entry", "stage_decision", "ask", "research",

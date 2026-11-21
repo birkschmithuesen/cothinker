@@ -13,7 +13,7 @@ back; it is the basis for level 2 (docs/entwurf-meeting-modi.md) and for
 the reference check in the bench. With `--policy` the consumer hangs level
 2 (gateway/policy_runner.py) onto `on_result`, which gets the answer in
 memory -- the file itself is still never read back. So the rules are
-those of the other traces (gateway/events.py, gateway/timing.py):
+those of the other traces (shared/events.py, gateway/timing.py):
 
   * OFF unless `COTHINKER_DECIDER` is set. No surprise network call in a
     running meeting; without it this module creates no thread and no file
@@ -31,7 +31,7 @@ those of the other traces (gateway/events.py, gateway/timing.py):
     question ids, `p` / `choice` (one of the question's own choices),
     tokens and cost. Every value is filtered by shape before it is
     written -- a string that is not a token (1-32 chars `[A-Za-z0-9_-]`)
-    is dropped, the same promise gateway/events.py makes -- so neither the
+    is dropped, the same promise shared/events.py makes -- so neither the
     block, nor the heading, nor an exception message can reach the file.
     Log lines carry type names, tokens and numbers only.
 
@@ -49,7 +49,7 @@ from pathlib import Path
 from typing import Callable, Optional
 
 import decide as d
-from events import is_number, is_token
+from shared.events import is_number, is_token
 from questions import QUESTIONS, QUESTIONS_HASH, QUESTIONS_VERSION
 
 # Version of the LINE layout below, not of the question set. Task 4 (the
