@@ -94,6 +94,12 @@ def test_backlog_over_one_wins_over_listening(tmp_path):
     assert emitted[-1].payload["detail"]["count"] == 3
 
 
+def test_backlog_of_exactly_one_does_not_trigger_backlog_state(tmp_path):
+    block, emitted = make_block(tmp_path)
+    dispatch_tick(block, {"queue_backlog": 1, "open_block_chars": 0})
+    assert emitted[-1].payload["state"] == "listening"
+
+
 def test_turn_running_wins_over_backlog(tmp_path):
     block, emitted = make_block(tmp_path)
     dispatch_tick(block, {"queue_backlog": 3, "turn_running": True})
