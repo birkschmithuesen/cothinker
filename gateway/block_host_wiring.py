@@ -32,6 +32,7 @@ from blocks.decisions_tasks_questions import DecisionsBlock
 from blocks.knowledge_link import KnowledgeLinkBlock
 import blocks.status_line as status_line_block
 from blocks.condense import CondenseBlock
+from blocks.graph import GraphBlock
 from blocks.mirroring_coach.coach import MirroringCoach, resolve_config
 from blocks.topics import TopicsBlock
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
@@ -57,6 +58,7 @@ REGISTRY: dict[str, Callable[[], Block]] = {
     "minutes-document": MinutesDocumentBlock,
     "topics": TopicsBlock,
     "mirroring-coach": MirroringCoach,
+    "graph": GraphBlock,
 }
 
 REGISTRY["condense"] = CondenseBlock
