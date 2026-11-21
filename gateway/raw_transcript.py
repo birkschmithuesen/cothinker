@@ -15,6 +15,7 @@ import sys
 import threading
 from datetime import datetime
 from pathlib import Path
+from typing import Callable
 
 from gateway.stage_state import scrub
 
@@ -39,9 +40,15 @@ def _flock(f) -> bool:
 class MinutesFile:
     """The one writer of a session's minutes file."""
 
-    def __init__(self, path: Path, lock: "threading.RLock | threading.Lock"):
+    def __init__(self, path: Path, lock: "threading.RLock | threading.Lock",
+                 report: Callable[[bool], None] | None = None):
         self.path = Path(path)
         self.lock = lock
+        # Called after every append attempt with True or False: a failed
+        # write is the most expensive failure here, the raw transcript is
+        # unrecoverable.
+        self.report = report or (lambda ok: None)
+        self._raw_lines: list[str] = []
 
     @staticmethod
     def line(text, speaker=None, stempel: str | None = None) -> str:
@@ -61,16 +68,58 @@ class MinutesFile:
         """
         zeile = self.line(text, speaker)
         with self.lock:
+            self._raw_lines.append(zeile)
+            return self._append(zeile)
+
+    def append_note(self, text: str) -> bool:
+        """Append a note of the host's own (not an utterance). Returns
+        whether it landed."""
+        return self._append(text)
+
+    def _append(self, text: str) -> bool:
+        """Append to the file; report the outcome. Never raises."""
+        ok = False
+        with self.lock:
             try:
                 with open(self.path, "a", encoding="utf-8") as f:
                     _flock(f)
-                    f.write(zeile)
+                    f.write(text)
                     f.flush()
                     os.fsync(f.fileno())
-                return True
+                ok = True
             except (OSError, UnicodeError) as e:
                 _log("minutes file not writable:", e)
-                return False
+        # The report may take the stage writer's lock while this file's lock
+        # is still held by a caller; that is the only direction there is.
+        try:
+            self.report(ok)
+        except Exception as e:  # noqa: BLE001 -- never fail a write
+            _log("report failed:", repr(e))
+        return ok
+
+    def restore_missing(self) -> int:
+        """Write back raw lines another writer made disappear. Returns the
+        number RESTORED, zero when the write back failed."""
+        with self.lock:
+            if not self._raw_lines:
+                return 0
+            try:
+                inhalt = self.path.read_text(encoding="utf-8", errors="replace")
+            except OSError as e:
+                _log("minutes file not readable:", e)
+                return 0
+            vorhanden = set(inhalt.splitlines())
+            fehlend = [z for z in self._raw_lines if z.rstrip("\n") not in vorhanden]
+            if not fehlend:
+                return 0
+            _log(f"warning: {len(fehlend)} raw lines were missing from the "
+                 f"protocol — restoring (external write?)")
+            kopf = (f"\n*Nachgetragen {datetime.now():%H:%M} — {len(fehlend)} "
+                    f"Zeilen waren aus dem Rohtranskript verschwunden.*\n")
+            if not self._append(kopf + "".join(fehlend)):
+                _log("  restoring failed — the lines are still missing")
+                return 0
+            return len(fehlend)
 
     def write_sections(self, text: str) -> None:
         """Replace everything in front of `## Rohtranskript` with `text`.
