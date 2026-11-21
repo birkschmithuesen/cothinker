@@ -29,7 +29,7 @@ additively.
  templates           Reflect · workshop (one-day) · InScribe (long) · Kollektivgedächtnis
                      = blocks + phases + rules, no code
  blocks              capture bullets · condense · timer · speaker queue · …
- surfaces            stage · workshop web app · InScribe web app · External Display
+ surfaces            stage · InScribe Workshop · InScribe Production · External Display
  STT module          engines + transcript pipeline, behind the STT API
  ───────────────────────────────────────────────────────────────────────────────────
  core                five APIs · phase engine · block host · session runtime
@@ -162,9 +162,11 @@ class Surface(Protocol):
   `kind="voice"`, so everything reachable by tap is also reachable by speech.
 - The stage keeps its single-writer rule: the session host is the only
   writer of `buehne.json`; the stage surface renders from it.
-- **Coupling rule (ADR 0007, OPEN):** blocks reach surfaces only through the
-  Surface API; a template *may* ship its own surface extension (an extra
-  renderer for an intent kind). Not confirmed by Birk.
+- **Coupling rule (ADR 0007):** blocks reach surfaces only through the
+  Surface API; a template *may* ship a surface extension that renders
+  exactly one intent kind, lives in the template, and plugs into an
+  extension point the generic surface declares. First cases: the workbench
+  (InScribe Production) and the term board.
 
 ### 2.4 Module API (ADR 0002, ADR 0008)
 
@@ -352,21 +354,20 @@ surfaces = ["stage"]
 | Surface | Today | Renders |
 |---|---|---|
 | stage (meeting web view) | `stage/stage.py` + `gateway/stage_state.py` | intents of Reflect; read-only for viewers |
-| workshop web app (one-day format) | `workshop/hub.py` + `workshop/static/` | phones, operator desk |
-| InScribe web app (long format) | InScribe's own web stack | phases, chat, workbench |
+| InScribe Workshop (one-day format) | `workshop/hub.py` + `workshop/static/` | phones, operator desk |
+| InScribe Production (long format) | InScribe's own web stack | phases, chat, workbench |
 | External Display | `workshop/wall*.py`, floor pages; Kollektivgedächtnis screens | projection or screen, attachable to any template |
 | guest view | `workshop/conference_app.py`, public mirror | read-only |
 
-The final names of the two web apps are open (gate list). Telegram is not a
-target surface (ADR 0013).
+Telegram is not a target surface (ADR 0013).
 
 ## 8. Instance examples
 
 | Instance | Template | Surfaces | Notes |
 |---|---|---|---|
 | a meeting | Reflect (ADR 0010): 12 blocks, one phase | stage (+ External Display optional) | STT over SSE from a recording machine |
-| Example-WS (one-day workshop) | InScribe, one-day format (ADR 0011) | workshop web app, External Display (wall, floor) | STT in-process per table |
-| Example-Instance (InScribe long format) | InScribe, long format (ADR 0011) | InScribe web app | 6–7 phases over several days |
+| Example-WS (one-day workshop) | InScribe, one-day format (ADR 0011) | InScribe Workshop, External Display (wall, floor) | STT in-process per table |
+| Example-Instance (InScribe long format) | InScribe, long format (ADR 0011) | InScribe Production | 6–7 phases over several days |
 | Kollektivgedächtnis | Kollektivgedächtnis: interview round → capture terms → merge terms → graph → condense to sentence + image generation | External Display (wall graph, dream screen), operator view | STT over SSE; lives in its own repository |
 
 ## 9. Safety invariants the target keeps
@@ -391,7 +392,7 @@ target surface (ADR 0013).
 | [0004](../adr/0004-transcript-pipeline-inside-stt-module.md) | Transcript processing inside the STT module | §3 |
 | [0005](../adr/0005-agent-api-hermes-api-server.md) | Agent API via the Hermes API server, no in-process import | §2.2 |
 | [0006](../adr/0006-surface-api-view-intents-user-actions.md) | Surface API: view intents out, user actions in | §2.3, §7 |
-| [0007](../adr/0007-coupling-rule-blocks-surfaces.md) | Coupling rule between blocks and surfaces (open point) | §2.3 |
+| [0007](../adr/0007-coupling-rule-blocks-surfaces.md) | Coupling rule between blocks and surfaces (accepted) | §2.3 |
 | [0008](../adr/0008-everything-that-works-is-a-block.md) | Building blocks with a small fixed API | §5 |
 | [0009](../adr/0009-methods-are-templates.md) | Methods are templates; the core runs phases | §4, §6 |
 | [0010](../adr/0010-reflect-first-template.md) | Reflect: name and first template, 12 blocks | §6, §8 |
@@ -401,3 +402,4 @@ target surface (ADR 0013).
 | [0014](../adr/0014-licence-agpl-cla-dco-modules-own-licence.md) | Licence: AGPL core, CLA and DCO; modules may carry their own licence | §1 |
 | [0015](../adr/0015-public-repo-fresh-export-private-instances.md) | Public repository from a fresh export, private instance repositories | §1 |
 | [0016](../adr/0016-public-repo-issues-and-prs.md) | Work in the public repository through issues and pull requests | — |
+| [0018](../adr/0018-product-names-interaction-migration-rules.md) | Product names, interaction and migration rules | §1, §2.3, §7, §8 |
