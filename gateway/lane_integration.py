@@ -47,7 +47,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-from blocks import call_ack, call_intent
+from shared.wake_word import call_ack, call_intent
 from correction_prefilter import prefilter
 from lane_context import ROLL_EVERY, WINDOW_SIZE, LaneContext
 from lanes import TIMEOUT_MARKER, Job, LaneQueue
@@ -104,7 +104,7 @@ CALL_ANSWER_RULE = (
     "getan hast. buehne.json und vorschlag.jsonl brauchst du nicht. "
     "Kurz: hoechstens 600 Zeichen, ausser die Runde will ausdruecklich mehr.")
 
-# Per-intent shape of the answer (blocks.CALL_INTENTS decides the intent).
+# Per-intent shape of the answer (wake_word.CALL_INTENTS decides the intent).
 CALL_INTENT_SHAPES = {
     "structure": (
         "Form: die grossen Themen der Runde als fette Zeilen (**Thema**), "
@@ -470,7 +470,7 @@ class Lanes:
     # -------------------------------------------------------------- calls
     def handle_block(self, speaker: str, text: str, *,
                      wake_word: bool) -> Optional[str]:
-        """One finished block (`gateway/blocks.py`'s `block_done`).
+        """One finished block (`gateway/segmenter.py`'s `block_done`).
 
         Point 5: the agent-facing text is PREFILTERED (fillers/repeats
         stripped) -- the raw text is what `protokoll.md` keeps; this

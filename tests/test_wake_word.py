@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from gateway.blocks import call_ack, call_intent  # noqa: E402
+from shared.wake_word import call_ack, call_intent  # noqa: E402
 
 
 def test_structure_intent() -> None:

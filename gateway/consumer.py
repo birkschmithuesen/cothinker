@@ -12,7 +12,7 @@ after every speaking pause. We only consume it, we never change it.
 
 Flow:
   1. every `final` goes into the raw transcript immediately (nothing is lost)
-  2. sentences are bundled into meaningful blocks (gateway/blocks.py)
+  2. sentences are bundled into meaningful blocks (gateway/segmenter.py)
   3. a turn of the long-lived agent worker is triggered per finished block:
      it maintains the protocol and PROPOSES stage entries
   4. the consumer applies the proposals and writes the stage itself
@@ -54,7 +54,7 @@ from types import SimpleNamespace
 from typing import Callable, Iterable, Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from blocks import Block, BlockBuilder  # noqa: E402
+from segmenter import Block, BlockBuilder  # noqa: E402
 from correction import (CorrectionWorker, Corrector, MODEL_CHAIN,  # noqa: E402
                         build_glossary)
 import correction_prefilter  # noqa: E402
@@ -4267,14 +4267,14 @@ def main() -> int:
         if decider is not None:
             decider.submit(b.text, reason=b.reason, chars=b.chars,
                            at=jetzt_block, **decider_mod.stage_context(state))
-        # `_emit("pause")` (gateway/blocks.py) never runs synchronously
+        # `_emit("pause")` (gateway/segmenter.py) never runs synchronously
         # with the sentence that "caused" it -- it fires either at the
         # start of the NEXT sentence() call (closing THIS now-stale
         # block) or from the ticker thread's tick(), when nobody has
         # spoken for pause_s. Both callers land here synchronously, under
         # BlockBuilder's own lock -- so even though sentence() runs in
         # the SSE reader thread and tick() in the separate ticker thread
-        # (see the CONCURRENCY note in gateway/blocks.py), the lock keeps
+        # (see the CONCURRENCY note in gateway/segmenter.py), the lock keeps
         # block_done() itself from ever running concurrently, so this is
         # the one place that can write the marker line the instant the
         # block actually closes, rather than waiting for (and possibly

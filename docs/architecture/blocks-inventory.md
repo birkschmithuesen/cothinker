@@ -46,7 +46,7 @@ tables below are built from.
 
 | Block | Group | Source files (lines) | Used by | Built |
 |---|---|---|---|---|
-| segment (utterance batching) | Capture | `gateway/blocks.py` 402 | core | 1× |
+| segment (utterance batching) | Capture | `gateway/segmenter.py` 356, `shared/wake_word.py` 67 — 423 | core | 1× |
 | topic change | Capture | `gateway/topic_detect.py` 571, `topic_hysteresis.py` 95, `topic_laya_worker.py` 138, `topic_title.py` 202 — 1006 | Reflect | 1× |
 | decisions / tasks / open questions | Capture | `gateway/decide.py` 569, `decider.py` 424, `openrouter_jev.py` 269, `policy.py` 668, `policy_runner.py` 567, `proposals.py` 68, `questions.py` 191 — 2756 | Reflect | 1× |
 | minutes document | Condense + write | `gateway/protocol_doc.py` 441 | Reflect | 1× |
@@ -122,7 +122,6 @@ surfaces/`, every `*.py` outside a `tests/` directory, at `HEAD`.
 
 ```inventory cothinker
 gateway/agent_lane.py                                                             core:agent
-gateway/blocks.py                                                                 block:segment
 gateway/conflict_triage.py                                                        core:session
 gateway/consumer.py                                                               core:session
 gateway/correction.py                                                             stt:correction
@@ -142,6 +141,7 @@ gateway/policy_runner.py                                                        
 gateway/proposals.py                                                              block:decisions-tasks-questions
 gateway/protocol_doc.py                                                           block:minutes-document
 gateway/questions.py                                                              block:decisions-tasks-questions
+gateway/segmenter.py                                                              block:segment
 gateway/smart_turn_worker.py                                                      stt:thought-end
 gateway/speaker_enroll.py                                                         stt:speaker-labels
 gateway/speaker_label.py                                                          stt:speaker-labels
@@ -180,7 +180,9 @@ shared/surface.py                                                               
 shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py               block:write-text
 shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py                block:write-text
 shared/speechmatics.py                                                           stt:engine-speechmatics
+shared/surface.py                                                                 core:module
 shared/utterance.py                                                              stt:engine-speechmatics
+shared/wake_word.py                                                               block:segment
 stage/session_graph.py                                                           block:graph
 stage/stage.py                                                                   surface:stage
 stt/fundusapps/__init__.py                                                       stt:server
