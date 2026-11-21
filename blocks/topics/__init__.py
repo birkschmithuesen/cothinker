@@ -15,10 +15,10 @@ until the decisions block takes that over):
     {"decider_result": {"neues_thema": p | None, "rueckkehr_thema": p | None,
                         "block": str, "previous": str}}
 
-It runs the hysteresis; on a confirmed NEW topic (a confirmed return opens
-nothing) it emits the view intent `topic:<id>` (kind `status`, audience
+It runs the hysteresis; on a confirmed NEW topic it emits the view intent `topic:<id>` (kind `status`, audience
 `room`) and the event `block_output {"topic": {"id", "title", "since",
-"provisional"}}`. With `titles` on, the titler's answer arrives later as a
+"provisional"}}` (a confirmed return emits only the event
+`block_output {"topic": {"return": true, "since"}}`, no intent). With `titles` on, the titler's answer arrives later as a
 second `topic:<id>` intent with `provisional: false`; a titler failure
 keeps the provisional title.
 
@@ -76,8 +76,13 @@ class TopicsBlock:
             return ()
         decision = self._hysteresis.on_result(
             result.get("neues_thema"), result.get("rueckkehr_thema"))
-        if not decision.changed or decision.returned:
+        if not decision.changed:
             return ()
+        if decision.returned:
+            # A confirmed return opens no topic and no view intent; the
+            # output only lets the lanes reset their per-topic state.
+            return (CoreEvent("block_output", {"topic": {
+                "return": True, "since": self._ctx.clock()}}),)
         block_text = str(result.get("block") or "")
         title = derived_title(block_text) or one_line(block_text) or "Thema"
         with self._lock:

@@ -528,14 +528,19 @@ class Lanes:
         """The block host's `on_output` listener for `{"topic": ...}`.
 
         The `topics` block (blocks/topics) confirms a genuinely NEW topic
+        (or a RETURN, `topic["return"]`: coach state reset only, no entry)
         and emits it; this opens the coach-eligibility window AND gives it
         exactly one new history entry (point 6a). This is the ONLY writer
         of topic history entries: the legacy stage sink only rewrites the
         stage file and swaps a final title in place.
         """
+        returned = bool(topic.get("return"))
         title = str(topic.get("title") or "Thema")
         block_text = self._decider_block_text
-        self.log(f"topic: new {title}")
+        if returned:
+            self.log("topic: return")
+        else:
+            self.log(f"topic: new {title}")
         if self.coach_rhythm:
             # END: the topic that just closed gets its structure, filed
             # into ITS entry -- built before the new entry is pushed, so
@@ -543,12 +548,15 @@ class Lanes:
             self._fire_rhythm_end()
         with self._lock:
             self._coach_topic_started_at = self.now()
-            self._coach_eligible = True
+            # A return never triggers a new coach contribution.
+            self._coach_eligible = not returned
             self._coach_contributed = False
             self._rhythm_tries = {"start": 0, "pause": 0}
             self._rhythm_done = {"start": False, "pause": False}
             self._rhythm_next_try_at = 0.0
             self._rhythm_entry_id = ""
+        if returned:
+            return          # reactivating an old topic adds no history row
         # A CONFIRMED change (p >= threshold AND min topic age, the
         # hysteresis' own pacing) always gets its entry -- the stage's
         # automatic-change brake must not refuse it a second time (the

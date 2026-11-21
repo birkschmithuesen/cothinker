@@ -308,6 +308,29 @@ check("test_switch_off_no_titler_the_headline_is_the_provisional_title", "switch
 stop_lanes(rig)
 
 
+def test_confirmed_return_reaches_the_coach_without_a_history_row():
+    """Regression (issue #39): a confirmed return resets the coach's
+    per-topic state through Lanes.on_topic, as before the move, and adds
+    no history entry and no topic view intent."""
+    rig, state, writer, clock, lane_logs = make(None, "ret")
+    clock.t += 95
+    rig.decide(0.9, "Erster Satz hier")
+    n_hist, n_intents = len(state.history), len(rig.intents)
+    rig.lanes._coach_eligible = True
+    rig.lanes._coach_contributed = True
+    clock.t += 95
+    rig.host.dispatch(CoreEvent("block_output", {"decider_result": {
+        "neues_thema": 0.0, "rueckkehr_thema": 0.95,
+        "block": "Zurueck zum Anfang", "previous": ""}}))
+    assert "topic: return" in lane_logs
+    assert rig.lanes._coach_eligible is False
+    assert rig.lanes._coach_contributed is False
+    assert rig.lanes._coach_topic_started_at == clock.t
+    assert len(state.history) == n_hist
+    assert len(rig.intents) == n_intents
+    stop_lanes(rig)
+
+
 def test_plain_title_passes():
     _verify("test_plain_title_passes")
 
