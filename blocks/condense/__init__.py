@@ -32,7 +32,10 @@ Events emitted, per condensed topic:
     {"topic_id", "title", "text", "quotes"})) when a text exists;
   * CoreEvent("block_output", {"from": "condense", "condensed":
     {"topic_id", "text", "quotes", "not_condensed"}}).
-An LLM exception emits nothing (the failure goes to `ctx.trace`).
+A topic that closes with no buffered segments emits the `block_output` with
+empty text and `not_condensed: [topic_id]` (no LLM call, no view intent).
+An LLM exception emits nothing (the failure goes to `ctx.trace`); an exception
+on the retry also discards the first call's results.
 """
 from __future__ import annotations
 
@@ -171,8 +174,12 @@ class CondenseBlock:
 
     def _condense_topic(self, topic: dict, segments: list) -> Sequence[CoreEvent]:
         ctx = self._ctx
-        if ctx is None or not segments:
+        if ctx is None:
             return ()
+        if not segments:                       # no topic is dropped: report it, no LLM call
+            return (CoreEvent("block_output", {"from": self.id, "condensed": {
+                "topic_id": topic["id"], "text": "", "quotes": [],
+                "not_condensed": [topic["id"]]}}),)
         try:
             res = condense(segments, [topic], ctx.language, ctx.llm,
                            system=self._system,

@@ -50,6 +50,17 @@ def test_german_speech_english_quotes_gives_german_text():
     assert detect_language(res.text) == "de"
     assert res.quotes == ["we need more budget for the new project"]
     assert res.topics_covered == ["t1"] and res.not_condensed == []
+    # wrong-language text is rejected, retried once, the German retry is accepted
+    en_text = "The team talks about the budget and the plan for next year is still open."
+    llm = FakeLlm(reply(("t1", en_text, [])), reply(("t1", DE_TEXT, [])))
+    res = condense(SEGMENTS, [{"id": "t1", "title": "Budget"}], "de", llm)
+    assert len(llm.calls) == 2
+    assert res.text == DE_TEXT and res.not_condensed == []
+    # still the wrong language on the retry: the topic is listed, not covered
+    llm = FakeLlm(reply(("t1", en_text, [])), reply(("t1", en_text, [])))
+    res = condense(SEGMENTS, [{"id": "t1", "title": "Budget"}], "de", llm)
+    assert len(llm.calls) == 2
+    assert res.topics_covered == [] and res.not_condensed == ["t1"]
 
 
 def test_quotes_are_verbatim():
@@ -86,17 +97,34 @@ def test_missing_topic_retried_then_listed():
     assert [t["topic_id"] for t in llm.calls[1][1]["topics"]] == ["c"]
     assert res.topics_covered == ["a", "b"]
     assert res.not_condensed == ["c"]
+    # a topic that closes with no buffered segments is not dropped (no LLM call)
+    idle = FakeLlm()
+    emitted = []
+    ctx = BlockContext(instance=None, session_dir=None, state=None, agent=None, llm=idle,
+                       language="de", clock=lambda: 0.0, emit=emitted.append,
+                       artefact=lambda n, t: None)
+    block = CondenseBlock()
+    block.start(ctx, {"prompt": "prompts/condense.{lang}.md"})
+    block.on_event(CoreEvent("block_output", {"topic": {"id": "t1", "title": "Leer"}}))
+    out = block.on_event(CoreEvent("block_output", {"topic": {"id": "t2", "title": "Next"}}))
+    assert idle.calls == [] and emitted == []
+    assert [e.payload for e in out] == [{"from": "condense", "condensed": {
+        "topic_id": "t1", "text": "", "quotes": [], "not_condensed": ["t1"]}}]
 
 
 def test_llm_failure_emits_nothing(tmp_path):
-    emitted = []
+    emitted, traced = [], []
+    llm = FakeLlm(RuntimeError("down"))
     ctx = BlockContext(instance=None, session_dir=tmp_path, state=StateStore(tmp_path / "s"),
-                       agent=None, llm=FakeLlm(RuntimeError("down")), language="de",
-                       clock=lambda: 0.0, emit=emitted.append, artefact=lambda n, t: None)
+                       agent=None, llm=llm, language="de",
+                       clock=lambda: 0.0, emit=emitted.append, artefact=lambda n, t: None,
+                       trace=lambda event, fields: traced.append((event, fields)))
     block = CondenseBlock()
     block.start(ctx, {"prompt": "prompts/condense.{lang}.md"})
+    assert "JSON" in load_prompt("en")
     assert block.on_event(CoreEvent("block_output", {"topic": {"id": "t1", "title": "Budget"}})) == ()
     assert block.on_event(CoreEvent("segment", {"id": 1, "text": SEGMENTS[0]["text"]})) == ()
     out = block.on_event(CoreEvent("block_output", {"topic": {"id": "t1", "closed": True}}))
     assert out == () and emitted == []
-    assert "JSON" in load_prompt("en")
+    assert len(llm.calls) == 1
+    assert [e for e, _ in traced] == ["condense.llm_failed"]
