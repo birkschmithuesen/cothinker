@@ -32,14 +32,16 @@ action through it, so a future table row cannot bypass it.
 from __future__ import annotations
 
 import re
+import sys
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional, Sequence
 
-from shared.wake_word import WAKE_NOT
-from shared.minutes_format import DEFAULT_MODE, MODES
-from shared.text import MAX_PENDING_LABEL
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from shared.wake_word import WAKE_NOT  # noqa: E402
+from shared.minutes_format import DEFAULT_MODE, MODES  # noqa: E402
+from shared.text import MAX_PENDING_LABEL  # noqa: E402
 
 ACTIONS = ("topic_block", "tag_entry", "stage_decision", "ask", "research",
            "document", "wake")

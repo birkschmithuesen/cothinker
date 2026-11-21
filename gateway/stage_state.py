@@ -40,7 +40,7 @@ from pathlib import Path
 from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from shared.text import MAX_PENDING_LABEL, derived_title, one_line  # noqa: E402,F401
+from shared.text import MAX_PENDING_LABEL, derived_title, one_line  # noqa: E402
 
 # STILL 2, although the history is new. `content()` only GAINED a key:
 # `main` is unchanged and still carries the displayed surface, so an old

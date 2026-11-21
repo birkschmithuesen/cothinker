@@ -200,7 +200,7 @@ class BlockBuilder:
         Covers the case `_is_bare_wake` cannot: the STT server welds an
         explanation and the wake word into ONE `final` when there is no
         detectable pause between them (live incident 2026-10-27:
-        "Das heisst, wir koennten Robo da auch mal fragen.
+        "Das heisst, wir koennten Robo dazu auch mal fragen.
         Robo Aktiv." arrived as a single final). Only the LAST sentence is
         checked -- a wake word addressed at the end of a sentence that
         OPENS with a real order ("Mach das bitte, Robo.") keeps that order,
@@ -291,10 +291,10 @@ class BlockBuilder:
                     # unrelated content -- live incident 2026-10-27:
                     # pre-flagging here let the NEXT speaker's
                     # filler ride out as a call twice in the same window,
-                    # once after "... Robo da auch mal fragen. Robo
+                    # once after "... Robo dazu auch mal fragen. Robo
                     # Aktiv." and once after an incidental name-drop,
-                    # "Ja, vielleicht koennen wir schon mal. Bernd. Robo."
-                    # (Bernd is a participant, not an order). A genuine
+                    # "Ja, das passt schon. Erika. Robo."
+                    # (Erika is a participant, not an order). A genuine
                     # follow-up order still fires: it either repeats the
                     # wake word itself (caught by `_is_wake` below on its
                     # own merit) or accumulates past `min_chars`/`max_s`
