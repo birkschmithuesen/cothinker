@@ -7,7 +7,10 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
+from gateway.block_host_wiring import (  # noqa: E402
+    build_session_blocks, feed_utterance)
 from gateway.raw_transcript import MinutesFile  # noqa: E402
+from shared.blocks import BLOCK_API_VERSION  # noqa: E402
 
 FRONT = "# Titel\n\n## Verlauf\n\n## Entscheidungen\n\n"
 RAW_HEAD = "## Rohtranskript\n"
@@ -22,17 +25,29 @@ def _make(tmp_path: Path, front: str = FRONT) -> MinutesFile:
 def test_raw_append_survives_block_crash(tmp_path):
     mf = _make(tmp_path)
 
-    def block_handler():
-        raise RuntimeError("block crashed")
+    class Crashing:
+        id = "capture-bullets"
+        api_version = BLOCK_API_VERSION
 
-    mf.append_raw("Wir nehmen Option B", "Anna")
-    try:
-        block_handler()
-    except RuntimeError:
-        pass
+        def start(self, ctx, config):
+            pass
+
+        def on_event(self, ev):
+            raise RuntimeError("block crashed")
+
+        def stop(self):
+            pass
+
+    logs: list[str] = []
+    blocks = build_session_blocks(
+        session_dir=tmp_path / "sess", sink=lambda intent: None,
+        log=logs.append, registry={"capture-bullets": Crashing},
+        clock=lambda: 0.0)
+    feed_utterance(mf, blocks, "Wir nehmen Option B", "Anna", {})
     data = mf.path.read_text(encoding="utf-8")
     assert "*Anna:* Wir nehmen Option B" in data
     assert data.index(RAW_HEAD) < data.index("Wir nehmen Option B")
+    assert any("block crashed" in line for line in logs), logs
 
 
 def test_sections_spliced_before_raw(tmp_path):
