@@ -1,6 +1,6 @@
 # ADR 0011: InScribe: one template, long and one-day format
 
-- **Status:** accepted
+- **Status:** accepted — see ADR 0018 for the final surface names
 - **Date:** 2026-11-20
 
 ## Context
