@@ -1205,6 +1205,16 @@ def test_valid_coach_reply_contract():
     assert not valid_coach_reply("Frage: " + "x" * 600)
 
 
+def test_valid_coach_reply_pins_600_char_boundary():
+    label = "Frage: "
+    text_600 = label + "x" * (600 - len(label))
+    text_601 = label + "x" * (601 - len(label))
+    assert len(text_600) == 600
+    assert len(text_601) == 601
+    assert valid_coach_reply(text_600)
+    assert not valid_coach_reply(text_601)
+
+
 # --- the legacy stage sink's mirror row --------------------------------------------------------
 
 def _sink(tmp_path):
