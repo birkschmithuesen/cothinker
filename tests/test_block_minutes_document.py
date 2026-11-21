@@ -242,6 +242,22 @@ def test_port_splices_and_removes_the_artefact(tmp_path):
     assert port.add_entry("beschluss", "wir  BAUEN es").reason == "duplicate"
 
 
+def test_port_entry_lands_above_a_stray_non_utf8_byte(tmp_path):
+    # A stray byte in the head must not block every later section write
+    # (final review: the artefact transport used to encode strictly).
+    p = tmp_path / "protokoll.md"
+    p.write_bytes((HEAD + "- 09:00 alt ").encode("utf-8") + b"\xff"
+                  + ("\n\n" + RAW).encode("utf-8"))
+    raw_before = p.read_bytes()[p.read_bytes().index(b"## Rohtranskript"):]
+    port = k.open_minutes(p, session_dir=tmp_path / "sess")
+    res = port.add_entry("notiz", "neu", stamp="10:00")
+    assert res.reason == ""
+    data = p.read_bytes()
+    assert b"neu" in data
+    assert b"\xff" in data
+    assert data[data.index(b"## Rohtranskript"):] == raw_before
+
+
 def test_port_raw_append_comes_first_and_survives(tmp_path):
     p = _doc(tmp_path)
     port = k.open_minutes(p, session_dir=tmp_path / "sess")
