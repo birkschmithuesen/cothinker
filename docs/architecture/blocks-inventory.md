@@ -77,7 +77,7 @@ repository yet.
 | STT — thought end | 1594 | `stt/fundusapps/stt_server/thought_end.py` 514; `gateway/thought_end.py` 260, `thought_end_live.py` 402, `thought_end_laya_worker.py` 148, `smart_turn_worker.py` 270 | core |
 | STT — speaker labels | 1566 | `gateway/speaker_enroll.py` 606, `speaker_split.py` 423, `speaker_label.py` 278, `speaker_label_llm.py` 259 | core |
 | STT — correction | 858 | `gateway/correction.py` 733, `correction_prefilter.py` 125 | core |
-| core — session runtime | 5588 | `gateway/consumer.py` 4817, `shared/events.py`, `sync_safe.py`, `timing.py`, `conflict_triage.py`; `shared/__init__.py` | core |
+| core — session runtime | 5422 | `gateway/consumer.py` 4651, `shared/events.py`, `sync_safe.py`, `timing.py`, `conflict_triage.py`; `shared/__init__.py` | core |
 | core — Agent API | 1660 | `shared/agent.py` 387, `gateway/worker.py` 576, `lanes.py` 447, `agent_lane.py` 250 | core |
 | core — model clients | 614 | `gateway/infomaniak_chat.py` 178, `infomaniak_embed.py` 124, `infomaniak_limiter.py` 312 | core |
 | core — Instance API | 211 | `shared/instance.py` 128, `shared/profiles.py` 83 | core |
