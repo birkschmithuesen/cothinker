@@ -58,6 +58,7 @@ applies it on every poll, before it ever looks at the fingerprint.
 from __future__ import annotations
 
 import argparse
+import fcntl
 import hashlib
 import html
 import json
@@ -67,6 +68,8 @@ import secrets
 import sys
 import threading
 import time
+import unicodedata
+from datetime import datetime, timezone
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote
@@ -105,6 +108,60 @@ VAULT_EXCLUDE: tuple[str, ...] = DEFAULT_EXCLUDE
 # present this value, via `?t=` or the `X-Stage-Token` header (`H._get()`).
 TOKEN: str | None = None
 STATIC = Path(__file__).resolve().parent / "static"
+
+# ---- Participant actions (POST /join, POST /action) ----------------------
+# The stage records taps in an append-only spool file OUTSIDE the project
+# folder (a second writer inside a synced folder makes conflict copies); the
+# consumer reads it. The stage never writes `buehne.json`.
+DEFAULT_SPOOL_DIR = "~/.local/state/cothinker/spool"
+SPOOL_DIR: Path = Path(DEFAULT_SPOOL_DIR).expanduser()
+ACTIONS_FILE = "actions.jsonl"
+COOKIE_NAME = "cothinker_pid"
+MAX_POST_BYTES = 2048
+MIN_ACTION_GAP_S = 0.5           # per participant
+NAME_MAX = 40
+QUEUE_OPS = ("request", "done")
+_PID_RE = re.compile(r"[0-9a-f]{16}")
+_last_action: dict[str, float] = {}      # pid -> time.monotonic() of last POST
+_action_lock = threading.Lock()
+
+
+def clean_name(raw: object) -> str | None:
+    """A participant name, or None if unusable.
+
+    Strips control (Cc) and format (Cf, e.g. zero-width / bidi marks)
+    characters, then surrounding whitespace; 1..NAME_MAX characters remain.
+    """
+    if not isinstance(raw, str):
+        return None
+    name = "".join(c for c in raw
+                   if unicodedata.category(c) not in ("Cc", "Cf")).strip()
+    return name if 1 <= len(name) <= NAME_MAX else None
+
+
+def append_action(pid: str, intent_id: str, kind: str, payload: dict) -> None:
+    """Appends one JSON line to `<SPOOL_DIR>/<session folder>/actions.jsonl`.
+
+    The session folder is the one holding the `buehne.json` the stage is
+    showing (`stage_file().parent`). Line: `{"v": 1, "at", "person",
+    "intent_id", "kind", "payload"}`; `at` is ISO-8601 UTC with
+    milliseconds and a `Z` suffix, e.g. `2026-09-08T19:12:04.123Z`. The
+    append happens under an exclusive `flock` as a single write.
+    """
+    at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
+    at = at.replace("+00:00", "Z")
+    line = json.dumps({"v": 1, "at": at, "person": pid,
+                       "intent_id": intent_id, "kind": kind,
+                       "payload": payload}, ensure_ascii=False) + "\n"
+    folder = SPOOL_DIR / stage_file().parent.name
+    folder.mkdir(parents=True, exist_ok=True)
+    with open(folder / ACTIONS_FILE, "a", encoding="utf-8") as f:
+        fcntl.flock(f, fcntl.LOCK_EX)
+        try:
+            f.write(line)
+            f.flush()
+        finally:
+            fcntl.flock(f, fcntl.LOCK_UN)
 # Read once, at import: the list is a deployment fact, and a directory
 # listing per request would be a file system call in front of a room.
 VENDOR_FILES = ("cytoscape.min.js", "layout-base.js", "cose-base.js",
@@ -2621,6 +2678,98 @@ class H(BaseHTTPRequestHandler):
         except (BrokenPipeError, ConnectionResetError, OSError):
             self.close_connection = True
 
+    def _token_ok(self, q: dict) -> bool:
+        """The access check shared by GET and POST (`True` when no token)."""
+        if TOKEN is None:
+            return True
+        candidate = q.get("t", [""])[0] or self.headers.get("X-Stage-Token", "")
+        # Compared as UTF-8 BYTES, not as `str`: `compare_digest`
+        # raises `TypeError` on a non-ASCII `str` operand, which would
+        # turn a one-byte probe into a 500 -- distinguishing a
+        # token-protected stage from an unknown path, exactly what
+        # the GET 404 exists to prevent (and bricking a non-ASCII
+        # `--token` for every request, correct token included).
+        return bool(candidate) and secrets.compare_digest(
+            candidate.encode("utf-8"), TOKEN.encode("utf-8"))
+
+    def do_POST(self):
+        try:
+            self._post()
+        except Exception as e:            # noqa: BLE001
+            print(f"stage: error on POST {self.path.split('?')[0]!r}: {e!r}",
+                  flush=True)
+            self._send(500, b"error", "text/plain")
+
+    def _post(self):
+        path = self.path.split("?")[0]
+        q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
+        if path not in ("/join", "/action"):
+            return self._send(404, b"unbekannt", "text/plain")
+        if not self._token_ok(q):
+            return self._send(403, b"forbidden", "text/plain")
+        try:
+            length = int(self.headers.get("Content-Length", ""))
+        except ValueError:
+            return self._send(400, b"bad request", "text/plain")
+        if length < 0:
+            return self._send(400, b"bad request", "text/plain")
+        if length > MAX_POST_BYTES:
+            # Not read: the connection is closed instead.
+            self.close_connection = True
+            return self._send(413, b"too large", "text/plain")
+        raw = self.rfile.read(length)
+
+        cookie = ""
+        for part in self.headers.get("Cookie", "").split(";"):
+            k, _, v = part.strip().partition("=")
+            if k == COOKIE_NAME:
+                cookie = v
+        pid = cookie if _PID_RE.fullmatch(cookie) else ""
+        if path == "/action" and not pid:
+            return self._send(401, b"no participant", "text/plain")
+        if pid:
+            now = time.monotonic()
+            with _action_lock:
+                last = _last_action.get(pid)
+                limited = last is not None and now - last < MIN_ACTION_GAP_S
+                if not limited:
+                    _last_action[pid] = now
+            if limited:
+                return self._send(429, b"slow down", "text/plain")
+
+        try:
+            body = json.loads(raw.decode("utf-8"))
+        except (ValueError, UnicodeError):
+            body = None
+        if not isinstance(body, dict):
+            return self._send(400, b"bad request", "text/plain")
+
+        if path == "/join":
+            name = clean_name(body.get("name"))
+            if name is None:
+                return self._send(400, b"bad name", "text/plain")
+            pid = pid or secrets.token_hex(8)
+            append_action(pid, "participant:name", "edit", {"name": name})
+            payload = json.dumps({"ok": True}).encode()
+            try:
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(payload)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header(
+                    "Set-Cookie",
+                    f"{COOKIE_NAME}={pid}; HttpOnly; SameSite=Strict; Path=/")
+                self.end_headers()
+                self.wfile.write(payload)
+            except (BrokenPipeError, ConnectionResetError, OSError):
+                self.close_connection = True
+            return
+        if body.get("intent_id") != "queue:room" or \
+                body.get("op") not in QUEUE_OPS:
+            return self._send(400, b"bad action", "text/plain")
+        append_action(pid, "queue:room", "tap", {"op": body["op"]})
+        self._send(200, b'{"ok": true}', "application/json")
+
     def do_GET(self):
         try:
             self._get()
@@ -2645,18 +2794,8 @@ class H(BaseHTTPRequestHandler):
         # a failure. Answers byte-identical to the unknown-path 404 below:
         # on this server, a rejected request is indistinguishable from a
         # wrong path, which is why 404 and not 401.
-        if TOKEN is not None:
-            candidate = q.get("t", [""])[0] or self.headers.get(
-                "X-Stage-Token", "")
-            # Compared as UTF-8 BYTES, not as `str`: `compare_digest`
-            # raises `TypeError` on a non-ASCII `str` operand, which would
-            # turn a one-byte probe into a 500 -- distinguishing a
-            # token-protected stage from an unknown path, exactly what
-            # this 404 exists to prevent (and bricking a non-ASCII
-            # `--token` for every request, correct token included).
-            if not candidate or not secrets.compare_digest(
-                    candidate.encode("utf-8"), TOKEN.encode("utf-8")):
-                return self._send(404, b"unbekannt", "text/plain")
+        if not self._token_ok(q):
+            return self._send(404, b"unbekannt", "text/plain")
 
         d = unquote(q.get("d", [""])[0])
 
@@ -2892,6 +3031,11 @@ def main() -> int:
     ap.add_argument("--vault-include-network", action="store_true",
                     help="also serve the person-related notes under "
                          "*/network/*. Off by default, deliberately.")
+    ap.add_argument("--spool-dir", default=DEFAULT_SPOOL_DIR,
+                    help="where participant actions are spooled "
+                         "(<spool>/<session-folder>/actions.jsonl); the "
+                         "consumer must be given the same folder. "
+                         "Default: %(default)s")
     tok_grp = ap.add_mutually_exclusive_group()
     tok_grp.add_argument("--token", default=None,
                          help="access token every request must present, "
@@ -2919,6 +3063,8 @@ def main() -> int:
             raise SystemExit(f"project not unique: {a.project!r} ({len(treffer)})")
         kand = treffer[0]
     PROJECT = kand
+    global SPOOL_DIR
+    SPOOL_DIR = Path(a.spool_dir).expanduser()
     global VAULT, VAULT_EXCLUDE
     VAULT = Path(a.vault) if a.vault else Path()
     if a.vault_include_network:
