@@ -25,6 +25,7 @@ import time
 from pathlib import Path
 from typing import Callable, Mapping, Optional
 
+from blocks.capture_bullets import CaptureBulletsBlock
 from blocks.decisions_tasks_questions import DecisionsBlock
 from blocks.knowledge_link import KnowledgeLinkBlock
 import blocks.status_line as status_line_block
@@ -43,6 +44,7 @@ REFLECT_TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "reflect"
 
 # One line per block, added by the pull request that builds it.
 REGISTRY: dict[str, Callable[[], Block]] = {
+    "capture-bullets": CaptureBulletsBlock,
     "decisions-tasks-questions": DecisionsBlock,
     "knowledge-link": KnowledgeLinkBlock,
     "status-line": status_line_block.StatusLineBlock,
