@@ -57,12 +57,13 @@ tables below are built from.
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
 | timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
+| speaker queue | Show + share | `blocks/speaker_queue/__init__.py` 102, `queue.py` 82 — 184 | Reflect | 1× |
 
-**Reflect check:** 9 of the 12 blocks Birk confirmed for Reflect already
+**Reflect check:** 10 of the 12 blocks Birk confirmed for Reflect already
 have code in this repository — topic change, decisions / tasks / open
 questions, minutes document, mirroring / coach question, knowledge link,
-status line, session graph, speaking share, timer. The other 3 confirmed
-blocks (capture bullets, condense, speaker queue) have no code in this
+status line, session graph, speaking share, timer, speaker queue. The other
+2 confirmed blocks (capture bullets, condense) have no code in this
 repository yet.
 
 ## STT module, surfaces, core (not blocks)
@@ -116,6 +117,7 @@ block:graph                  block — graph (session / results / term graph)
 block:write-text             block — write text (prologue, scene, script)
 block:speaking-share         block — speaking share (talk share + room talk time)
 block:timer                  block — timer (planned items, drift, projected end)
+block:speaker-queue          block — speaker queue (tap to request/leave the floor)
 retire                       dropped by the target (decision 25 engines)
 ```
 
@@ -133,6 +135,8 @@ blocks/status_line/__init__.py                                                  
 blocks/status_line/line.py                                                       block:status-line
 blocks/timer/__init__.py                                                         block:timer
 blocks/timer/clock.py                                                            block:timer
+blocks/speaker_queue/__init__.py                                                  block:speaker-queue
+blocks/speaker_queue/queue.py                                                     block:speaker-queue
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
 gateway/conflict_triage.py                                                        core:session
