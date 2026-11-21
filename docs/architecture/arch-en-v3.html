@@ -1,0 +1,41 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#fff;font-family:"DejaVu Sans",Arial,sans-serif;color:#1d1d1f;width:1500px}
+.wrap{padding:26px 30px}h1{font-size:29px;margin:0 0 4px}.sub{font-size:16px;color:#666;margin-bottom:16px}
+.row{display:flex;gap:12px;margin:9px 0;align-items:stretch}
+.lab{width:200px;flex:none;font-weight:bold;font-size:17px;display:flex;align-items:center;padding:8px;border-radius:8px}
+.box{flex:1;border-radius:10px;padding:10px 12px;font-size:15px;line-height:1.35;border:2px solid}
+.box b{font-size:17px;display:block;margin-bottom:3px}
+.inst{background:#f4f4f4;border-color:#999}.ux{background:#e8f1fd;border-color:#3b7dd8}.meth{background:#fdf1e3;border-color:#d98a2b}
+.core{background:#e7f6ec;border-color:#2e9b55}.api{background:#fff;border:2px dashed #2e9b55}.hermes{background:#ededed;border-color:#555}
+.note{font-size:15px;color:#333;margin-top:12px;line-height:1.5}.tag{display:inline-block;background:#fff;border:1px solid #aaa;border-radius:5px;padding:1px 6px;margin:2px 3px 0 0;font-size:13px}
+.ok{background:#d6f2df;border-color:#2e9b55}.part{background:#fff3cf;border-color:#d9a400}.no{background:#fbdcdc;border-color:#c84040}
+.st{font-size:13px;font-weight:bold;margin-top:4px}
+.leg span{display:inline-block;padding:3px 10px;border-radius:6px;border:2px solid;margin-right:10px;font-size:14px}.blk{background:#f3ecfb;border-color:#8a5cc7}.mini{display:inline-block;background:#fff;border:1px solid #8a5cc7;border-radius:6px;padding:2px 8px;margin:3px 4px 0 0;font-size:14px}
+.pipe{background:#eef8f1;border:2px solid #2e9b55}.park{opacity:.55;border-style:dashed}</style></head><body><div class="wrap">
+<h1>CoThinker — target architecture (draft v3)</h1><div class="sub">Each layer depends only on the layers below it. A method is a template: building blocks + phases + rules. An instance selects a template, surfaces and extra blocks.</div>
+<div class="row"><div class="lab" style="background:#eee">Instances<br>(private repos)</div><div class="box inst"><b>instance.toml + content</b>questions, roles, prompts, phase schedule, room layout, languages · selects method + surfaces + features<br>
+<span class="tag">example-instance-2026: inscribe (long, 6–7 phases) + inscribe web app</span><span class="tag">etc-example-ws-2026: inscribe (one-day format) + workshop web app + external display + timer + speaking share</span><span class="tag">meeting: reflect + stage</span></div></div>
+<div class="row"><div class="lab" style="background:#e8f1fd">Surface modules<br>(UX)</div>
+<div class="box ux"><b>stage</b>meeting web view: topic, decisions, open items</div>
+<div class="box ux"><b>inscribe web app</b>groups work autonomously through 6–7 phases</div>
+<div class="box ux"><b>workshop web app</b>one-day format, many phones, operator desk</div>
+<div class="box ux"><b>external display</b>wall / floor, as projection or screen</div>
+<div class="box ux park"><b>telegram</b>parked</div></div>
+<div class="row"><div class="lab" style="background:#fdf1e3">Method templates<br>(no own code)</div>
+<div class="box meth"><b>reflect</b>meeting assistant: capture bullets + condense + mirror</div>
+<div class="box meth"><b>inscribe</b>interviews → condense → write text; long (6–7 phases) or one-day format</div>
+<div class="box meth"><b>curate, …</b>later</div></div>
+<div class="row"><div class="lab" style="background:#f3ecfb">Building blocks<br>(feature modules)</div>
+<div class="box blk"><b>small units, each with a small fixed API · internals no more general than their first use</b>
+<span class="mini">capture bullets</span><span class="mini">condense</span><span class="mini">write text</span><span class="mini">timer</span><span class="mini">speaking share</span><span class="mini">speaker queue</span><span class="mini">choice / vote</span><span class="mini">poster</span><span class="mini">piece model</span><span class="mini">dramaturgy checks</span><span class="mini">…</span><br>
+<span style="font-size:13px">Everything that does work is a block — including logic only one method uses today.</span></div></div>
+<div class="row"><div class="lab" style="background:#e7f6ec">CoThinker core<br>(public, headless)</div><div class="box core"><b>Session runtime</b>sessions + state store · agent proposes, rule engine decides · event bus · phase engine · instance loader · module loader
+
+<div class="row" style="margin:7px 0 0">
+<div class="box api"><b>STT API</b>one API for every source → STT module (see separate diagram)</div>
+<div class="box api"><b>Agent API</b>Hermes API server today, other runtimes later</div>
+<div class="box api"><b>Surface API</b>view intents out (prompt, choice, timer, status, artefact), user actions in</div>
+<div class="box api"><b>Module API</b>tools, phases, profile, on_event</div>
+<div class="box api"><b>Instance API</b>instance.toml, content paths</div></div></div></div>
+<div class="row"><div class="lab" style="background:#ededed">Foundation</div><div class="box hermes"><b>Hermes agent</b>memory, tools, model routing · local / EU</div></div>
+<div class="note"><b>Coupling rule:</b> blocks reach surfaces only through the Surface API. A template MAY ship its own surface extension for views no generic surface can show.</div>
+</div></body></html>
