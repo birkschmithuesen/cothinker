@@ -2974,6 +2974,32 @@ def test_a_429_is_quiet_and_only_disables_the_buttons_for_a_moment(part_page):
     assert v["dlgHidden"] is True and v["status"] == ""
 
 
+def test_a_429_on_the_pending_tap_after_the_join_is_retried_once(part_page):
+    v = _run_part(part_page, """
+      var timers = [];
+      global.setTimeout = function(fn){ timers.push(fn); return 1; };
+      await tap('join-later');
+      await tap('teiln-wort');
+      replies.push(200);
+      replies.push(429);
+      await submitName('Anna');
+      out.before = posts.length;
+      var fns = timers.splice(0); for (var f of fns) await f();
+      out.ops = posts.map(function(p){ return p.url.split('?')[0]; });""")
+    assert v["ops"] == ["join", "action", "action"]
+
+
+def test_a_429_on_join_shows_a_wait_message(part_page):
+    v = _run_part(part_page, """
+      replies.push(429);
+      await submitName('Anna');
+      out.err = el('join-err').textContent;
+      out.hidden = el('join-dlg').hasAttribute('hidden');
+      out.marker = sessionStorage.getItem('cothinker-joined-name');""")
+    assert v["err"] == "Bitte kurz warten und erneut versuchen."
+    assert v["hidden"] is False and v["marker"] is None
+
+
 def test_the_share_view_shows_the_link_with_token_and_its_qr_code(part_page):
     v = _run_part(part_page, """
       out.before = el('share-dlg').hasAttribute('hidden');

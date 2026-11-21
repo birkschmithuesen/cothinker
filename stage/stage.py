@@ -123,7 +123,11 @@ NAME_MAX = 40
 QUEUE_OPS = ("request", "done")
 _PID_RE = re.compile(r"[0-9a-f]{16}")
 _last_action: dict[str, float] = {}      # pid -> time.monotonic() of last POST
+_join_times: dict[str, list[float]] = {}  # client IP -> cookieless join times
 _action_lock = threading.Lock()
+# Cookieless joins per client IP: lenient, a whole room may share one NAT.
+JOIN_IP_MAX = 20
+JOIN_IP_WINDOW_S = 10.0
 
 
 def clean_name(raw: object) -> str | None:
@@ -154,8 +158,10 @@ def append_action(pid: str, intent_id: str, kind: str, payload: dict) -> None:
                        "intent_id": intent_id, "kind": kind,
                        "payload": payload}, ensure_ascii=False) + "\n"
     folder = SPOOL_DIR / stage_file().parent.name
-    folder.mkdir(parents=True, exist_ok=True)
-    with open(folder / ACTIONS_FILE, "a", encoding="utf-8") as f:
+    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
+    fd = os.open(folder / ACTIONS_FILE,
+                 os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+    with os.fdopen(fd, "a", encoding="utf-8") as f:
         fcntl.flock(f, fcntl.LOCK_EX)
         try:
             f.write(line)
@@ -1951,6 +1957,10 @@ sgBlockAnchorJump();
     if(!name){ err.textContent='Bitte gib einen Namen ein.'; return; }
     try{
       var r=await post('join',{name:name});
+      if(r.status===429){
+        err.textContent='Bitte kurz warten und erneut versuchen.';
+        return;
+      }
       if(!r.ok) throw new Error('join '+r.status);
       try{ sessionStorage.setItem(KEY, name); }catch(e){}
       err.textContent='';
@@ -1980,6 +1990,8 @@ sgBlockAnchorJump();
         openDlg();
       } else if(r.status===429){
         wait=true;                      // too quick: a brief pause, no message
+        // A tap queued before joining must not be lost: retry it once.
+        if(retry===true) setTimeout(function(){ senden(op, text, 'again'); }, 600);
       } else if(r.ok){
         if(stat) stat.textContent=text;
       } else if(stat){
@@ -2874,6 +2886,39 @@ class H(BaseHTTPRequestHandler):
                   flush=True)
             self._send(500, b"error", "text/plain")
 
+    def _action_limited(self, pid: str) -> bool:
+        """True if `pid` tapped less than MIN_ACTION_GAP_S ago (else records it)."""
+        now = time.monotonic()
+        with _action_lock:
+            last = _last_action.get(pid)
+            if last is not None and now - last < MIN_ACTION_GAP_S:
+                return True
+            if len(_last_action) >= 1024:
+                for k in [k for k, t in _last_action.items()
+                          if now - t >= MIN_ACTION_GAP_S]:
+                    del _last_action[k]
+            _last_action[pid] = now
+        return False
+
+    def _join_ip_limited(self) -> bool:
+        """True if this client IP made JOIN_IP_MAX cookieless joins within
+        the last JOIN_IP_WINDOW_S (else records this one)."""
+        ip = self.client_address[0]
+        now = time.monotonic()
+        with _action_lock:
+            if len(_join_times) >= 1024:
+                for k in [k for k, ts in _join_times.items()
+                          if not ts or now - ts[-1] >= JOIN_IP_WINDOW_S]:
+                    del _join_times[k]
+            ts = [t for t in _join_times.get(ip, ())
+                  if now - t < JOIN_IP_WINDOW_S]
+            if len(ts) >= JOIN_IP_MAX:
+                _join_times[ip] = ts
+                return True
+            ts.append(now)
+            _join_times[ip] = ts
+        return False
+
     def _post(self):
         path = self.path.split("?")[0]
         q = parse_qs(self.path.split("?", 1)[1] if "?" in self.path else "")
@@ -2901,20 +2946,6 @@ class H(BaseHTTPRequestHandler):
         pid = cookie if _PID_RE.fullmatch(cookie) else ""
         if path == "/action" and not pid:
             return self._send(401, b"no participant", "text/plain")
-        if pid:
-            now = time.monotonic()
-            with _action_lock:
-                last = _last_action.get(pid)
-                limited = last is not None and now - last < MIN_ACTION_GAP_S
-                if not limited:
-                    if len(_last_action) >= 1024:
-                        for k in [k for k, t in _last_action.items()
-                                  if now - t >= MIN_ACTION_GAP_S]:
-                            del _last_action[k]
-                    _last_action[pid] = now
-            if limited:
-                return self._send(429, b"slow down", "text/plain")
-
         try:
             body = json.loads(raw.decode("utf-8"))
         except (ValueError, UnicodeError):
@@ -2926,6 +2957,8 @@ class H(BaseHTTPRequestHandler):
             name = clean_name(body.get("name"))
             if name is None:
                 return self._send(400, b"bad name", "text/plain")
+            if not pid and self._join_ip_limited():
+                return self._send(429, b"slow down", "text/plain")
             pid = pid or secrets.token_hex(8)
             append_action(pid, "participant:name", "edit", {"name": name})
             payload = json.dumps({"ok": True}).encode()
@@ -2945,6 +2978,8 @@ class H(BaseHTTPRequestHandler):
         if body.get("intent_id") != "queue:room" or \
                 body.get("op") not in QUEUE_OPS:
             return self._send(400, b"bad action", "text/plain")
+        if self._action_limited(pid):
+            return self._send(429, b"slow down", "text/plain")
         append_action(pid, "queue:room", "tap", {"op": body["op"]})
         self._send(200, b'{"ok": true}', "application/json")
 

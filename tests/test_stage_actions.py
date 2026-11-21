@@ -43,6 +43,7 @@ def env(tmp_path, monkeypatch):
     monkeypatch.setattr(b, "TOKEN", TOKEN)
     monkeypatch.setattr(b, "SPOOL_DIR", spool)
     monkeypatch.setattr(b, "_last_action", {})
+    monkeypatch.setattr(b, "_join_times", {})
     b.clear_cache()
     srv = ThreadingHTTPServer(("127.0.0.1", 0), b.H)
     srv.daemon_threads = True
@@ -120,6 +121,16 @@ def test_rate_limit_429(env):
     assert post(env, "/action", body, cookie=pid)[0] == 429
     other = join(env, "Bob")
     assert post(env, "/action", body, cookie=other)[0] == 200
+    # A join is not a tap: join then tap at once is not throttled, and a
+    # rejected (400) action does not use up the slot.
+    third = join(env, "Carol")
+    assert post(env, "/action", {"intent_id": "x", "op": "request"},
+                cookie=third)[0] == 400
+    assert post(env, "/action", body, cookie=third)[0] == 200
+    # Cookieless joins are limited per client IP (20 per 10 s; 3 used above).
+    codes = [post(env, "/join", {"name": "N"})[0] for _ in range(25)]
+    assert 429 in codes and codes[:10] == [200] * 10
+    assert codes.count(200) == 20 - 3
 
 
 def test_line_format(env):
@@ -132,6 +143,9 @@ def test_line_format(env):
         assert entry["v"] == 1 and entry["person"] == pid
         assert re.fullmatch(r"\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z",
                             entry["at"])
+    spool_file = env["spool"] / SESSION / "actions.jsonl"
+    assert spool_file.stat().st_mode & 0o777 == 0o600
+    assert spool_file.parent.stat().st_mode & 0o777 == 0o700
     assert (first["kind"], first["intent_id"], first["payload"]) == (
         "edit", "participant:name", {"name": "Alice"})
     assert (second["kind"], second["intent_id"], second["payload"]) == (
