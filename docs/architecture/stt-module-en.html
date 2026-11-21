@@ -1,0 +1,38 @@
+<!doctype html><html><head><meta charset="utf-8"><style>body{margin:0;background:#fff;font-family:"DejaVu Sans",Arial,sans-serif;color:#1d1d1f;width:1500px}
+.wrap{padding:26px 30px}h1{font-size:29px;margin:0 0 4px}.sub{font-size:16px;color:#666;margin-bottom:16px}
+.row{display:flex;gap:12px;margin:9px 0;align-items:stretch}
+.lab{width:200px;flex:none;font-weight:bold;font-size:17px;display:flex;align-items:center;padding:8px;border-radius:8px}
+.box{flex:1;border-radius:10px;padding:10px 12px;font-size:15px;line-height:1.35;border:2px solid}
+.box b{font-size:17px;display:block;margin-bottom:3px}
+.inst{background:#f4f4f4;border-color:#999}.ux{background:#e8f1fd;border-color:#3b7dd8}.meth{background:#fdf1e3;border-color:#d98a2b}
+.core{background:#e7f6ec;border-color:#2e9b55}.api{background:#fff;border:2px dashed #2e9b55}.hermes{background:#ededed;border-color:#555}
+.note{font-size:15px;color:#333;margin-top:12px;line-height:1.5}.tag{display:inline-block;background:#fff;border:1px solid #aaa;border-radius:5px;padding:1px 6px;margin:2px 3px 0 0;font-size:13px}
+.ok{background:#d6f2df;border-color:#2e9b55}.part{background:#fff3cf;border-color:#d9a400}.no{background:#fbdcdc;border-color:#c84040}
+.st{font-size:13px;font-weight:bold;margin-top:4px}
+.leg span{display:inline-block;padding:3px 10px;border-radius:6px;border:2px solid;margin-right:10px;font-size:14px}.blk{background:#f3ecfb;border-color:#8a5cc7}.mini{display:inline-block;background:#fff;border:1px solid #8a5cc7;border-radius:6px;padding:2px 8px;margin:3px 4px 0 0;font-size:14px}
+.pipe{background:#eef8f1;border:2px solid #2e9b55}.park{opacity:.55;border-style:dashed}.st{display:inline-block;font-size:12px;border-radius:4px;padding:0 5px;margin-left:4px;border:1px solid #888;background:#fff}
+.arrow{text-align:center;font-size:22px;color:#2e9b55;margin:2px 0}</style></head><body><div class="wrap">
+<h1>STT module — audio in, clean utterances out (draft)</h1><div class="sub">Everything between a microphone and the session runtime. The core only sees the STT API. Tags show where the code lives today.</div>
+<div class="row"><div class="lab" style="background:#eee">Audio sources</div>
+<div class="box inst"><b>room microphone</b>recording PC next to the table <span class="st">meeting</span></div>
+<div class="box inst"><b>phones</b>browser audio per person <span class="st">workshop</span></div>
+<div class="box inst"><b>online meeting tap</b>BigBlueButton per-track audio <span class="st">meeting</span></div></div>
+<div class="arrow">▼</div>
+<div class="row"><div class="lab" style="background:#e7f6ec">Audio stage</div>
+<div class="box core"><b>capture + audio clock</b>timestamps on the audio timeline</div>
+<div class="box core"><b>voice activity</b>VAD (silero), level, "move closer"</div>
+<div class="box core"><b>thought end (audio)</b>smart-turn next to the audio; audio never leaves the machine</div></div>
+<div class="arrow">▼</div>
+<div class="row"><div class="lab" style="background:#e7f6ec">Engine adapters</div>
+<div class="box api"><b>speechmatics EU</b>realtime, diarization <span class="st">both</span></div>
+<div class="box api"><b>whisper (local)</b>optional, offline / no cloud</div></div>
+<div class="arrow">▼</div>
+<div class="row"><div class="lab" style="background:#e7f6ec">Text stage</div>
+<div class="box core"><b>thought end (text)</b>Laya on the transcript <span class="st">meeting</span></div>
+<div class="box core"><b>speaker labels</b>diarization + enrollment + name matching <span class="st">both, twice</span></div>
+<div class="box core"><b>correction</b>punctuation, fillers, glossary names; guard decides; display only <span class="st">meeting</span></div></div>
+<div class="arrow">▼</div>
+<div class="row"><div class="lab" style="background:#fff;border:2px dashed #2e9b55">STT API</div>
+<div class="box api"><b>utterance events</b>text · speaker · start/end · thought-end probability · language — corrected text as a separate stream, never fed back into the agent</div></div>
+<div class="note"><b>Per instance:</b> pick sources, Speechmatics or local Whisper, and switch each stage on or off. <b>Today</b> the workshop bypasses the module and talks to Speechmatics directly — that is the first thing to unify.</div>
+</div></body></html>
