@@ -2728,3 +2728,159 @@ def test_reduced_motion_the_label_stands_at_once_with_dots(pending):
 def test_reduced_motion_gone_means_gone_no_flash(pending):
     r = pending.r
     assert r["leaving"] == [] and r["leavingTimeouts"] == 0, str(r["leaving"])
+
+
+# ------------------------------------------------- the speaker queue / share
+# Issue #37: `#queue`/`#share` ride the fingerprint (unlike `#agenda`/
+# `#pending`), so `queueApply()`/`shareApply()` only run from inside
+# `tick()`'s mark-gated block -- this harness checks the markup they build
+# from a REAL `queue_part()`/`share_part()` payload, straight off a running
+# `stage.py`, not a hand-written stand-in for it.
+QUEUE_SHARE_HARNESS = r"""
+// --- the same small DOM stand-in as the history/link harness above ------
+function El(id){ this.id=id; this._html=''; this._text=''; this.classList=new CL(this);
+  this.attrs={}; }
+El.prototype = {
+  get innerHTML(){ return this._html; },
+  set innerHTML(v){ this._html=String(v); },
+  get textContent(){ return this._text; },
+  set textContent(v){ this._text=String(v); },
+  getAttribute:function(k){ return this.attrs[k]===undefined?null:this.attrs[k]; },
+  setAttribute:function(k,v){ this.attrs[k]=v; },
+  hasAttribute:function(k){ return this.attrs[k]!==undefined; },
+  toggleAttribute:function(k,on){
+    if(on) this.attrs[k]=''; else delete this.attrs[k];
+    return on;
+  },
+  querySelector:function(){ return null; },
+  querySelectorAll:function(){ return []; },
+  get offsetWidth(){ return 1; }
+};
+function CL(el){ this.el=el; this.set={}; }
+CL.prototype = {
+  add:function(c){ this.set[c]=true; },
+  remove:function(c){ delete this.set[c]; },
+  contains:function(c){ return !!this.set[c]; },
+  toggle:function(c,on){ if(on) this.add(c); else this.remove(c); }
+};
+
+var els={};
+function el(id){ if(!els[id]) els[id]=new El(id); return els[id]; }
+['verlauf','content','collapsed','links','punkt','clock','warn','ops-text',
+ 'mirror','decisions','notices','headline','queue','share',
+ 'protokoll-col','protokoll-content','protokoll-toggle'].forEach(el);
+
+var listeners={};
+global.document = {
+  getElementById:function(id){ return els[id]||null; },
+  querySelector:function(){ return null; },
+  querySelectorAll:function(){ return []; },
+  addEventListener:function(t,fn){ (listeners[t]=listeners[t]||[]).push(fn); },
+  activeElement:null, hidden:false, body:{scrollHeight:1000}
+};
+global.window = {
+  scrollY:0, innerHeight:800,
+  getSelection:function(){ return {isCollapsed:true}; },
+  scrollTo:function(){},
+  location:{search:'', origin:'http://buehne.example'}
+};
+global.location = global.window.location;
+global.setInterval=function(){ return 0; };
+global.setTimeout=function(){ return 0; };
+
+var payloads = JSON.parse(process.argv[2]);
+var shot = 0;
+global.fetch = async function(){
+  var p = payloads[Math.min(shot, payloads.length-1)];
+  shot++;
+  return { json: async function(){ return p; } };
+};
+
+%SCRIPT%
+
+process.on('uncaughtException', function(e){
+  console.error('UNCAUGHT', (e && e.stack) || e); process.exit(3); });
+
+var out={};
+(async function(){
+  await tickOnce();                        // P1: no queue/share key at all
+  out.hiddenQueue=els['queue'].innerHTML;
+  out.hiddenShare=els['share'].innerHTML;
+  await tickOnce();                        // P2: both keys fed
+  out.queueHtml=els['queue'].innerHTML;
+  out.shareHtml=els['share'].innerHTML;
+  console.log(JSON.stringify(out));
+})();
+"""
+
+
+@pytest.fixture(scope="module")
+def queue_share(tmp_path_factory):
+    """A real `stage.py`, polled twice: once before `queue`/`share` exist
+    in `buehne.json`, once after -- with a markup-bearing name in each, the
+    same posture as the `pending` fixture's planted session sentence
+    above, to check escaping end to end rather than trust `queue_part()`'s
+    own unit tests alone."""
+    projekt = tmp_path_factory.mktemp("cothinker-queue-share")
+
+    def publish(extra: dict | None) -> None:
+        content = {"version": 2, "status": STATUS, "mirror": "",
+                   "headline": "", "main": {"markdown": ""},
+                   "decisions": [], "notices": [], "links": []}
+        if extra:
+            content.update(extra)
+        (projekt / "buehne.json").write_text(
+            json.dumps(content, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    server, port = _start_stage(projekt)
+    payloads: list[dict] = []
+    page = ""
+    try:
+        publish(None)
+        payloads.append(_parts(port))
+        publish({
+            "queue": {"mode": "round_robin", "speaking": ["<b>Eva</b>"],
+                      "waiting": ["Finn", "Greta"], "round": 2},
+            "share": {"shares": [{"person": "<i>Hugo</i>", "share": 0.6},
+                                  {"person": "Ida", "share": 0.4}],
+                      "total_words": 500},
+        })
+        payloads.append(_parts(port))
+        page = _get(port) or ""
+    finally:
+        _stop(server)
+
+    ns = SimpleNamespace(payloads=payloads, page=page, skript=_script_of(page),
+                         out={})
+    if ns.skript is not None and all(payloads):
+        body = _body(ns.skript)
+        runner = projekt / "run-queue-share.js"
+        runner.write_text(QUEUE_SHARE_HARNESS.replace("%SCRIPT%", body),
+                          encoding="utf-8")
+        run = _node(runner, json.dumps(payloads))
+        if run.returncode == 0:
+            ns.out = _last_json(run)
+    return ns
+
+
+def test_queue_and_share_start_hidden_until_the_key_arrives(queue_share):
+    assert queue_share.out.get("hiddenQueue") == "", queue_share.out
+    assert queue_share.out.get("hiddenShare") == "", queue_share.out
+
+
+def test_queue_waiting_renders_in_the_order_the_file_gave_it(queue_share):
+    html = queue_share.out.get("queueHtml", "")
+    assert html.index("Finn") < html.index("Greta"), html
+
+
+def test_queue_and_share_names_are_escaped_not_double_escaped(queue_share):
+    queue_html = queue_share.out.get("queueHtml", "")
+    share_html = queue_share.out.get("shareHtml", "")
+    assert "&lt;b&gt;Eva&lt;/b&gt;" in queue_html, queue_html
+    assert "&lt;i&gt;Hugo&lt;/i&gt;" in share_html, share_html
+    assert "&amp;lt;" not in queue_html + share_html, queue_html + share_html
+
+
+def test_share_bar_widths_reflect_the_normalised_shares(queue_share):
+    html = queue_share.out.get("shareHtml", "")
+    assert "width:60%" in html and "width:40%" in html, html
