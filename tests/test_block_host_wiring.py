@@ -119,3 +119,31 @@ def test_on_output_sees_block_output(tmp_path):
     blocks.on_output(seen.append)
     blocks.dispatch("utterance", {"text": "hallo"})
     assert seen == [{"from": "capture-bullets"}]
+
+
+def test_infomaniak_llm_adapter_maps_to_chat_and_raises_on_empty():
+    from gateway.infomaniak_chat import ChatError, ChatReply
+
+    class FakeClient:
+        def __init__(self, text):
+            self.text, self.seen = text, None
+
+        def chat(self, model, system, user, schema, **kw):
+            self.seen = (model, system, user, schema, kw)
+            return ChatReply(text=self.text)
+
+    ok = FakeClient('{"topics": []}')
+    llm = bhw.InfomaniakLlm(ok, model="m")
+    assert llm.complete("sys", "usr", timeout_s=7) == '{"topics": []}'
+    assert ok.seen[:3] == ("m", "sys", "usr")
+    assert ok.seen[4]["request_timeout_s"] == 7
+    with pytest.raises(ChatError):
+        bhw.InfomaniakLlm(FakeClient("  "), model="m").complete("s", "u")
+
+
+def test_default_llm_for_only_condense_with_key(monkeypatch):
+    monkeypatch.setenv("INFOMANIAK_API_KEY", "k")
+    assert isinstance(bhw.default_llm_for("condense"), bhw.InfomaniakLlm)
+    assert bhw.default_llm_for("capture-bullets") is None
+    monkeypatch.delenv("INFOMANIAK_API_KEY")
+    assert bhw.default_llm_for("condense") is None
