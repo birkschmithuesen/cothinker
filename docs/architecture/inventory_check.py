@@ -14,7 +14,7 @@ The inventory holds one fenced block per repository:
     ```
 
 and one fenced ```targets block that defines every target id (a block, an
-STT module part, the phase engine, a surface, core runtime, or `retire`).
+STT module part, a surface, core runtime, or `retire`).
 
 For each repository this script lists the Python source files of the
 scoped trees (tests excluded: any path with a `tests` segment, and
@@ -31,13 +31,8 @@ offending paths, exit 1.
 Usage (from the repo root):
 
     python3 docs/architecture/inventory_check.py
-    python3 docs/architecture/inventory_check.py \
-        --repo interview-theater=<path-to-clone> \
-        --repo kollektivgedaechtnis=<path-to-clone>
     python3 docs/architecture/inventory_check.py --table   # block table with line counts
 
-Only `cothinker` is checked by default (this repository). The other two
-are private application repos; pass their clone paths to include them.
 Stdlib only; reads git objects, never the working tree, never writes.
 """
 from __future__ import annotations
@@ -54,9 +49,8 @@ INVENTORY = HERE / "blocks-inventory.md"
 
 # repo -> (ref, top-level directories in scope)
 SCOPES: dict[str, tuple[str, tuple[str, ...]]] = {
-    "cothinker": ("HEAD", ("gateway", "stage", "workshop", "shared", "stt", "graph", "modules")),
-    "interview-theater": ("example-instance-2026-final", ("interview_theater",)),
-    "kollektivgedaechtnis": ("HEAD", ("kg", "kg2", "mirror", "stt_backends")),
+    "cothinker": ("HEAD", ("gateway", "stage", "shared", "stt", "graph", "modules",
+                          "blocks", "templates", "surfaces")),
 }
 
 FENCE = re.compile(r"^```(inventory|targets)\s*([\w.-]*)\s*$")
@@ -96,7 +90,13 @@ def git(root: Path, *args: str) -> str:
 
 
 def sources(root: Path, ref: str, dirs: tuple[str, ...]) -> list[str]:
-    out = git(root, "ls-tree", "-r", "--name-only", ref, "--", *dirs)
+    # HEAD means "what would be committed next": read the index (which
+    # `git add -N` registers a new path in) rather than the last commit,
+    # so a newly added but uncommitted module is caught as unmapped too.
+    if ref == "HEAD":
+        out = git(root, "ls-files", "--", *dirs)
+    else:
+        out = git(root, "ls-tree", "-r", "--name-only", ref, "--", *dirs)
     keep = []
     for p in out.splitlines():
         segs = p.split("/")
@@ -113,24 +113,15 @@ def line_count(root: Path, ref: str, path: str) -> int:
 
 def main() -> int:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--repo", action="append", default=[], metavar="NAME=PATH",
-                    help="add a repository clone to the check (interview-theater, kollektivgedaechtnis)")
     ap.add_argument("--table", action="store_true",
                     help="print per-target file lists with line counts instead of checking")
     a = ap.parse_args()
 
-    roots = {"cothinker": Path(git(HERE, "rev-parse", "--show-toplevel").strip())}
-    for spec in a.repo:
-        name, _, path = spec.partition("=")
-        if name not in SCOPES or not path:
-            raise SystemExit(f"--repo {spec!r}: expected one of {sorted(SCOPES)}=<path>")
-        roots[name] = Path(path)
-
+    root = Path(git(HERE, "rev-parse", "--show-toplevel").strip())
     targets, rows = parse(INVENTORY.read_text(encoding="utf-8"))
     ok = True
     per_target: dict[str, list[tuple[str, str, int]]] = defaultdict(list)
-    for name, root in roots.items():
-        ref, dirs = SCOPES[name]
+    for name, (ref, dirs) in SCOPES.items():
         listed = sources(root, ref, dirs)
         mapped = rows.get(name, {})
         unmapped = [p for p in listed if p not in mapped]

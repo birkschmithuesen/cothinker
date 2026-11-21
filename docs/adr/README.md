@@ -17,7 +17,7 @@ an entry number of the 2026-11-20 concept-round decision log, or a decision (D1,
 | [0004](0004-transcript-pipeline-inside-stt-module.md) | Transcript processing inside the STT module | accepted |
 | [0005](0005-agent-api-hermes-api-server.md) | Agent API via the Hermes API server, no in-process import | accepted |
 | [0006](0006-surface-api-view-intents-user-actions.md) | Surface API: view intents out, user actions in | accepted |
-| [0007](0007-coupling-rule-blocks-surfaces.md) | Coupling rule between blocks and surfaces | proposed, open point |
+| [0007](0007-coupling-rule-blocks-surfaces.md) | Coupling rule between blocks and surfaces | accepted |
 | [0008](0008-everything-that-works-is-a-block.md) | Building blocks with a small fixed API | accepted |
 | [0009](0009-methods-are-templates.md) | Methods are templates; the core runs phases | accepted |
 | [0010](0010-reflect-first-template.md) | Reflect: name and first template, 12 blocks | accepted |
@@ -28,3 +28,4 @@ an entry number of the 2026-11-20 concept-round decision log, or a decision (D1,
 | [0015](0015-public-repo-fresh-export-private-instances.md) | Public repository from a fresh export, private instance repositories | accepted |
 | [0016](0016-public-repo-issues-and-prs.md) | Work in the public repository through issues and pull requests | accepted |
 | [0017](0017-network-seams-fastapi-blocks-in-process.md) | Network seams on FastAPI, blocks stay in-process | proposed, not yet confirmed by Birk |
+| [0018](0018-product-names-interaction-migration-rules.md) | Product names, interaction and migration rules | accepted |
