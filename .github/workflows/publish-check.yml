@@ -31,3 +31,18 @@ jobs:
       - env:
           COTHINKER_DENYLIST_KEY: ${{ secrets.COTHINKER_DENYLIST_KEY }}
         run: python3 tools/publish_check.py --repo . --hmac ci-denylist.hmac
+
+  merge-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+          # Full history (not just the PR head commit) so merge_guard.py's
+          # `origin/main..HEAD` commit-log walk and card-id scan can actually
+          # resolve the base..candidate range.
+          fetch-depth: 0
+      - uses: actions/setup-python@0b93645e9fea7318ecaed2b359559ac225c90a2b # v5.3.0
+        with:
+          python-version: "3.11"
+      - run: python3 tools/merge_guard.py --repo . --base origin/main --candidate HEAD

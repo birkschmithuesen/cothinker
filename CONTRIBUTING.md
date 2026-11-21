@@ -71,6 +71,26 @@ A human contributor signs off with their own real name and address, as the
 DCO intends -- the identity above is only for commits the factory itself
 authors in this repository, never for a human's contribution.
 
+## 4. The merge guard -- internal work-item ids and publish-check hits
+
+`tools/merge_guard.py` refuses a merge if any new commit carries an internal
+work-item id (a `card-id`, the pattern from `publish/denylist-public.txt`) in
+its message, or if `tools/publish_check.py` finds a hit on the candidate.
+This is not advisory documentation -- it is wired into two real, independent
+gates:
+
+- a `merge-guard` job in `.github/workflows/publish-check.yml`, which runs on
+  every pull request against `main` and fails the PR's required check (so
+  `gh pr checks <pr>` and the GitHub UI both go red); and
+- the factory's own landing path, `land.py` (`~/.hermes/profiles/birk/scripts/
+  land.py`), which calls `tools/merge_guard.py` before it rebases or merges a
+  branch for any repo whose `FACTORY.yaml` sets `workflow: github-pr` (this
+  repo has it) -- a refusal there aborts with the same exit code as a failed
+  test suite or changelog gate, before anything is pushed to `main`.
+
+Either gate catching a hit means the branch does not land until the
+work-item id or publish-check hit is removed from the commit history.
+
 ## Questions
 
 Open an issue in this repository on GitHub.
