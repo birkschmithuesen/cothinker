@@ -18,9 +18,9 @@ from pathlib import Path
 from typing import Callable
 
 from gateway.stage_state import scrub
+from shared.minutes_format import _ROH_LINE_RE
 
 RAW_HEADING = "## Rohtranskript"
-_RAW_LINE_RE = re.compile(r"^## Rohtranskript[ \t]*\r?$", re.MULTILINE)
 
 
 def _log(*args) -> None:
@@ -138,7 +138,7 @@ class MinutesFile:
                     old = f.read()
             except FileNotFoundError:
                 old = ""
-            m = _RAW_LINE_RE.search(old)
+            m = _ROH_LINE_RE.search(old)
             tail = old[m.start():] if m else RAW_HEADING + "\n"
             self._replace(head + tail)
 
