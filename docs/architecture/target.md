@@ -119,8 +119,8 @@ Rules on top of the transport:
 - The core adapter checks the returned text for failure markers
   (`API call failed`, `HTTP 4`) in addition to the structured `failed` event;
   a run that fails this check counts as failed.
-- How module tools reach the agent (MCP server per session vs. skill scripts)
-  is open — see the plan's gate list.
+- Module tools reach the agent as an MCP stdio server per session, generated
+  from the block tool specs (ADR 0018).
 
 ### 2.3 Surface API (ADR 0006, ADR 0007)
 
@@ -129,8 +129,8 @@ send **user actions** back. A surface never calls a block, a block never
 writes a surface's file.
 
 ```python
-INTENT_KINDS = {"prompt", "choice_list", "timer", "status", "artefact"}   # decision 15
-# proposed additions (gate list): "queue" (speaker queue), "share" (speaking share), "graph"
+INTENT_KINDS = {"prompt", "choice_list", "timer", "status", "artefact",   # decision 15
+                "queue", "share", "graph"}                                  # ADR 0018
 
 @dataclass(frozen=True)
 class ViewIntent:
@@ -366,8 +366,8 @@ Telegram is not a target surface (ADR 0013).
 | Instance | Template | Surfaces | Notes |
 |---|---|---|---|
 | a meeting | Reflect (ADR 0010): 12 blocks, one phase | stage (+ External Display optional) | STT over SSE from a recording machine |
-| Assistant (one-day workshop) | InScribe, one-day format (ADR 0011) | InScribe Workshop, External Display (wall, floor) | STT in-process per table |
-| Example-Instance (InScribe long format) | InScribe, long format (ADR 0011) | InScribe Production | 6–7 phases over several days |
+| a one-day workshop | InScribe, one-day format (ADR 0011) | InScribe Workshop, External Display (wall, floor) | STT in-process per table |
+| a production (InScribe long format) | InScribe, long format (ADR 0011) | InScribe Production | 6–7 phases over several days |
 | Kollektivgedächtnis | Kollektivgedächtnis: interview round → capture terms → merge terms → graph → condense to sentence + image generation | External Display (wall graph, dream screen), operator view | STT over SSE; lives in its own repository |
 
 ## 9. Safety invariants the target keeps
@@ -402,4 +402,4 @@ Telegram is not a target surface (ADR 0013).
 | [0014](../adr/0014-licence-agpl-cla-dco-modules-own-licence.md) | Licence: AGPL core, CLA and DCO; modules may carry their own licence | §1 |
 | [0015](../adr/0015-public-repo-fresh-export-private-instances.md) | Public repository from a fresh export, private instance repositories | §1 |
 | [0016](../adr/0016-public-repo-issues-and-prs.md) | Work in the public repository through issues and pull requests | — |
-| [0018](../adr/0018-product-names-interaction-migration-rules.md) | Product names, interaction and migration rules | §1, §2.3, §7, §8 |
+| [0018](../adr/0018-product-names-interaction-migration-rules.md) | Product names, interaction and migration rules | §1, §2.2, §2.3, §7, §8 |
