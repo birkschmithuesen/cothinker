@@ -1121,6 +1121,95 @@ def agenda_part(raw: object) -> dict | None:
     }
 
 
+# The speaker queue and the speaking share (ADR 0010, ADR 0018 intent
+# kinds `queue`/`share`): two more optional, defensive data sections, the
+# same shape as `agenda_part()` above -- `dict | None`, hidden when the
+# key is absent or too foreign to show. Unlike `agenda`/`pending`/`image`
+# they carry NO clock (no `item_started_at`-style number, no per-poll
+# "secondsago" text), so both ARE part of `fingerprint()` below: a reader
+# has to see the swap/scroll logic run when who is speaking or the shares
+# actually change, the same as for `decisions` or `notices`. Names are
+# HTML-escaped here, not left to the page script's `textContent` the way
+# `agenda_part()`'s are -- the page marks up each person as part of a
+# bar/list it builds itself, so the escaping has to happen before that.
+MAX_QUEUE_PEOPLE = 20
+MAX_SHARE_PEOPLE = 20
+
+
+def _name_list(raw: object, cap: int) -> list[str]:
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for p in raw[:cap]:
+        text = _agenda_text(p)
+        if text:
+            out.append(html.escape(text))
+    return out
+
+
+def queue_part(raw: object) -> dict | None:
+    """The speaker queue as plain data -- who speaks now, who waits, in
+    order -- or None: no `queue` key this session, or nobody in it
+    survives validation (a queue with no one speaking and no one waiting
+    has nothing to show).
+    """
+    if not isinstance(raw, dict):
+        return None
+    speaking = _name_list(raw.get("speaking"), MAX_QUEUE_PEOPLE)
+    waiting = _name_list(raw.get("waiting"), MAX_QUEUE_PEOPLE)
+    if not speaking and not waiting:
+        return None
+    mode = html.escape(_agenda_text(raw.get("mode"))) if raw.get("mode") else ""
+    round_n = _int(raw.get("round"), 0) if raw.get("round") is not None else 0
+    return {
+        "mode": mode or None,
+        "speaking": speaking,
+        "waiting": waiting,
+        "round": round_n if round_n > 0 else None,
+    }
+
+
+def _share_number(wert: object) -> float | None:
+    if isinstance(wert, bool) or not isinstance(wert, (int, float)):
+        return None
+    return float(wert) if wert > 0 else None
+
+
+def share_part(raw: object) -> dict | None:
+    """The speaking share as plain data -- each person's slice of the
+    meeting's words, normalised to sum to exactly 1 regardless of what
+    rounding the writer's own numbers carried -- or None: no `share` key,
+    or no person's share survives validation (nothing to draw a bar for).
+    """
+    if not isinstance(raw, dict):
+        return None
+    shares_raw = raw.get("shares")
+    if not isinstance(shares_raw, list):
+        return None
+    entries = []
+    for s in shares_raw[:MAX_SHARE_PEOPLE]:
+        if not isinstance(s, dict):
+            continue
+        person = _agenda_text(s.get("person"))
+        share = _share_number(s.get("share"))
+        if not person or share is None:
+            continue
+        entries.append((html.escape(person), share))
+    total = sum(share for _, share in entries)
+    if not entries or total <= 0:
+        return None
+    total_words = raw.get("total_words")
+    return {
+        "shares": [{"person": person, "share": share / total}
+                   for person, share in entries],
+        "total_words": (_int(total_words, 0)
+                        if isinstance(total_words, (int, float))
+                        and not isinstance(total_words, bool) else None),
+    }
+
+
 def graph_part_stub(seed: str) -> str:
     """An older graph position, without its drawing (C2, Variante 1).
 
@@ -1286,6 +1375,10 @@ def stage_parts() -> dict:
         # Deliberately NOT in `fingerprint()`, like `pending` above --
         # see `agenda_part()`'s own docstring.
         "agenda": agenda_part(b.get("agenda")),
+        # Unlike `agenda` above, IN `fingerprint()` -- see `queue_part()`'s
+        # own docstring: neither carries a clock.
+        "queue": queue_part(b.get("queue")),
+        "share": share_part(b.get("share")),
     }
 
 
@@ -1321,11 +1414,17 @@ def fingerprint(teile: dict) -> str:
     coming and going every few seconds, they must not run the swap logic
     (pulse, scroll restore) each time. The page applies them on every poll,
     before it looks at the fingerprint, and reconciles them by id itself.
+
+    `queue` and `share` are IN, unlike `agenda`/`pending`/`image`: neither
+    carries a clock (see `queue_part()`/`share_part()`), so there is no
+    reason to keep them out, and good reason to keep them in -- who is
+    speaking or how the shares split only changes when the content does,
+    and that is exactly the swap/scroll logic this fingerprint gates.
     """
     roh = "".join(str(teile[k]) for k in (
         "mirror", "call_answer", "headline", "main", "collapsed",
         "decisions", "notices", "question", "parked", "links",
-        "history", "protokoll")).encode()
+        "history", "protokoll", "queue", "share")).encode()
     return hashlib.sha256(roh).hexdigest()[:16]
 
 
