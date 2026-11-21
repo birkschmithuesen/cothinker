@@ -30,7 +30,7 @@ _STOPWORDS = {
         mit von zu den dem des auf für auch sich dass daß wie aber oder wenn dann noch
         nur sind war waren wird werden wurde haben hat hatte kann können muss müssen
         bei nach aus über unter vor durch ohne weil schon sehr mehr hier da dort
-        nein ja doch mal wirklich diese dieser dieses heute gut als um im am zum zur
+        nein ja doch mal wirklich diese dieser dieses heute gut als um im zum zur
         uns euch mich dich mir dir ihm ihn kein keine
     """.split()),
     "en": frozenset("""

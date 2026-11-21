@@ -26,7 +26,6 @@ from typing import Callable, Mapping, Optional
 
 import blocks.status_line as status_line_block
 from blocks.condense import CondenseBlock
-from gateway.correction import MODEL_CHAIN
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
 from gateway.sync_safe import atomic_write_text
 from shared.blocks import BLOCK_API_VERSION, Block, BlockContext, BlockHost
@@ -44,6 +43,9 @@ REGISTRY: dict[str, Callable[[], Block]] = {
 REGISTRY["condense"] = CondenseBlock
 
 HOST_LISTENER_ID = "session-host"
+
+# Moves to the instance's text-model configuration (target.md §9).
+CONDENSE_MODEL = "google/gemma-4-31B-it"
 
 # The condense block's reply shape (blocks/condense/coverage.parse_reply);
 # the EU text endpoint only accepts a strict json_schema response format.
@@ -64,15 +66,14 @@ _CONDENSE_SCHEMA = {
 class InfomaniakLlm:
     """`shared.llm.LlmPort` over the EU text client (`gateway/infomaniak_chat.py`).
 
-    The model is the first of `correction.MODEL_CHAIN`, the instance's
-    existing text-model configuration. Raises `ChatError` on failure; the
+    The model is `CONDENSE_MODEL`. Raises `ChatError` on failure; the
     client already rejects an empty reply.
     """
 
     def __init__(self, client=None, *, model: Optional[str] = None,
                  schema: Optional[dict] = None) -> None:
         self._client = client if client is not None else InfomaniakClient()
-        self._model = model if model is not None else MODEL_CHAIN[0]
+        self._model = model if model is not None else CONDENSE_MODEL
         self._schema = schema if schema is not None else _CONDENSE_SCHEMA
 
     def complete(self, system: str, user: str, *, timeout_s: float = 60) -> str:
