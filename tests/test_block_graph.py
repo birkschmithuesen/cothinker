@@ -37,6 +37,16 @@ def test_topic_change_emits_graph(tmp_path) -> None:
     assert emitted[0].kind == "graph"
 
 
+def test_minutes_changed_emits_graph(tmp_path) -> None:
+    emitted = []
+    block = GraphBlock()
+    block.start(_ctx(tmp_path, emitted), {})
+    block.on_event(CoreEvent("block_output", {"minutes_changed": True}))
+    assert len(emitted) == 1
+    assert emitted[0].id == "graph:session" and emitted[0].block == "graph"
+    assert emitted[0].kind == "graph"
+
+
 def test_unchanged_graph_emits_nothing(tmp_path) -> None:
     emitted = []
     block = GraphBlock()
