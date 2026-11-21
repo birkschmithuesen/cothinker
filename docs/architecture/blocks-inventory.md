@@ -121,6 +121,7 @@ surfaces/`, every `*.py` outside a `tests/` directory, at `HEAD`.
 
 ```inventory cothinker
 blocks/__init__.py                                                                core:session
+gateway/actions_reader.py                                                         surface:stage
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
 gateway/blocks.py                                                                 block:segment
@@ -172,12 +173,16 @@ graph/vault_notes.py                                                            
 modules/example_echo/module.py                                                   core:module
 shared/__init__.py                                                               core:session
 shared/agent.py                                                                   core:agent
+shared/blocks.py                                                                  core:module
 shared/instance.py                                                                core:instance
 shared/modules.py                                                                 core:module
+shared/phases.py                                                                  core:session
 shared/profiles.py                                                                core:instance
 shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py               block:write-text
 shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py                block:write-text
 shared/speechmatics.py                                                           stt:engine-speechmatics
+shared/surface.py                                                                 surface:stage
+shared/templates.py                                                               core:module
 shared/utterance.py                                                              stt:engine-speechmatics
 stage/session_graph.py                                                           block:graph
 stage/stage.py                                                                   surface:stage
