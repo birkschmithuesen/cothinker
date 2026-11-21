@@ -42,6 +42,7 @@ class BlockContext:
     clock: Callable[[], float]
     emit: Callable[[object], None]         # shared.surface.ViewIntent -> None
     artefact: Callable[[str, str], None]   # (name, text), written by the host
+    trace: Optional[Callable[[str, Mapping], None]] = None  # (event, fields) -> None
 
 
 class Block(Protocol):
