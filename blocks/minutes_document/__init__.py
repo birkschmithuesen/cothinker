@@ -19,6 +19,10 @@ Input, `block_output` payload keys (other keys are ignored):
   `notiz` entry. Nothing produces these two yet.
 - `topic {"title", "stamp"}`
 
+Write events (`entry`, `bullet`, `condensed`, `topic`) must be dispatched
+under the host's file lock: the artefact path is shared and the block reads
+the file fresh each time, so an unlocked dispatch risks a stale read.
+
 Output: `block_output {"minutes_changed": {"name": "protokoll.md"}}`, only
 after a write that landed.
 
