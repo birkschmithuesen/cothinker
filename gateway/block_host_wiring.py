@@ -232,8 +232,9 @@ def feed_utterance(minutes, blocks: SessionBlocks, text: str,
     then the block host.
 
     `minutes` is the session host's `MinutesFile`. `minutes.append_raw`
-    runs FIRST and unguarded -- the transcript is the evidence, the event is a convenience, and a raw-append failure
-    must propagate exactly as it did before this wiring existed. A
+    runs FIRST and unguarded -- the transcript is the evidence, the event
+    is a convenience, and a raw-append failure must propagate exactly as
+    it did before this wiring existed. A
     dispatch failure, in contrast, is logged and swallowed: a block
     breaking must never cost a line of the transcript.
     """

@@ -3509,12 +3509,12 @@ def main() -> int:
         else:
             writer.clear_warning(warning_text("protocol"))
 
-    # With COTHINKER_PROJECT_DIR the project is its own git repo (a plain
-    # clone outside $COTHINKER_ENTITIES): git must run there, not in
-    # ENTITIES.parent, or every commit -- the shutdown one included -- fails.
     minutes_file = MinutesFile(path, threading.RLock(), report=protocol_report)
     minutes_doc = MinutesPort(minutes_file, session_blocks, session_dir=run_dir,
                               mode=a.mode)
+    # With COTHINKER_PROJECT_DIR the project is its own git repo (a plain
+    # clone outside $COTHINKER_ENTITIES): git must run there, not in
+    # ENTITIES.parent, or every commit -- the shutdown one included -- fails.
     session_git = SessionGit(
         path,
         (folder if os.environ.get("COTHINKER_PROJECT_DIR", "").strip()
