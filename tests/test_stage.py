@@ -548,6 +548,16 @@ def test_relative_link_lands_in_the_right_place(linked, basis, seitenpfad,
     assert c == 200
 
 
+# Full coverage: every relative href on the page (plus "parts", as in the
+# archive) must be in LINK_TARGETS, so a new broken link cannot slip through.
+@pytest.mark.parametrize("seitenpfad", ["/", "/file/notizen"])
+def test_page_hrefs_equal_the_link_table(linked, seitenpfad):
+    code, s = linked(seitenpfad)
+    gefunden = set(re.findall(r'href="([^":]+)"', s)) | {"parts"}
+    erwartet = {v for p, v, _ in LINK_TARGETS if p == seitenpfad}
+    assert gefunden == erwartet
+
+
 # No escaping the project folder
 @pytest.mark.parametrize("pfad", [
     "/file/..%2F..%2F..%2Fetc%2Fpasswd", "/file/../../../etc/passwd",
