@@ -1,7 +1,11 @@
 # Contributing
 
-Thanks for wanting to work on CoThinker. Two things are required before a
-contribution can be merged, on top of any code review:
+Thanks for wanting to work on CoThinker. See `AGENTS.md` for the working
+rules this repository follows (branching, issues, ADRs, who merges, commit
+identity, the publish check, and what stays out of this template repo).
+
+Two things are required before a contribution can be merged, on top of any
+code review:
 
 ## 1. The CLA
 
