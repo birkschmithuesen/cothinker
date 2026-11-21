@@ -87,7 +87,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.append(str(Path(__file__).resolve().parent))
 from session_graph import (build_session_graph,             # noqa: E402
                            protocol_head, topics_from_stage)
-from gateway.protocol_doc import is_v2, parse_topics         # noqa: E402
+from shared.minutes_format import is_v2, parse_topics         # noqa: E402
 from gateway import stage_image                              # noqa: E402
 
 ENTITIES = Path(os.environ.get(
@@ -284,7 +284,7 @@ def md(text, dateien: set, max_zeichen: int | None = None) -> str:
 
 
 # The three second-level headings a v2 protocol is cut at. Same tolerance
-# as gateway/protocol_doc.py: trailing blanks and a CRLF line end.
+# as shared/minutes_format.py: trailing blanks and a CRLF line end.
 _V2_SECTION_RE = re.compile(r"^## (Überblick|Themen|Rohtranskript)[ \t]*\r?$",
                             re.MULTILINE)
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)

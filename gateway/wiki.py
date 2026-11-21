@@ -37,8 +37,9 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from events import is_token                                  # noqa: E402
-from protocol_doc import clean_line                          # noqa: E402
+from shared.events import is_token                                  # noqa: E402
+from shared.minutes_format import clean_line                          # noqa: E402
+from shared.wiki_names import PAGE_DIR, _normalise, page_path, page_slug, slugify  # noqa: E402
 from graph.neighbours import HardEdges                       # noqa: E402
 from graph.vault_notes import Note, NoteIndex, scan_vault    # noqa: E402
 
@@ -54,8 +55,7 @@ MIN_STEM = 4
 # The protocol's title line limit (`Protocol.open_topic`, `clean_line`).
 TITLE_MAX = 120
 
-# Topic pages (MM-G D4/D5): where they go, how many links, how many names.
-PAGE_DIR = "entwuerfe"
+# Topic pages (MM-G D4/D5): how many links, how many names.
 PAGE_LINKS = 5
 MIN_PAGE_LINKS = 2
 # ANNAHME: 50 pages of one name in one session is not a meeting, it is a loop.
@@ -86,27 +86,6 @@ ZURUF_NEIN = re.compile(r"\b(?:kein\w*|nicht)\b", re.IGNORECASE)
 # One clause: what lies between punctuation marks.
 _CLAUSE_SPLIT = re.compile(r"[,.;:!?]+")
 
-_UMLAUTS = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
-_NON_ALNUM = re.compile(r"[^a-z0-9]+")
-
-
-def _normalise(text) -> str:
-    """casefold, umlauts spelled out, every other non-alnum run -> '-'."""
-    if not isinstance(text, str):
-        return ""
-    # NFC first: a decomposed 'u' + diaeresis (macOS file names) must
-    # become 'ue' like the composed one, not 'u'.
-    t = unicodedata.normalize("NFC", text).casefold().translate(_UMLAUTS)
-    # Accents that are not German umlauts: 'é' -> 'e', not a hyphen.
-    t = unicodedata.normalize("NFKD", t).encode("ascii", "ignore").decode()
-    return _NON_ALNUM.sub("-", t).strip("-")
-
-
-def slugify(text, limit: int = 60) -> str:
-    """The file-name/matching form of a title. "" when nothing is left."""
-    return _normalise(text)[:max(0, limit)].rstrip("-")
-
-
 def wants_page(text) -> bool:
     """True when one clause of `text` orders a topic page (`ZURUF_SEITE`)
     and carries no negation (`ZURUF_NEIN`). Never raises."""
@@ -131,17 +110,6 @@ def bare_title(line) -> str:
     if not isinstance(line, str):
         return ""
     return _TITLE_LINKS.sub("", _TITLE_MARK.sub("", line)).strip()
-
-
-def page_slug(titel, created) -> str:
-    """The page's file name: the title's slug, else `seite-HHMM`."""
-    return slugify(titel) or f"seite-{created:%H%M}"
-
-
-def page_path(session_dir, slug: str, n: int = 1) -> Path:
-    """`<session_dir>/entwuerfe/<slug>.md`, from the 2nd on `<slug>-<n>.md`."""
-    name = slug if n <= 1 else f"{slug}-{n}"
-    return Path(session_dir) / PAGE_DIR / f"{name}.md"
 
 
 def _relative(pfad, project_dir) -> str:

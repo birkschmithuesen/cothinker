@@ -36,18 +36,15 @@ twice (17 of 3000).
 from __future__ import annotations
 
 import re
+import sys
 import threading
 import time
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Callable
 
-# German words that start like the wake word but are NOT one. Without this
-# list, `\brobo[a-zäöüß]*` turns every sentence about robots into an order --
-# and robots are a topic in these rounds. Subtracted AFTER the prefix match,
-# so "Roboter" alone stays harmless while "Roboterzeuge" (recognition welded
-# "Robo, erzeuge" into one word) still fires.
-_WAKE_NOT = re.compile(r"^(robert|roboti\w*|roboter|robotern|roboters)$",
-                       re.IGNORECASE)
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from shared.wake_word import WAKE_NOT  # noqa: E402
 
 # Trailing filler after the wake word that still means "heard, not told to
 # do anything yet" -- live incident 2026-10-27: "Robo
@@ -67,7 +64,7 @@ _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 # or a hyphen -- the address pattern "<name>, <imperative>", accepted
 # utterance-initial (after an optional opening quote). "Roboter" is in
 # the list for the same reason; mid-sentence it stays a false friend
-# (_WAKE_NOT above).
+# (WAKE_NOT above).
 #
 # Live meeting 2026-10-20 20:49: the STT server also misheard "Robo" as
 # "Grobo", "Wo, wo" and "Wobei". "Grobo" joins the unconditional group
@@ -96,49 +93,6 @@ _WAKE_IMPERATIVE_OR_ADDRESS = re.compile(
     r"n(?:ä|ae)chste[rs]?|punkt\w*|thema\w*|agenda\w*)\b",
     re.IGNORECASE,
 )
-
-# Call-lane intent detection (konzept-spuren-architektur.md, "Entscheider
-# ohne LLM"): rule-based keywords only, no model call -- the acknowledgement
-# has to be on stage in < 2 s, well before any agent could even start. Order
-# matters: checked top to bottom, first match wins. "question" is deliberately
-# last -- a structuring/summarizing/research request can itself be phrased as
-# a question ("kannst du strukturieren?") and should still get the specific
-# template.
-CALL_INTENTS: tuple[tuple[str, re.Pattern], ...] = (
-    ("structure", re.compile(r"strukturier", re.IGNORECASE)),
-    ("summarize", re.compile(r"fass\w*\s+.*zusammen|zusammenfass",
-                             re.IGNORECASE)),
-    ("research", re.compile(r"recherchier", re.IGNORECASE)),
-    ("question", re.compile(r"\?|\bwas ist\b|\bwie ist\b|\bwer ist\b"
-                            r"|\bwarum\b|\bwieso\b|\bweshalb\b",
-                            re.IGNORECASE)),
-)
-
-# One quittance per intent, shown on stage before any agent runs. The lane
-# worker's real result later replaces this -- see consumer wiring.
-CALL_ACK_TEMPLATES: dict[str, str] = {
-    "structure": "Robo: Strukturierung läuft …",
-    "summarize": "Robo: Zusammenfassung läuft …",
-    "research": "Robo: Recherche läuft …",
-    "question": "Robo: Antwort kommt …",
-    "generic": "Robo: kommt gleich …",
-}
-
-
-def call_intent(text: str) -> str:
-    """Which acknowledgement template a call's text asks for.
-
-    Rule-based, no model call -- this has to run in well under the 2 s the
-    acceptance test measures for call → acknowledgement.
-    """
-    for name, pattern in CALL_INTENTS:
-        if pattern.search(text):
-            return name
-    return "generic"
-
-
-def call_ack(text: str) -> str:
-    return CALL_ACK_TEMPLATES[call_intent(text)]
 
 
 @dataclass
@@ -222,7 +176,7 @@ class BlockBuilder:
         if self.wake_word_re is None:
             return False
         m = self.wake_word_re.match(clause)
-        if not m or _WAKE_NOT.match(m.group(0)):
+        if not m or WAKE_NOT.match(m.group(0)):
             return False
         rest = re.sub(r"[\s,.!?:;\-–„“\"'»«]+", " ", clause[m.end():]).strip()
         return not rest or bool(_BARE_WAKE_FILLER.match(rest))
@@ -246,7 +200,7 @@ class BlockBuilder:
         Covers the case `_is_bare_wake` cannot: the STT server welds an
         explanation and the wake word into ONE `final` when there is no
         detectable pause between them (live incident 2026-10-27:
-        "Das heisst, wir koennten Robo da auch mal fragen.
+        "Das heisst, wir koennten Robo dazu auch mal fragen.
         Robo Aktiv." arrived as a single final). Only the LAST sentence is
         checked -- a wake word addressed at the end of a sentence that
         OPENS with a real order ("Mach das bitte, Robo.") keeps that order,
@@ -265,7 +219,7 @@ class BlockBuilder:
         """
         if self.wake_word_re is None:
             return False
-        if any(not _WAKE_NOT.match(m.group(0))
+        if any(not WAKE_NOT.match(m.group(0))
                for m in self.wake_word_re.finditer(text)):
             return True
         return self._is_wake_variant_start(text)
@@ -337,10 +291,10 @@ class BlockBuilder:
                     # unrelated content -- live incident 2026-10-27:
                     # pre-flagging here let the NEXT speaker's
                     # filler ride out as a call twice in the same window,
-                    # once after "... Robo da auch mal fragen. Robo
+                    # once after "... Robo dazu auch mal fragen. Robo
                     # Aktiv." and once after an incidental name-drop,
-                    # "Ja, vielleicht koennen wir schon mal. Bernd. Robo."
-                    # (Bernd is a participant, not an order). A genuine
+                    # "Ja, das passt schon. Erika. Robo."
+                    # (Erika is a participant, not an order). A genuine
                     # follow-up order still fires: it either repeats the
                     # wake word itself (caught by `_is_wake` below on its
                     # own merit) or accumulates past `min_chars`/`max_s`

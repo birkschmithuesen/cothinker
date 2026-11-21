@@ -46,13 +46,13 @@ tables below are built from.
 
 | Block | Group | Source files (lines) | Used by | Built |
 |---|---|---|---|---|
-| segment (utterance batching) | Capture | `gateway/blocks.py` 402 | core | 1× |
+| segment (utterance batching) | Capture | `gateway/segmenter.py` 356, `shared/wake_word.py` 67 — 423 | core | 1× |
 | topic change | Capture | `gateway/topic_detect.py` 571, `topic_hysteresis.py` 95, `topic_laya_worker.py` 138, `topic_title.py` 202 — 1006 | Reflect | 1× |
 | decisions / tasks / open questions | Capture | `gateway/decide.py` 569, `decider.py` 424, `openrouter_jev.py` 269, `policy.py` 668, `policy_runner.py` 567, `proposals.py` 68, `questions.py` 191 — 2756 | Reflect | 1× |
-| minutes document | Condense + write | `gateway/protocol_doc.py` 441 | Reflect | 1× |
+| minutes document | Condense + write | `shared/minutes_format.py` 441 | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
 | mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
-| knowledge link (vault) | Agent behaviour | `gateway/wiki.py` 424, `graph/__init__.py` 5, `graph_build.py` 89, `neighbours.py` 90, `ring_select.py` 110, `seed_note.py` 84, `vault_notes.py` 239 — 1041 | Reflect | 1× |
+| knowledge link (vault) | Agent behaviour | `gateway/wiki.py` 424, `shared/wiki_names.py` 49, `graph/__init__.py` 5, `graph_build.py` 89, `neighbours.py` 90, `ring_select.py` 110, `seed_note.py` 84, `vault_notes.py` 239 — 1090 | Reflect | 1× |
 | status line | Show + share | `gateway/status_line.py` 164 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
 
@@ -74,12 +74,12 @@ repository yet.
 | STT — thought end | 1594 | `stt/fundusapps/stt_server/thought_end.py` 514; `gateway/thought_end.py` 260, `thought_end_live.py` 402, `thought_end_laya_worker.py` 148, `smart_turn_worker.py` 270 | core |
 | STT — speaker labels | 1566 | `gateway/speaker_enroll.py` 606, `speaker_split.py` 423, `speaker_label.py` 278, `speaker_label_llm.py` 259 | core |
 | STT — correction | 858 | `gateway/correction.py` 733, `correction_prefilter.py` 125 | core |
-| core — session runtime | 5588 | `gateway/consumer.py` 4817, `events.py`, `sync_safe.py`, `timing.py`, `conflict_triage.py`; `shared/__init__.py` | core |
+| core — session runtime | 5588 | `gateway/consumer.py` 4817, `shared/events.py`, `sync_safe.py`, `timing.py`, `conflict_triage.py`; `shared/__init__.py` | core |
 | core — Agent API | 1660 | `shared/agent.py` 387, `gateway/worker.py` 576, `lanes.py` 447, `agent_lane.py` 250 | core |
 | core — model clients | 614 | `gateway/infomaniak_chat.py` 178, `infomaniak_embed.py` 124, `infomaniak_limiter.py` 312 | core |
 | core — Instance API | 211 | `shared/instance.py` 128, `shared/profiles.py` 83 | core |
 | core — Module API | 213 | `shared/modules.py` 169, `modules/example_echo/module.py` 44 | core |
-| surface — stage | 4678 | `stage/stage.py` 2953, `gateway/stage_state.py` 1618, `stage_image.py` 107 | core |
+| surface — stage | 4732 | `stage/stage.py` 2953, `gateway/stage_state.py` 1618, `shared/text.py` 54, `stage_image.py` 107 | core |
 | retire | 1924 | STT engines dropped by decision 25: `stt_server/backends/infomaniak_whisper_backend.py` 475, `vosk_backend.py` 78, `whisper_streaming_backend.py` 303, `_vendored_whisper_streaming/` 980, `test_vosk.py` 88 | — |
 
 ## Targets
@@ -123,14 +123,13 @@ surfaces/`, every `*.py` outside a `tests/` directory, at `HEAD`.
 blocks/__init__.py                                                                core:session
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
-gateway/blocks.py                                                                 block:segment
 gateway/conflict_triage.py                                                        core:session
 gateway/consumer.py                                                               core:session
 gateway/correction.py                                                             stt:correction
 gateway/correction_prefilter.py                                                   stt:correction
 gateway/decide.py                                                                 block:decisions-tasks-questions
 gateway/decider.py                                                                block:decisions-tasks-questions
-gateway/events.py                                                                 core:session
+shared/events.py                                                                  core:session
 gateway/infomaniak_chat.py                                                        core:llm
 gateway/infomaniak_embed.py                                                       core:llm
 gateway/infomaniak_limiter.py                                                     core:llm
@@ -142,8 +141,9 @@ gateway/openrouter_jev.py                                                       
 gateway/policy.py                                                                 block:decisions-tasks-questions
 gateway/policy_runner.py                                                          block:decisions-tasks-questions
 gateway/proposals.py                                                              block:decisions-tasks-questions
-gateway/protocol_doc.py                                                           block:minutes-document
+shared/minutes_format.py                                                          block:minutes-document
 gateway/questions.py                                                              block:decisions-tasks-questions
+gateway/segmenter.py                                                              block:segment
 gateway/smart_turn_worker.py                                                      stt:thought-end
 gateway/speaker_enroll.py                                                         stt:speaker-labels
 gateway/speaker_label.py                                                          stt:speaker-labels
@@ -172,13 +172,19 @@ graph/vault_notes.py                                                            
 modules/example_echo/module.py                                                   core:module
 shared/__init__.py                                                               core:session
 shared/agent.py                                                                   core:agent
+shared/blocks.py                                                                  core:module
 shared/instance.py                                                                core:instance
 shared/modules.py                                                                 core:module
+shared/phases.py                                                                  core:session
 shared/profiles.py                                                                core:instance
 shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py               block:write-text
 shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py                block:write-text
 shared/speechmatics.py                                                           stt:engine-speechmatics
+shared/surface.py                                                                 core:module
+shared/text.py                                                                    surface:stage
 shared/utterance.py                                                              stt:engine-speechmatics
+shared/wake_word.py                                                               block:segment
+shared/wiki_names.py                                                              block:knowledge-link
 stage/session_graph.py                                                           block:graph
 stage/stage.py                                                                   surface:stage
 stt/fundusapps/__init__.py                                                       stt:server

@@ -12,7 +12,7 @@ after every speaking pause. We only consume it, we never change it.
 
 Flow:
   1. every `final` goes into the raw transcript immediately (nothing is lost)
-  2. sentences are bundled into meaningful blocks (gateway/blocks.py)
+  2. sentences are bundled into meaningful blocks (gateway/segmenter.py)
   3. a turn of the long-lived agent worker is triggered per finished block:
      it maintains the protocol and PROPOSES stage entries
   4. the consumer applies the proposals and writes the stage itself
@@ -54,22 +54,23 @@ from types import SimpleNamespace
 from typing import Callable, Iterable, Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from blocks import Block, BlockBuilder  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from segmenter import Block, BlockBuilder  # noqa: E402
 from correction import (CorrectionWorker, Corrector, MODEL_CHAIN,  # noqa: E402
                         build_glossary)
 import correction_prefilter  # noqa: E402
 from infomaniak_chat import Client as InfomaniakClient  # noqa: E402
 from infomaniak_chat import api_key as infomaniak_key  # noqa: E402
 from correction import FINISH_GRACE_S, FINISH_TIMEOUT_S  # noqa: E402
-from events import EventLog, is_token  # noqa: E402
+from shared.events import EventLog, is_token  # noqa: E402
 import decider as decider_mod  # noqa: E402
 from policy import marker, pending_label, with_marker  # noqa: E402
 from proposals import read_proposals  # noqa: E402
-from protocol_doc import (DEFAULT_MODE, MODES, TAGS, Entry,  # noqa: E402
+from shared.minutes_format import (DEFAULT_MODE, MODES, TAGS, Entry,  # noqa: E402
                           Topic, clean_line, clean_wikilinks, entry_line,
                           parse_topics, project_md_names, read_mode,
                           render_view, splice, topic_line)
-from protocol_doc import is_v2 as is_v2_text  # noqa: E402
+from shared.minutes_format import is_v2 as is_v2_text  # noqa: E402
 from stage_state import PARKED, StageState, scrub  # noqa: E402
 from stage_state import (AgendaRuntime, agenda_payload,  # noqa: E402
                          current_item_from_ticks, detect_agenda_command,
@@ -474,7 +475,7 @@ Gesprochenen aus, nicht am Anfang. Lieber knapp und aktuell als vollstaendig
 und veraltet.
 """
 
-# Protocol v2 (topic blocks with tagged entries, gateway/protocol_doc.py).
+# Protocol v2 (topic blocks with tagged entries, shared/minutes_format.py).
 #
 # In v2 the consumer is the only writer of protokoll.md, so the agent's
 # whole output is proposal lines -- the protocol is read-only for it.
@@ -2265,7 +2266,7 @@ def applied_event(state: StageState, action: dict) -> dict | None:
             # NO TITLE. A topic title is a sentence out of the meeting and
             # therefore not a token; the trace takes its LENGTH, in an
             # existing numeric field, and nothing else. The filter in
-            # gateway/events.py would drop it anyway -- it is not relaxed,
+            # shared/events.py would drop it anyway -- it is not relaxed,
             # and nothing here relies on it catching this.
             return {"event": "topic_changed", "id": state.main.id,
                     "chars": len(state.main.title),
@@ -3093,7 +3094,7 @@ class StageWriter:
                 # `StageState.apply()` -- "parked" among them, which is how
                 # a held-back notice becomes countable. Never foreign text;
                 # the space becomes an underscore because the trace takes
-                # tokens only ("no text" -> "no_text", see gateway/events.py).
+                # tokens only ("no text" -> "no_text", see shared/events.py).
                 self.trace("proposal_rejected", reason=reason.replace(" ", "_"))
                 # A parked notice IS a change of the surface: a dimmed line
                 # appears and the entry goes off to the protocol. It is a
@@ -4288,14 +4289,14 @@ def main() -> int:
         if decider is not None:
             decider.submit(b.text, reason=b.reason, chars=b.chars,
                            at=jetzt_block, **decider_mod.stage_context(state))
-        # `_emit("pause")` (gateway/blocks.py) never runs synchronously
+        # `_emit("pause")` (gateway/segmenter.py) never runs synchronously
         # with the sentence that "caused" it -- it fires either at the
         # start of the NEXT sentence() call (closing THIS now-stale
         # block) or from the ticker thread's tick(), when nobody has
         # spoken for pause_s. Both callers land here synchronously, under
         # BlockBuilder's own lock -- so even though sentence() runs in
         # the SSE reader thread and tick() in the separate ticker thread
-        # (see the CONCURRENCY note in gateway/blocks.py), the lock keeps
+        # (see the CONCURRENCY note in gateway/segmenter.py), the lock keeps
         # block_done() itself from ever running concurrently, so this is
         # the one place that can write the marker line the instant the
         # block actually closes, rather than waiting for (and possibly

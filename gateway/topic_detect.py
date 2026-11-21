@@ -114,7 +114,7 @@ def block_views(cuts, utterances) -> list:
                  if k in nach_index]
         if not teile:
             continue
-        # The same join gateway/blocks.py's `Block.text` does, so
+        # The same join gateway/segmenter.py's `Block.text` does, so
         # `chars` here is the `chars` the trace recorded.
         text = " ".join(u.text.strip() for u in teile if u.text.strip()).strip()
         out.append(BlockView(index=len(out), start=teile[0].at,

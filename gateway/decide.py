@@ -110,7 +110,7 @@ CHOICE_CRITERIA = {
 class DecideError(Exception):
     """A call could not be made or did not come back usably.
 
-    `token` is safe for the text-free event trace (gateway/events.py):
+    `token` is safe for the text-free event trace (shared/events.py):
     1-32 ASCII letters, digits, `_` or `-`. The message is built from the
     token and numbers only.
     """

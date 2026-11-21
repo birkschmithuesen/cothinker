@@ -13,7 +13,7 @@ per utterance, exactly what a turn-end measurement needs and NOTHING else:
 
   - `index`      the STT `final` counter (`[n]`)
   - `pause_s`    wall-clock seconds until the NEXT `final` arrived -- this is
-                 what `gateway/blocks.py` itself measures (arrival time, not
+                 what `gateway/segmenter.py` itself measures (arrival time, not
                  an acoustic timestamp), so it is faithful to what the
                  running system actually saw, latency included
   - `chars`      length of the truncated preview line (`text[:80]`) is NOT
@@ -76,7 +76,7 @@ def extract(lines: list[str], start_s: int | None, end_s: int | None
 
     # A `block #N (...)` line reports the CUT, not which utterance closed it
     # -- but a wake cut is emitted synchronously with the utterance that
-    # contained the wake word (gateway/blocks.py:124-127, `sentence()`
+    # contained the wake word (gateway/segmenter.py:124-127, `sentence()`
     # returns right after `_emit("wake")`). The immediately preceding
     # `[n]` line is therefore that utterance.
     # `last_seen_idx` tracks the most recent utterance UNCONDITIONALLY --

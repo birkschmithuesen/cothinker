@@ -32,14 +32,16 @@ action through it, so a future table row cannot bypass it.
 from __future__ import annotations
 
 import re
+import sys
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional, Sequence
 
-from blocks import _WAKE_NOT
-from protocol_doc import DEFAULT_MODE, MODES
-from stage_state import MAX_PENDING_LABEL
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from shared.wake_word import WAKE_NOT  # noqa: E402
+from shared.minutes_format import DEFAULT_MODE, MODES  # noqa: E402
+from shared.text import MAX_PENDING_LABEL  # noqa: E402
 
 ACTIONS = ("topic_block", "tag_entry", "stage_decision", "ask", "research",
            "document", "wake")
@@ -422,7 +424,7 @@ def content_words(text, n: int = 3) -> list[str]:
     internal hyphen, as in "Kuchenbasar-Termin", must stay), drops
     `PENDING_STOPWORDS` and drops the wake word -- but not
     "Robotik"/"Robert"/"Roboter...", the same exclusion
-    `blocks._WAKE_NOT` applies, because those are content, not an address
+    `shared.wake_word.WAKE_NOT` applies, because those are content, not an address
     to Robo.
     """
     words: list[str] = []
@@ -433,7 +435,7 @@ def content_words(text, n: int = 3) -> list[str]:
         low = token.lower()
         if low in PENDING_STOPWORDS:
             continue
-        if low.startswith("robo") and not _WAKE_NOT.match(low):
+        if low.startswith("robo") and not WAKE_NOT.match(low):
             continue
         words.append(token)
         if len(words) >= n:
@@ -449,13 +451,13 @@ def wake_source(text) -> str:
 
     A wake block still holds every earlier sentence of the open block, so
     the order is what follows the wake word, not the talk before it.
-    Same matching as `blocks`: word boundary, prefix, minus `_WAKE_NOT`
+    Same matching as `gateway/segmenter.py`: word boundary, prefix, minus `WAKE_NOT`
     ("Robotik"/"Robert" are not the wake word). The whole text when no
     wake word is found.
     """
     s = str(text)
     for m in _WAKE_TOKEN.finditer(s):
-        if not _WAKE_NOT.match(m.group(0)):
+        if not WAKE_NOT.match(m.group(0)):
             return s[m.start():]
     return s
 
