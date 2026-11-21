@@ -2759,8 +2759,8 @@ class StageWriter:
 
         THE page path: level 2's `document` action and the Zuruf "Robo,
         leg dafuer eine Seite an" both end here. The page is created by
-        the knowledge-link block's `create_topic_page`; then the consumer itself -- not the
-        agent -- files `[notiz] Themenseite [[<stem>]]` into the current
+        the knowledge-link block's `create_topic_page`; then the consumer
+        itself -- not the agent -- files `[notiz] Themenseite [[<stem>]]` into the current
         topic block, and traces `wiki_create links=<n>`. None when no page
         was created. Never raises: a failure costs the page or the entry,
         never the turn.
@@ -3744,7 +3744,11 @@ def main() -> int:
     # which holds only this run's machine files. v2 only -- in v1 the
     # agent writes the topic blocks.
     if writer.protocol is not None:
-        writer.knowledge_link = session_blocks.get("knowledge-link")
+        kl_block = session_blocks.get("knowledge-link")
+        if kl_block is not None:
+            writer.knowledge_link = kl_block
+        else:
+            log("knowledge-link block not in the template: default instance")
         writer.knowledge_link.use_project(folder)
     # Level 2 (docs/entwurf-meeting-modi.md §3): opt-in, and only where
     # every part it relies on is there -- the decider's answers, a
