@@ -142,7 +142,7 @@ class TimingLog:
     -- `record_utterance`/`record_pause_marker` may raise (`OSError`,
     `UnicodeError`, ...). The call site in `gateway/consumer.py` is
     responsible for catching and logging, the same way it already
-    handles `Protocol.append_raw` and `bb.sentence`. That keeps the
+    handles `MinutesFile.append_raw` and `bb.sentence`. That keeps the
     OBSERVABLE contract in one place: exactly one `log(...)` call on
     failure, and the SSE loop keeps running regardless.
     """

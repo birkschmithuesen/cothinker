@@ -14,7 +14,7 @@ from shared.blocks import BLOCK_API_VERSION
 from shared.surface import ViewIntent
 
 
-class FakeProtocol:
+class FakeMinutesFile:
     def __init__(self, calls):
         self.calls = calls
 
@@ -56,7 +56,7 @@ class RaisingBlock:
 
 def test_feed_utterance_appends_raw_before_dispatch(tmp_path):
     calls = []
-    protocol = FakeProtocol(calls)
+    protocol = FakeMinutesFile(calls)
     blocks = FakeBlocks(calls)
     bhw.feed_utterance(protocol, blocks, "hallo", "max", {"at": 1.0})
     assert calls[0] == ("append_raw", "hallo", "max")
@@ -70,7 +70,7 @@ def test_feed_utterance_survives_a_raising_block(tmp_path):
         session_dir=tmp_path, sink=lambda intent: None, log=logs.append,
         registry={"capture-bullets": RaisingBlock}, clock=lambda: 0.0,
     )
-    protocol = FakeProtocol([])
+    protocol = FakeMinutesFile([])
     bhw.feed_utterance(protocol, session_blocks, "hallo", "max", {"at": 1.0})
     assert protocol.calls == [("append_raw", "hallo", "max")]
     assert any("boom" not in line and "capture-bullets" in line and "broken" in line
@@ -79,7 +79,7 @@ def test_feed_utterance_survives_a_raising_block(tmp_path):
 
 def test_feed_utterance_keeps_raw_when_dispatch_breaks(tmp_path):
     calls = []
-    protocol = FakeProtocol(calls)
+    protocol = FakeMinutesFile(calls)
     blocks = FakeBlocks(calls, raise_on_dispatch=True)
     bhw.feed_utterance(protocol, blocks, "hallo", "max", {"at": 1.0})
     assert calls[0] == ("append_raw", "hallo", "max")

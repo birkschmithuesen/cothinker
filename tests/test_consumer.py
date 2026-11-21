@@ -604,7 +604,7 @@ def sec_03(sec_02):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot = k.Protocol(pfad, tmp)
+        prot = k.MinutesFile(pfad, threading.RLock())
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
 
@@ -669,11 +669,12 @@ def sec_03(sec_02):
         skript = f"""
 import sys
 sys.path.insert(0, {str(Path(__file__).resolve().parents[1])!r})
-from gateway.consumer import Protocol
+import threading
+from gateway.raw_transcript import MinutesFile
 from pathlib import Path
 p = Path({str(tmp / 'locale-test.md')!r})
 p.write_text("## Rohtranskript\\n", encoding="utf-8")
-Protocol(p, p.parent).append_raw("Gr\\u00fc\\u00dfe aus dem \\u20ac-Raum", None)
+MinutesFile(p, threading.RLock()).append_raw("Gr\\u00fc\\u00dfe aus dem \\u20ac-Raum", None)
 print("ok")
 """
     except Exception:  # noqa: BLE001
@@ -697,7 +698,7 @@ print("ok")
 
     # 16 — lost raw lines are detected and restored
     try:
-        prot2 = k.Protocol(tmp / "verlust.md", tmp)
+        prot2 = k.MinutesFile(tmp / "verlust.md", threading.RLock())
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -756,8 +757,8 @@ print("ok")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(58, "conflict file detected", len(prot.conflict_files()) == 1,
-              repr([p.name for p in prot.conflict_files()]))
+        _chk(58, "conflict file detected", len(k.find_conflicts([tmp])) == 1,
+              repr([p.name for p in k.find_conflicts([tmp])]))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     return rec
@@ -812,7 +813,7 @@ def sec_04(sec_03):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        gprot = k.Protocol(gdatei, grepo)
+        gprot = k.SessionGit(gdatei, grepo)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
 
@@ -888,7 +889,7 @@ def sec_04(sec_03):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        gprot2 = k.Protocol(gdatei, grepo)          # fresh look at the remote
+        gprot2 = k.SessionGit(gdatei, grepo)          # fresh look at the remote
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -3236,8 +3237,8 @@ def sec_27(sec_26):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_weg = k.Protocol(d_prot / "gibt-es-nicht" / "protokoll.md", d_prot,
-                              report=gemeldet.append)
+        prot_weg = k.MinutesFile(d_prot / "gibt-es-nicht" / "protokoll.md",
+                                 threading.RLock(), report=gemeldet.append)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -3268,7 +3269,8 @@ def sec_27(sec_26):
             schreibgeschuetzt = d_prot / "readonly.md"
             schreibgeschuetzt.write_text("## Rohtranskript\n", encoding="utf-8")
             gemeldet2 = []
-            prot_ro = k.Protocol(schreibgeschuetzt, d_prot, report=gemeldet2.append)
+            prot_ro = k.MinutesFile(schreibgeschuetzt, threading.RLock(),
+                                   report=gemeldet2.append)
             k.log = lambda *a: None
             prot_ro.append_raw("Satz eins")
             prot_ro.append_raw("Satz zwei")
@@ -5387,7 +5389,7 @@ def sec_38(sec_37):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_v2 = k.Protocol(p_neu, _v2)
+        prot_v2 = k.open_minutes(p_neu)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5403,7 +5405,7 @@ def sec_38(sec_37):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_v1 = k.Protocol(p_alt, _v2)
+        prot_v1 = k.open_minutes(p_alt)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5412,7 +5414,7 @@ def sec_38(sec_37):
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(356, "a missing file is not v2 and does not raise",
-              k.Protocol(_v2 / "fehlt" / "x.md", _v2).is_v2 is False)
+              k.open_minutes(_v2 / "fehlt" / "x.md", session_dir=_v2).is_v2 is False)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     return rec
@@ -5493,7 +5495,7 @@ def sec_43(sec_40):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_u = k.Protocol(v2_datei("u.md"), _v2)
+        prot_u = k.open_minutes(v2_datei("u.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5926,7 +5928,7 @@ def sec_49(sec_48):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_fb = k.Protocol(p_fb, _v2)
+        prot_fb = k.open_minutes(p_fb)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6000,7 +6002,7 @@ def sec_50(sec_49):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_pr = k.Protocol(v2_datei("pr.md"), _v2)
+        prot_pr = k.open_minutes(v2_datei("pr.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6122,7 +6124,7 @@ def sec_53(sec_50):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_o = k.Protocol(v2_datei("order.md"), _v2)
+        prot_o = k.open_minutes(v2_datei("order.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6164,7 +6166,7 @@ def sec_53(sec_50):
         rec.error += traceback.format_exc()[-1200:]
 
     try:
-        prot_t = k.Protocol(v2_datei("order-topic.md"), _v2)
+        prot_t = k.open_minutes(v2_datei("order-topic.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6207,7 +6209,7 @@ def sec_53(sec_50):
         rec.error += traceback.format_exc()[-1200:]
 
     try:
-        prot_b = k.Protocol(v2_datei("order-decision.md"), _v2)
+        prot_b = k.open_minutes(v2_datei("order-decision.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6250,7 +6252,7 @@ def sec_53(sec_50):
         rec.error += traceback.format_exc()[-1200:]
 
     try:
-        prot_g = k.Protocol(v2_datei("order-garbage.md"), _v2)
+        prot_g = k.open_minutes(v2_datei("order-garbage.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6308,11 +6310,11 @@ def sec_54(sec_53):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_off = k.Protocol(v2_datei("order-off.md"), _v2)
+        prot_off = k.open_minutes(v2_datei("order-off.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_ref = k.Protocol(v2_datei("order-ref.md"), _v2)
+        prot_ref = k.open_minutes(v2_datei("order-ref.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -7462,7 +7464,7 @@ def sec_73(sec_72):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _pw.protocol = consumer.Protocol(_ppath, _ptmp, mode="sitzung")
+        _pw.protocol = consumer.open_minutes(_ppath, mode="sitzung")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
