@@ -46,21 +46,22 @@ WORKSHOP_IMPORT_ALLOWLIST = frozenset({
 })
 
 
-def git_grep_workshop(path: str) -> str:
+def git_grep_import(module: str, path: str) -> str:
     """Empty string means no match (`git grep` exits 1 on no match, which
     is not an error here). A pathspec for a directory that does not exist
-    in the tree also just yields no match."""
+    in the tree also just yields no match. `--untracked` also covers new,
+    not-yet-added files (still honouring .gitignore); `-I` skips binaries
+    such as stray bytecode."""
     r = subprocess.run(
-        ["git", "grep", "-nE", r"^\s*(from|import) workshop", "--", path],
+        ["git", "grep", "--untracked", "-I", "-nE",
+         rf"^\s*(from|import) {module}", "--", path],
         cwd=REPO, capture_output=True, text=True)
+    assert r.returncode in (0, 1), r.stderr
     return r.stdout
 
 
-def git_grep_import(module: str, path: str) -> str:
-    r = subprocess.run(
-        ["git", "grep", "-nE", rf"^\s*(from|import) {module}", "--", path],
-        cwd=REPO, capture_output=True, text=True)
-    return r.stdout
+def git_grep_workshop(path: str) -> str:
+    return git_grep_import("workshop", path)
 
 
 @pytest.mark.parametrize("path", ["gateway", "stt"])
