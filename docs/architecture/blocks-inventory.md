@@ -53,7 +53,7 @@ tables below are built from.
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
 | mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
 | knowledge link (vault) | Agent behaviour | `gateway/wiki.py` 424, `shared/wiki_names.py` 49, `graph/__init__.py` 5, `graph_build.py` 89, `neighbours.py` 90, `ring_select.py` 110, `seed_note.py` 84, `vault_notes.py` 239 — 1090 | Reflect | 1× |
-| status line | Show + share | `gateway/status_line.py` 164 | Reflect | 1× |
+| status line | Show + share | `blocks/status_line/__init__.py` 86, `line.py` 24 — 110 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
 | timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
@@ -81,7 +81,7 @@ repository yet.
 | core — model clients | 614 | `gateway/infomaniak_chat.py` 178, `infomaniak_embed.py` 124, `infomaniak_limiter.py` 312 | core |
 | core — Instance API | 211 | `shared/instance.py` 128, `shared/profiles.py` 83 | core |
 | core — Module API | 213 | `shared/modules.py` 169, `modules/example_echo/module.py` 44 | core |
-| surface — stage | 4732 | `stage/stage.py` 2953, `gateway/stage_state.py` 1618, `shared/text.py` 54, `stage_image.py` 107 | core |
+| surface — stage | 4886 | `stage/stage.py` 2953, `gateway/stage_state.py` 1618, `shared/text.py` 54, `stage_image.py` 107, `gateway/stage_texts.py` 154 | core |
 | retire | 1924 | STT engines dropped by decision 25: `stt_server/backends/infomaniak_whisper_backend.py` 475, `vosk_backend.py` 78, `whisper_streaming_backend.py` 303, `_vendored_whisper_streaming/` 980, `test_vosk.py` 88 | — |
 
 ## Targets
@@ -129,6 +129,8 @@ blocks/__init__.py                                                              
 blocks/speaking_share/__init__.py                                                 block:speaking-share
 blocks/speaking_share/room_talk_time.py                                           block:speaking-share
 blocks/speaking_share/talk_share.py                                               block:speaking-share
+blocks/status_line/__init__.py                                                   block:status-line
+blocks/status_line/line.py                                                       block:status-line
 blocks/timer/__init__.py                                                         block:timer
 blocks/timer/clock.py                                                            block:timer
 gateway/agent_lane.py                                                             core:agent
@@ -161,7 +163,7 @@ gateway/speaker_label_llm.py                                                    
 gateway/speaker_split.py                                                          stt:speaker-labels
 gateway/stage_image.py                                                            surface:stage
 gateway/stage_state.py                                                            surface:stage
-gateway/status_line.py                                                            block:status-line
+gateway/stage_texts.py                                                            surface:stage
 gateway/sync_safe.py                                                              core:session
 gateway/thought_end.py                                                            stt:thought-end
 gateway/thought_end_laya_worker.py                                                stt:thought-end
