@@ -61,10 +61,10 @@ def test_is_accepted():
     assert is_accepted(BASE.replace("accepted", "superseded by ADR 0100"))
 
 
-def test_adr_0007_stays_proposed_and_is_editable():
+def test_adr_0007_is_accepted_and_now_protected():
     path = ADR_DIR / "0007-coupling-rule-blocks-surfaces.md"
     text = path.read_text(encoding="utf-8")
-    assert not is_accepted(text)
+    assert is_accepted(text)
 
 
 def test_adr_0001_is_accepted():
