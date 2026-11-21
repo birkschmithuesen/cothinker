@@ -52,7 +52,7 @@ tables below are built from.
 | minutes document | Condense + write | `shared/minutes_format.py` 441 | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
 | mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
-| knowledge link (vault) | Agent behaviour | `blocks/knowledge_link/wiki.py` 424, `shared/wiki_names.py` 49 (`graph/*.py`, the vault-note library, is a core library: `core:session`) | Reflect | 1× |
+| knowledge link (vault) | Agent behaviour | `blocks/knowledge_link/__init__.py` 123, `blocks/knowledge_link/wiki.py` 408, `shared/wiki_names.py` 49 (`graph/*.py`, the vault-note library, is a core library: `core:session`) | Reflect | 1× |
 | status line | Show + share | `gateway/status_line.py` 164 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
@@ -171,8 +171,8 @@ gateway/topic_detect.py                                                         
 gateway/topic_hysteresis.py                                                       block:topics
 gateway/topic_laya_worker.py                                                      block:topics
 gateway/topic_title.py                                                            block:topics
-blocks/knowledge_link/__init__.py                                                                block:knowledge-link
-blocks/knowledge_link/wiki.py                                                                block:knowledge-link
+blocks/knowledge_link/__init__.py                                                 block:knowledge-link
+blocks/knowledge_link/wiki.py                                                     block:knowledge-link
 gateway/worker.py                                                                 core:agent
 graph/__init__.py                                                                 core:session
 graph/graph_build.py                                                              core:session
