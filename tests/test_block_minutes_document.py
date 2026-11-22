@@ -81,6 +81,18 @@ def _ev(**payload):
     return CoreEvent("block_output", payload)
 
 
+def _changes(out):
+    """The `minutes_changed` events among a block's outputs."""
+    return [e for e in out if "minutes_changed" in e.payload]
+
+
+def _result(out):
+    """The `entry_result` payload among a block's outputs."""
+    got = [e.payload for e in out if e.payload.get("kind") == "entry_result"]
+    assert len(got) == 1
+    return got[0]
+
+
 def _open(b, p, mode="sitzung"):
     return b.on_event(_ev(minutes_open={"path": str(p), "mode": mode}))
 
@@ -97,12 +109,12 @@ def test_entry_renders_a_head_and_announces_the_change(tmp_path):
     _open(b, p)
     out = b.on_event(_ev(entry={"tag": "beschluss", "text": "Wir bauen es",
                                 "stamp": "10:00", "names": None}))
-    assert [(e.kind, e.payload) for e in out] == [
+    assert [(e.kind, e.payload) for e in _changes(out)] == [
         ("block_output", {"minutes_changed": {"name": "protokoll.md"}})]
     assert len(heads) == 1
     assert "Wir bauen es" in heads[0]
     assert "## Rohtranskript" not in heads[0]
-    assert b.last_result().reason == ""
+    assert _result(out)["reason"] == ""
     # splicing it in front of the raw section keeps that section byte-identical
     MinutesFile(p, threading.RLock()).write_sections(heads[0])
     new = p.read_text(encoding="utf-8")
@@ -114,10 +126,10 @@ def test_changed_event_only_on_a_landed_write(tmp_path):
     p = _doc(tmp_path)
     b, heads = _started(tmp_path)
     _open(b, p)
-    assert b.on_event(_ev(entry={"tag": "unbekannt", "text": "x"})) == []
-    assert b.last_result().reason == "unknown tag"
-    assert b.on_event(_ev(entry={"tag": "notiz", "text": "   "})) == []
-    assert b.last_result().reason == "no text"
+    out = b.on_event(_ev(entry={"tag": "unbekannt", "text": "x"}))
+    assert _changes(out) == [] and _result(out)["reason"] == "unknown tag"
+    out = b.on_event(_ev(entry={"tag": "notiz", "text": "   "}))
+    assert _changes(out) == [] and _result(out)["reason"] == "no text"
     assert heads == []
 
 
@@ -126,11 +138,11 @@ def test_duplicate_entry_yields_no_event(tmp_path):
     b, heads = _started(tmp_path)
     _open(b, p)
     first = b.on_event(_ev(entry={"tag": "notiz", "text": "a", "stamp": "10:00"}))
-    assert first
+    assert _changes(first)
     MinutesFile(p, threading.RLock()).write_sections(heads[-1])
     again = b.on_event(_ev(entry={"tag": "notiz", "text": "a", "stamp": "10:01"}))
-    assert again == []
-    assert b.last_result().reason == "duplicate"
+    assert _changes(again) == []
+    assert _result(again)["reason"] == "duplicate"
     assert len(heads) == 1
 
 
@@ -139,8 +151,8 @@ def test_not_v2_file_yields_no_event(tmp_path):
     b, heads = _started(tmp_path)
     _open(b, p)
     assert b.is_v2 is False
-    assert b.on_event(_ev(entry={"tag": "notiz", "text": "a"})) == []
-    assert b.last_result().reason == "not v2"
+    out = b.on_event(_ev(entry={"tag": "notiz", "text": "a"}))
+    assert _changes(out) == [] and _result(out)["reason"] == "not v2"
     assert heads == []
 
 
@@ -148,9 +160,9 @@ def test_bullet_and_condensed_become_notes(tmp_path):
     p = _doc(tmp_path)
     b, heads = _started(tmp_path)
     _open(b, p)
-    assert b.on_event(_ev(bullet={"text": "ein Punkt", "stamp": "10:00"}))
+    assert _changes(b.on_event(_ev(bullet={"text": "ein Punkt", "stamp": "10:00"})))
     MinutesFile(p, threading.RLock()).write_sections(heads[-1])
-    assert b.on_event(_ev(condensed={"text": "kurz gefasst", "stamp": "10:01"}))
+    assert _changes(b.on_event(_ev(condensed={"text": "kurz gefasst", "stamp": "10:01"})))
     head = heads[-1]
     assert "[notiz] ein Punkt" in head
     assert "[notiz] kurz gefasst" in head
@@ -160,34 +172,35 @@ def test_topic_opens_a_block(tmp_path):
     p = _doc(tmp_path)
     b, heads = _started(tmp_path)
     _open(b, p)
-    assert b.on_event(_ev(topic={"title": "Budget", "stamp": "10:05"}))
+    assert _changes(b.on_event(_ev(topic={"title": "Budget", "stamp": "10:05"})))
     MinutesFile(p, threading.RLock()).write_sections(heads[-1])
     assert "### 10:05 Budget" in p.read_text(encoding="utf-8")
-    assert b.current_topic()[1] == "Budget"
-    assert b.current_topic_title() == "Budget"
+    state = b.on_event(_ev(minutes_query={}))[0].payload
+    assert state["kind"] == "minutes_state"
+    assert (state["topic_key"] != "" and state["topic_title"] == "Budget"
+            and state["is_v2"] is True)
 
 
 def test_no_file_io_before_minutes_open(tmp_path):
     p = tmp_path / "missing.md"
     b, heads = _started(tmp_path)
-    assert b.on_event(_ev(entry={"tag": "notiz", "text": "a"})) == []
-    assert b.last_result().reason == "not written"
-    assert b.current_topic() == ("", "")
-    assert b.is_v2 is False
-    assert b.mode == m.DEFAULT_MODE
+    out = b.on_event(_ev(entry={"tag": "notiz", "text": "a"}))
+    assert _changes(out) == [] and _result(out)["reason"] == "not written"
+    state = b.on_event(_ev(minutes_query={}))[0].payload
+    assert (state["topic_key"], state["topic_title"]) == ("", "")
+    assert state["is_v2"] is False and state["mode"] == m.DEFAULT_MODE
     assert heads == []
     assert not p.exists()
     assert not (tmp_path / "artefacts").exists()
 
 
-def test_last_result_pops(tmp_path):
+def test_every_write_event_is_answered_with_one_result(tmp_path):
     p = _doc(tmp_path)
     b, _ = _started(tmp_path)
     _open(b, p)
-    assert b.last_result() is None
-    b.on_event(_ev(entry={"tag": "notiz", "text": "a"}))
-    assert b.last_result() is not None
-    assert b.last_result() is None
+    out = b.on_event(_ev(entry={"tag": "notiz", "text": "a"}))
+    assert _result(out)["attempted"] is True
+    assert b.on_event(_ev(minutes_query={}))[0].payload["kind"] == "minutes_state"
 
 
 def test_other_events_are_ignored(tmp_path):

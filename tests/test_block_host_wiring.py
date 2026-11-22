@@ -147,3 +147,15 @@ def test_default_llm_for_only_condense_with_key(monkeypatch):
     assert bhw.default_llm_for("capture-bullets") is None
     monkeypatch.delenv("INFOMANIAK_API_KEY")
     assert bhw.default_llm_for("condense") is None
+
+
+def test_collect_returns_only_the_named_blocks_answers(tmp_path):
+    from blocks.minutes_document import MinutesDocumentBlock
+    blocks = bhw.build_session_blocks(
+        session_dir=tmp_path, sink=lambda i: None, log=lambda *a: None,
+        registry={"minutes-document": MinutesDocumentBlock})
+    got = blocks.collect("block_output", {"minutes_query": {}}, "minutes-document")
+    assert [o["kind"] for o in got] == ["minutes_state"]
+    assert blocks.collect("block_output", {"minutes_query": {}}, "other") == []
+    # nothing leaks into a plain dispatch afterwards
+    assert blocks.collect("tick", {"at": 0.0, "components": {}}, "minutes-document") == []

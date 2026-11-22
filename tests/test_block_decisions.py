@@ -103,6 +103,24 @@ class Rig:
         assert self.block.wait_for_results(1), "the decider never answered"
         self.blocks.dispatch("tick", {"at": time.time(), "components": {}})
 
+    last_open_ask_id = ""
+
+    def turn_orders(self, seg):
+        """Opens a turn through the event pair, as the host does: returns
+        (order note, spoken). No answer (no block) -> the plain text."""
+        n = len(self.outputs)
+        self.blocks.dispatch("block_output", {"turn_open": {
+            "turn": 1, "text": seg.text, "wake_word": seg.wake_word}})
+        got = [o for o in self.outputs[n:] if o.get("kind") == "turn_orders"]
+        if not got:
+            return "", seg.text
+        self.last_open_ask_id = got[-1]["open_ask_id"]
+        return got[-1]["note"], got[-1]["spoken"]
+
+    def end_turn(self, ok, answered=False):
+        self.blocks.dispatch("block_output", {"turn_closed": {
+            "turn": 1, "ok": ok, "answered": answered}})
+
     def of_kind(self, kind):
         return [o for o in self.outputs if o.get("kind") == kind]
 
@@ -171,9 +189,9 @@ def test_settle_updates_same_intent_id(tmp_path):
     rig = Rig(tmp_path, policy=True, decide_fn=scripted(aufgabe=0.8))
     rig.hear()
     rig.settle_decider()
-    extra, _ = rig.block.turn_orders(segment("Nur das."))
+    extra, _ = rig.turn_orders(segment("Nur das."))
     assert "A1" in extra
-    rig.block.end_turn(True)
+    rig.end_turn(True)
     ops = [(i.id, i.payload["op"]) for i in rig.intents]
     assert [op for _, op in ops] == ["announce", "settle"]
     assert ops[0][0] == ops[1][0], "a settle updates the SAME intent"
@@ -247,7 +265,7 @@ def rig_with_orders(tmp_path, orders, *, fmt_v2=True):
 
 def test_the_orders_note_becomes_the_turns_extra_order_note(tmp_path):
     rig, stub = rig_with_orders(tmp_path, pr.TurnOrders(note=NOTE))
-    extra, gesagt = rig.block.turn_orders(segment("Wir reden über den Termin."))
+    extra, gesagt = rig.turn_orders(segment("Wir reden über den Termin."))
     assert stub.taken == 1 and extra == NOTE
     assert (consumer.order_note_for(False) + extra).endswith(NOTE)
     assert NOTE in consumer.order_note_for(True) + extra
@@ -257,7 +275,7 @@ def test_the_orders_note_becomes_the_turns_extra_order_note(tmp_path):
 def test_a_wake_order_on_a_block_without_the_wake_word(tmp_path):
     rig, _ = rig_with_orders(
         tmp_path, pr.TurnOrders(note=NOTE, spoken=FRUEHER, wake=True))
-    extra, gesagt = rig.block.turn_orders(segment("Ja genau so."))
+    extra, gesagt = rig.turn_orders(segment("Ja genau so."))
     assert extra == NOTE + consumer.ORDER_NOTE
     assert gesagt == "Ja genau so. " + FRUEHER
 
@@ -265,15 +283,15 @@ def test_a_wake_order_on_a_block_without_the_wake_word(tmp_path):
 def test_a_block_with_the_wake_word_carries_its_note_once(tmp_path):
     rig, _ = rig_with_orders(
         tmp_path, pr.TurnOrders(note=NOTE, spoken=FRUEHER, wake=True))
-    extra, _ = rig.block.turn_orders(segment("Robo, mach das.", wake_word=True))
+    extra, _ = rig.turn_orders(segment("Robo, mach das.", wake_word=True))
     assert extra == NOTE
 
 
 def test_without_a_runner_no_note_and_spoken_is_the_block_text(tmp_path):
     rig = Rig(tmp_path, policy=False)
-    assert rig.block.turn_orders(segment("Nur das.")) == ("", "Nur das.")
-    assert rig.block.open_ask_id() == ""
-    rig.block.end_turn(True)          # a no-op, never raises
+    assert rig.turn_orders(segment("Nur das.")) == ("", "Nur das.")
+    assert rig.last_open_ask_id == ""
+    rig.end_turn(True)          # a no-op, never raises
     assert rig.block.page_order("x") is None
 
 
@@ -288,7 +306,7 @@ def test_the_stage_hooks_reach_the_runner(tmp_path):
     assert rig.writer.policy is rig.block
     rig.hear()
     rig.settle_decider()
-    rig.block.turn_orders(segment("Nur das."))
+    rig.turn_orders(segment("Nur das."))
     assert rig.block.marker_for("A1") == "*(autonom)*"
     rig.block.delivered("A1")
     assert not rig.state.pending

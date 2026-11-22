@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import re
 import sys
+import threading
 import time
 from pathlib import Path
 from typing import Callable, Mapping, Optional
@@ -147,6 +148,8 @@ class SessionBlocks:
         self.log = log
         self._by_id = dict(by_id)
         self._listener = self._by_id[HOST_LISTENER_ID]
+        self._collect_tl = threading.local()
+        self._listener.add_listener(self._on_collect)
 
     def get(self, block_id: str) -> Optional[object]:
         return self._by_id.get(block_id)
@@ -159,6 +162,26 @@ class SessionBlocks:
         except Exception as e:  # noqa: BLE001 -- see the docstring above
             self.log(f"block host: dispatch of {kind!r} failed: {type(e).__name__}: {e}")
             return 0
+
+    def _on_collect(self, payload) -> None:
+        seen = getattr(self._collect_tl, "seen", None)
+        if seen is not None and hasattr(payload, "get") and payload.get("from"):
+            seen.append(dict(payload))
+
+    def collect(self, kind: str, payload: Mapping[str, object],
+                from_id: str) -> list[dict]:
+        """Dispatches one event and returns what block `from_id` answered
+        with, in order. Dispatch is synchronous, so the answers reach the
+        host listener on this very thread before `dispatch` returns; each
+        thread collects only its own."""
+        outer = getattr(self._collect_tl, "seen", None)
+        self._collect_tl.seen = []
+        try:
+            self.dispatch(kind, payload)
+            got = self._collect_tl.seen
+        finally:
+            self._collect_tl.seen = outer
+        return [o for o in got if o.get("from") == from_id]
 
     def on_output(self, fn: Callable[[Mapping], None]) -> None:
         self._listener.add_listener(fn)

@@ -5631,8 +5631,10 @@ def sec_45(sec_43):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(417, "a decision sent twice is filed once, and the prompt says so",
-              "traegt er ihn trotzdem nur einmal ein" in p2)
+        _chk(417, "the prompt gives a decision one channel: entscheidungen, the "
+              "decision action repeats it word for word",
+              "genau EINMAL, als Eintrag unter `entscheidungen`" in p2
+              and "WORTGLEICH" in p2 and "nur einmal ein" not in p2)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6373,7 +6375,10 @@ def sec_56(sec_54):
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(492, "run_turn hands the runner's open ask to build_prompt",
-              "policy_ask_id=decisions.open_ask_id()" in _quelle)
+              "policy_ask_id=orders[\"open_ask_id\"]" in _quelle
+              and "decisions.open_ask_id" not in _quelle
+              and "decisions.turn_orders" not in _quelle
+              and "decisions.end_turn" not in _quelle)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     return rec
@@ -6421,7 +6426,7 @@ def sec_57(sec_56):
     try:
         _chk(493, "default first-turn rendering is pinned (sha256 of the JSON-reply prompt)",
               hashlib.sha256(p_tc_first.encode("utf-8")).hexdigest()
-              == "0bac075a5e9e0e70974df0022dde57ca8c1d0b93f680ed15e7d91a4b772fa61e",
+              == "369968337e8e226c166bb834ff7a0399f22dbe8795ca77ab7584f2264bf559fb",
               hashlib.sha256(p_tc_first.encode("utf-8")).hexdigest())
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -6680,7 +6685,7 @@ def sec_62(sec_61):
         _chk(515, "default (thread=None) first-turn rendering still matches the "
               "topic_criterion pin",
               hashlib.sha256(p_th_first.encode("utf-8")).hexdigest()
-              == "0bac075a5e9e0e70974df0022dde57ca8c1d0b93f680ed15e7d91a4b772fa61e",
+              == "369968337e8e226c166bb834ff7a0399f22dbe8795ca77ab7584f2264bf559fb",
               hashlib.sha256(p_th_first.encode("utf-8")).hexdigest())
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -8384,6 +8389,19 @@ def test_reply_items_are_filed_by_the_host(tmp_path):
     for line in ("[notiz] Der Stand.", "[beschluss] Wir bauen es.",
                  "[aufgabe] Mara schreibt den Antrag.", "[frage] Wer zahlt?"):
         assert line in run.protocol_text, run.protocol_text
+
+
+def test_a_decision_in_both_channels_with_the_same_words_is_filed_once(tmp_path):
+    from consumer_harness import run_consumer
+    text = "Wir nehmen das Angebot von Mara an."
+    reply = '```json\n' + json.dumps({
+        "entscheidungen": [text],
+        "buehne": [{"action": "decision", "time": "10:00", "text": text}],
+    }, ensure_ascii=False) + '\n```'
+    run = run_consumer(tmp_path, finals=["Ein Satz fuer den Termin."],
+                       wait_for_worker_turns=1, env_extra={"FAKE_WORKER_REPLY": reply})
+    assert run.returncode == 0 and not run.timed_out, run.log
+    assert run.protocol_text.count(f"[beschluss] {text}") == 1, run.protocol_text
 
 
 def test_buehne_items_reach_the_stage_through_the_host(tmp_path):

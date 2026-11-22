@@ -366,8 +366,11 @@ def continue_protocol(path: Path, now: datetime, mode: str = DEFAULT_MODE) -> bo
 #
 # `decision` doubles as `beschluss`: an accepted decision is shown on the
 # stage AND filed by the consumer as a `beschluss` entry. The minutes
-# document refuses a `beschluss` whose text it already holds, so a decision
-# sent both as `entscheidungen` item and as `decision` action is filed once.
+# document refuses a `beschluss` whose text it already holds, but only on
+# the same words. So the prompt gives every decision ONE channel, the
+# `entscheidungen` item, and lets the `decision` action carry the very same
+# text where the stage should show it too: the duplicate check then holds
+# by construction.
 #
 # `topic` stays the one trigger for a new topic block, and its `title`
 # becomes the block's heading. The host applies the stage proposals BEFORE
@@ -468,10 +471,11 @@ brauchst du nicht: es waechst den ganzen Termin.
 
    Was wohin gehoert:
    - `decision` NUR fuer Entscheidungen und Zusagen. Nicht fuer Themen, nicht
-     fuer Beobachtungen, nicht fuer Ideen, die gerade erst entstehen. Eine
-     `decision` steht auf der Buehne UND als `beschluss` im Protokoll — den
-     Eintrag macht der Konsument daraus. Schickst du denselben Beschluss
-     auch unter `entscheidungen`, traegt er ihn trotzdem nur einmal ein.
+     fuer Beobachtungen, nicht fuer Ideen, die gerade erst entstehen. Jeden
+     Beschluss meldest du genau EINMAL, als Eintrag unter `entscheidungen`.
+     Soll er auch auf die Buehne, traegt die `decision`-Zeile WORTGLEICH
+     denselben Text; der Konsument legt ihn dann nur einmal ab. Eine andere
+     Formulierung waere ein zweiter Eintrag im Protokoll.
    - `notice` NUR fuer die zwei Faelle oben. Es gibt keinen dritten Grund.
      Zwei Meldungen stehen hoechstens gleichzeitig; alles weitere unter
      `offene_fragen`.
@@ -1174,8 +1178,9 @@ class MinutesPort:
     `MinutesFile.write_sections` -- the host stays the file's only writer.
 
     The block host dispatches synchronously on the caller's thread, so the
-    block's result (`last_result()`) and the `_tl.write_failed` flag set by
-    `_on_output` belong to the thread that is inside `_send`.
+    block's `entry_result` answer and the `_tl.write_failed` flag set by
+    `_on_output` belong to the thread that is inside `_send`. The port calls
+    no method of the block: it reads the block's output events.
 
     Every call holds `file.lock` across the dispatch (the same span
     the old in-consumer minutes class held); `write_sections` re-enters it. The lock order
@@ -1205,18 +1210,23 @@ class MinutesPort:
     def lock(self):
         return self.file.lock
 
-    def _block(self):
-        return self.blocks.get(self.block_id)
+    def _state(self) -> dict:
+        """The block's `minutes_state` answer; {} when there is none."""
+        with self.file.lock:
+            got = self.blocks.collect("block_output", {"minutes_query": {}},
+                                      self.block_id)
+        for out in reversed(got):
+            if out.get("kind") == "minutes_state":
+                return out
+        return {}
 
     @property
     def is_v2(self) -> bool:
-        b = self._block()
-        return bool(b.is_v2) if b is not None else False
+        return bool(self._state().get("is_v2", False))
 
     @property
     def mode(self) -> str:
-        b = self._block()
-        return b.mode if b is not None else DEFAULT_MODE
+        return self._state().get("mode") or DEFAULT_MODE
 
     # -------------------------------------------------------------- calls
     def append_raw(self, text, speaker=None) -> bool:
@@ -1226,11 +1236,8 @@ class MinutesPort:
     def current_topic(self) -> tuple[str, str]:
         """(key, title) of the last topic block; ("", "") if none. Never raises."""
         try:
-            b = self._block()
-            if b is None:
-                return "", ""
-            with self.file.lock:
-                return b.current_topic()
+            st = self._state()
+            return st.get("topic_key", ""), st.get("topic_title", "")
         except Exception as e:            # noqa: BLE001 -- see the docstring
             self._log("protocol not read:", repr(e))
             return "", ""
@@ -1254,10 +1261,14 @@ class MinutesPort:
         with self.file.lock:
             self._tl.write_failed = False
             try:
-                self.blocks.dispatch("block_output", {key: body})
-                b = self._block()
-                got = b.last_result() if b is not None else None
-                res = got or minutes_block.EntryResult("not written")
+                answers = self.blocks.collect(
+                    "block_output", {key: body}, self.block_id)
+                got = [o for o in answers if o.get("kind") == "entry_result"]
+                if got:
+                    o = got[-1]
+                    res = minutes_block.EntryResult(
+                        o.get("reason", ""), o.get("links_seen", 0),
+                        o.get("links_dead", 0), attempted=o.get("attempted", True))
             except Exception as e:        # noqa: BLE001 -- never raise
                 self._log("protocol not written:", repr(e))
             if res.reason == "" and getattr(self._tl, "write_failed", False):
@@ -1590,26 +1601,44 @@ class TurnReply:
     failure: dict | None = None
 
 
+DECISIONS_BLOCK_ID = "decisions-tasks-questions"
+
+
+def turn_opened(blocks: SessionBlocks, b, turn: int) -> dict:
+    """Tells the blocks a turn opens (`turn_open`) and returns what the
+    decisions block answered (`turn_orders`): the order note, the spoken
+    text and the id of level 2's open question. Without the block: the
+    block's own text and nothing else."""
+    got = blocks.collect("block_output", {"turn_open": {
+        "turn": turn, "text": b.text, "wake_word": bool(b.wake_word)}},
+        DECISIONS_BLOCK_ID)
+    for out in reversed(got):
+        if out.get("kind") == "turn_orders" and out.get("turn") == turn:
+            return {"note": out.get("note") or "",
+                    "spoken": out.get("spoken") or b.text,
+                    "open_ask_id": out.get("open_ask_id") or ""}
+    return {"note": "", "spoken": b.text, "open_ask_id": ""}
+
+
+def turn_closed(blocks: SessionBlocks, turn: int, *, ok: bool,
+                answered: bool) -> None:
+    """Tells the blocks the turn is over (`turn_closed`)."""
+    blocks.dispatch("block_output", {"turn_closed": {
+        "turn": turn, "ok": ok, "answered": answered}})
+
+
 class ReplyIntake:
     """Dispatches a reply and collects the capture block's outputs.
 
-    One agent thread dispatches turns, one at a time; the host's output
-    listener runs on that thread during `dispatch`.
+    The answers come back through `SessionBlocks.collect`.
     """
 
     def __init__(self, blocks: SessionBlocks) -> None:
         self.blocks = blocks
-        self._seen: list[dict] = []
-        blocks.on_output(self._on_output)
-
-    def _on_output(self, payload) -> None:
-        if hasattr(payload, "get") and payload.get("from") == CAPTURE_BLOCK_ID:
-            self._seen.append(dict(payload))
 
     def read(self, text: str, turn: int) -> TurnReply:
-        self._seen = []
-        self.blocks.dispatch("agent_reply", {"text": text, "turn": turn})
-        seen, self._seen = self._seen, []
+        seen = self.blocks.collect(
+            "agent_reply", {"text": text, "turn": turn}, CAPTURE_BLOCK_ID)
         reply = TurnReply([], [])
         for out in seen:
             kind = out.get("kind")
@@ -3620,7 +3649,8 @@ def main() -> int:
             # MM-G D7: "Robo, leg dafuer eine Seite an" creates the topic
             # page BEFORE turn_orders, so level 2's fill order rides
             # along with this very turn.
-            extra_note, gesprochen = decisions.turn_orders(b)
+            orders = turn_opened(session_blocks, b, turn_no[0])
+            extra_note, gesprochen = orders["note"], orders["spoken"]
             prompt = build_prompt(
                 minutes_file.path, b, state,
                 backlog_note=(BACKLOG_NOTE if b.reason in ("batch", "carry")
@@ -3630,7 +3660,7 @@ def main() -> int:
                 file_names=file_names,
                 # Level 2's own open question is Robo's to evaluate: the
                 # agent sees it marked as such, not as one to resolve.
-                policy_ask_id=decisions.open_ask_id())
+                policy_ask_id=orders["open_ask_id"])
             if a.dry_agent:
                 log("  [dry] prompt would be:",
                     prompt[:120].replace("\n", " "), "…")
@@ -3725,8 +3755,8 @@ def main() -> int:
             # A wake order arrived when this turn put up an answer to
             # a call-out -- the same test the call-out itself gets.
             try:
-                decisions.end_turn(
-                    ok=gelungen,
+                turn_closed(
+                    session_blocks, turn_no[0], ok=gelungen,
                     answered=answered_the_call(
                         state.main.id, vorher_flaeche, state.main.quote))
             except Exception as e:        # noqa: BLE001
