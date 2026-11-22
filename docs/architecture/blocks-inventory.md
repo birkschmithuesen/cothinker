@@ -26,7 +26,7 @@ python3 docs/architecture/inventory_check.py
 Expected output (exactly these two lines, exit code 0):
 
 ```
-cothinker@HEAD: 89 source files, 89 mapped, 0 unmapped, 0 stale, 0 unknown targets
+cothinker@HEAD: 100 source files, 100 mapped, 0 unmapped, 0 stale, 0 unknown targets
 OK
 ```
 
@@ -208,7 +208,7 @@ shared/templates.py                                                             
 shared/surface.py                                                                  core:surface-api
 shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py               block:write-text
 shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py                block:write-text
-shared/speechmatics.py                                                           stt:engine-speechmatics
+shared/speechmatics.py                                                            stt:engine-speechmatics
 shared/text.py                                                                    surface:stage
 shared/utterance.py                                                              stt:engine-speechmatics
 shared/wake_word.py                                                               block:segment
