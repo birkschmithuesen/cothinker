@@ -35,8 +35,8 @@ sys.path.append(str(HERE.parent / "gateway"))
 from blocks.topics import title as tt  # noqa: E402
 from blocks.topics import TopicsBlock  # noqa: E402
 from gateway.call_lane import CallLane  # noqa: E402
-from gateway.legacy_stage_sink import make_sink  # noqa: E402
 from gateway.stage_state import StageState  # noqa: E402
+from gateway.stage_surface import StageSurface  # noqa: E402
 from shared.blocks import BlockContext, BlockHost  # noqa: E402
 from shared.modules import CoreEvent, StateStore  # noqa: E402
 
@@ -185,7 +185,7 @@ class Writer:
 
 class Rig:
     """The real topic path: TopicsBlock in a BlockHost; its intents go
-    through the legacy stage sink, its `topic` output to CallLane.on_topic."""
+    through the stage surface, its `topic` output to CallLane.on_topic."""
 
     def __init__(self, titler_factory, tag):
         import tempfile
@@ -200,12 +200,12 @@ class Rig:
             project_agenda="P", state=self.state, writer=self.writer, now=self.clock,
             dispatch=lambda kind, payload: self.announced.append((kind, payload)) or 0,
             log=lambda *a: self.lane_logs.append(" ".join(map(str, a))))
-        sink = make_sink(self.writer, lambda s: None)
+        surface = StageSurface(self.writer, self.state, lambda s: None)
         rig = self
 
         def emit(intent):
             rig.intents.append(intent)
-            sink(intent)
+            surface.render([intent])
 
         class Listener:
             id = "listener"

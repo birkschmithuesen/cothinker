@@ -30,7 +30,7 @@ import blocks.decisions_tasks_questions.policy_runner as pr  # noqa: E402
 from blocks.decisions_tasks_questions import (BLOCK_ID, DecisionsBlock,  # noqa: E402
                                               IntentWriter)
 from gateway import block_host_wiring as bhw  # noqa: E402
-from gateway.legacy_stage_sink import make_sink  # noqa: E402
+from gateway.stage_surface import StageSurface  # noqa: E402
 from shared.events import EventLog  # noqa: E402
 
 WALL = datetime(2026, 9, 26, 14, 7, 0)
@@ -73,11 +73,11 @@ class Rig:
         # Level 2 acts only while the writer files into a v2 protocol; a
         # stand-in does where the page's backlink is not what is checked.
         self.writer.protocol = object() if v2 else None
-        sink = make_sink(self.writer, self.logs.append)
+        surface = StageSurface(self.writer, self.state, self.logs.append)
 
         def tee(intent):
             self.intents.append(intent)
-            sink(intent)
+            surface.render([intent])
 
         self.blocks = bhw.build_session_blocks(
             session_dir=self.tmp, sink=tee, log=self.logs.append,

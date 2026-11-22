@@ -24,8 +24,8 @@ sticky: it only updates when its key is present in the event.
 
 The intent never carries a clock value (issue #41's hard requirement): the
 "zuletzt {at}" timestamp the stage renders for `listening` is stamped by
-`gateway.legacy_stage_sink` from its own clock at the moment it applies an
-intent to the `StageWriter`, not by this block. One consequence, noted
+`gateway.stage_surface.StageSurface` from its own clock at the moment it
+applies an intent to the `StageWriter`, not by this block. One consequence, noted
 here on purpose: that timestamp now advances only on a state/detail
 transition, not on every single utterance the way the old direct
 `publish_status()` -> `set_status()` call did -- the alternative (putting

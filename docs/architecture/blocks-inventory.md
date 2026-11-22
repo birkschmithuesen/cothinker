@@ -77,12 +77,12 @@ speaker queue.
 | STT — thought end | 1594 | `stt/fundusapps/stt_server/thought_end.py` 514; `gateway/thought_end.py` 260, `thought_end_live.py` 402, `thought_end_laya_worker.py` 148, `smart_turn_worker.py` 270 | core |
 | STT — speaker labels | 1566 | `gateway/speaker_enroll.py` 606, `speaker_split.py` 423, `speaker_label.py` 278, `speaker_label_llm.py` 259 | core |
 | STT — correction | 858 | `gateway/correction.py` 733, `correction_prefilter.py` 125 | core |
-| core — session runtime | 5934 | `gateway/consumer.py` 4653, `shared/events.py` 179, `gateway/raw_transcript.py` 172, `sync_safe.py` 204, `timing.py` 207, `conflict_triage.py` 186, `block_host_wiring.py` 197, `legacy_stage_sink.py` 46; `shared/phases.py` 82, `shared/__init__.py` 1, `blocks/__init__.py` 9 | core |
+| core — session runtime | 5888 | `gateway/consumer.py` 4653, `shared/events.py` 179, `gateway/raw_transcript.py` 172, `sync_safe.py` 204, `timing.py` 207, `conflict_triage.py` 186, `block_host_wiring.py` 197; `shared/phases.py` 82, `shared/__init__.py` 1, `blocks/__init__.py` 9 | core |
 | core — Agent API | 1660 | `shared/agent.py` 387, `gateway/worker.py` 576, `lanes.py` 447, `agent_lane.py` 250 | core |
 | core — model clients | 614 | `gateway/infomaniak_chat.py` 178, `infomaniak_embed.py` 124, `infomaniak_limiter.py` 312 | core |
 | core — Instance API | 211 | `shared/instance.py` 128, `shared/profiles.py` 83 | core |
 | core — Module API | 213 | `shared/modules.py` 169, `modules/example_echo/module.py` 44 | core |
-| surface — stage | 4886 | `stage/stage.py` 2953, `gateway/stage_state.py` 1618, `shared/text.py` 54, `stage_image.py` 107, `gateway/stage_texts.py` 154 | core |
+| surface — stage | 5197 | `stage/stage.py` 2953, `gateway/stage_state.py` 1618, `gateway/stage_surface.py` 311, `shared/text.py` 54, `stage_image.py` 107, `gateway/stage_texts.py` 154 | core |
 | retire | 1924 | STT engines dropped by decision 25: `stt_server/backends/infomaniak_whisper_backend.py` 475, `vosk_backend.py` 78, `whisper_streaming_backend.py` 303, `_vendored_whisper_streaming/` 980, `test_vosk.py` 88 | — |
 
 ## Targets
@@ -167,7 +167,6 @@ gateway/infomaniak_embed.py                                                     
 gateway/infomaniak_limiter.py                                                     core:llm
 gateway/call_lane.py                                                              core:agent
 gateway/lanes.py                                                                  core:agent
-gateway/legacy_stage_sink.py                                                      core:session
 blocks/decisions_tasks_questions/openrouter_jev.py                                block:decisions-tasks-questions
 blocks/decisions_tasks_questions/policy.py                                        block:decisions-tasks-questions
 blocks/decisions_tasks_questions/policy_runner.py                                 block:decisions-tasks-questions
@@ -183,6 +182,7 @@ gateway/speaker_label_llm.py                                                    
 gateway/speaker_split.py                                                          stt:speaker-labels
 gateway/stage_image.py                                                            surface:stage
 gateway/stage_state.py                                                            surface:stage
+gateway/stage_surface.py                                                          surface:stage
 gateway/stage_texts.py                                                            surface:stage
 gateway/sync_safe.py                                                              core:session
 gateway/thought_end.py                                                            stt:thought-end

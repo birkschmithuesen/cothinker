@@ -40,7 +40,7 @@ from call_lane import CallLane  # noqa: E402
 from gateway import block_host_wiring as bhw  # noqa: E402
 from gateway.block_host_wiring import (  # noqa: E402
     LaneQueuePort, build_session_blocks, coach_block_config, make_agent_for)
-from gateway.legacy_stage_sink import HANDLERS, make_sink  # noqa: E402
+from gateway.stage_surface import StageSurface  # noqa: E402
 from shared.blocks import BLOCK_API_VERSION, BlockContext  # noqa: E402
 from shared.lane_port import LanePort  # noqa: E402
 from shared.modules import CoreEvent, StateStore  # noqa: E402
@@ -156,8 +156,8 @@ def template_with(directory: Path, **config) -> Path:
 
 class Rig:
     """The old `Lanes` object, rebuilt from its parts: the real block host
-    with the mirroring coach on a real `LaneQueuePort`, the stage sink onto
-    a real StageState, and the call lane for the host-side topic
+    with the mirroring coach on a real `LaneQueuePort`, the stage surface
+    onto a real StageState, and the call lane for the host-side topic
     confirmation (`decide`: the `topics` block, then `CallLane.on_topic`)."""
 
     def __init__(self, tag: str, clock: Clock, *, delay: float = 45.0,
@@ -176,7 +176,7 @@ class Rig:
         def _log(*a):
             self.logs.append(" ".join(str(x) for x in a))
             log(*a)
-        stage_sink = make_sink(self.writer, _log)
+        surface = StageSurface(self.writer, self.state, _log)
         self.call = CallLane(
             call_command=[sys.executable, FAKE, "--mode", "ok", "--sleep",
                           str(call_sleep)],
@@ -185,7 +185,7 @@ class Rig:
 
         def block_sink(intent) -> None:
             self.intents.append(intent)
-            stage_sink(intent)
+            surface.render([intent])
             self.call.observe_intent(intent)
         self.ports: dict = {}
         inner = make_agent_for(
@@ -1234,12 +1234,14 @@ def test_valid_coach_reply_pins_600_char_boundary():
 
 # --- the legacy stage sink's mirror row --------------------------------------------------------
 
-def _sink(tmp_path):
+def _surface(tmp_path, *, coach_history_path=None):
     clock = Clock()
     state = ObservedState(now=clock)
     writer = FakeWriter(state)
     logs: list = []
-    return make_sink(writer, logs.append), state, writer, logs
+    return (StageSurface(writer, state, logs.append,
+                         coach_history_path=coach_history_path),
+            state, writer, logs)
 
 
 def _mirror_intent(contribution="reply", **payload):
@@ -1249,77 +1251,61 @@ def _mirror_intent(contribution="reply", **payload):
                                **payload})
 
 
-def test_the_sink_routes_mirror_intents_and_keeps_plain_handler_rows(monkeypatch):
-    sink, state, writer, logs = _sink(None)
-    sink(_mirror_intent("clear"))
-    assert logs == []                      # a known prefix, not logged as unknown
-    seen: list = []
-    monkeypatch.setitem(HANDLERS, "other", lambda w, i, ids: seen.append((w, i.id)))
-    sink2 = make_sink(writer, logs.append)
-    sink2(ViewIntent(id="other:1", block="other", kind="prompt", audience="room",
-                     payload={}))
-    assert seen == [(writer, "other:1")]
-
-
 def test_the_mirror_row_files_the_reply_into_the_topics_entry_not_the_mirror_line(tmp_path):
-    sink, state, writer, logs = _sink(tmp_path)
+    surface, state, writer, logs = _surface(tmp_path)
     state.confirmed_topic("Budget", "Es geht um Geld")
     entry = state.main.id
-    sink(_mirror_intent(topic_id=entry, addition="Spiegel: x"))
+    surface.render([_mirror_intent(topic_id=entry, addition="Spiegel: x")])
     assert "Spiegel: x" in state.history[0].markdown
     assert state.mirror != "Robo (Coach): x" and writer.writes == 1
 
 
 def test_the_mirror_row_falls_back_to_the_jsonl_when_the_entry_is_gone(tmp_path):
-    sink, state, writer, logs = _sink(tmp_path)
     path = tmp_path / "coach-history.jsonl"
-    sink = make_sink(writer, logs.append,
-                     row_config={"coach_history_path": path})
+    surface, state, writer, logs = _surface(tmp_path, coach_history_path=path)
     rec = {"at": "t", "stale": False, "ok": True, "final": "Spiegel: x",
            "topic_started_at": 1.0}
-    sink(_mirror_intent(topic_id="gone", addition="Spiegel: x", record=rec))
+    surface.render([_mirror_intent(topic_id="gone", addition="Spiegel: x", record=rec)])
     assert json.loads(path.read_text(encoding="utf-8")) == rec
     assert writer.writes == 0
 
 
 def test_the_mirror_row_records_a_failure_in_the_jsonl(tmp_path):
-    sink, state, writer, logs = _sink(tmp_path)
     path = tmp_path / "coach-history.jsonl"
-    sink = make_sink(writer, logs.append,
-                     row_config={"coach_history_path": path})
+    surface, state, writer, logs = _surface(tmp_path, coach_history_path=path)
     rec = {"at": "t", "stale": False, "ok": False, "final": "",
            "topic_started_at": 1.0}
-    sink(_mirror_intent("failure", record=rec))
+    surface.render([_mirror_intent("failure", record=rec)])
     assert json.loads(path.read_text(encoding="utf-8")) == rec
     assert writer.writes == 0 and state.accepted == []
 
 
 def test_the_mirror_row_raises_the_nachtrag_notice_and_clears_it(tmp_path):
-    sink, state, writer, _ = _sink(tmp_path)
+    surface, state, writer, _ = _surface(tmp_path)
     state.confirmed_topic("Eins", "x")
     entry = state.main.id
-    sink(_mirror_intent("Nachtrag", topic_id=entry, addition="**Nachtrag 10:00:** y",
-                        notice=True))
+    surface.render([_mirror_intent("Nachtrag", topic_id=entry,
+                                   addition="**Nachtrag 10:00:** y", notice=True)])
     assert "Nachtrag" in writer.warning() and "Eins" in writer.warning()
-    sink(_mirror_intent("clear"))
+    surface.render([_mirror_intent("clear")])
     assert writer.warning() == ""
 
 
 def test_the_mirror_row_never_clobbers_an_unrelated_warning(tmp_path):
-    sink, state, writer, _ = _sink(tmp_path)
+    surface, state, writer, _ = _surface(tmp_path)
     writer.warn("Achtung: Konflikt")
     state.confirmed_topic("Eins", "x")
-    sink(_mirror_intent("Nachtrag", topic_id=state.main.id,
-                        addition="**Nachtrag 10:00:** y", notice=True))
+    surface.render([_mirror_intent("Nachtrag", topic_id=state.main.id,
+                                   addition="**Nachtrag 10:00:** y", notice=True)])
     assert writer.warning() == "Achtung: Konflikt"
-    sink(_mirror_intent("clear"))
+    surface.render([_mirror_intent("clear")])
     assert writer.warning() == "Achtung: Konflikt"
 
 
 def test_the_block_to_sink_path_end_to_end(tmp_path):
-    sink, state, writer, _ = _sink(tmp_path)
+    surface, state, writer, _ = _surface(tmp_path)
     h = Harness(tmp_path)
-    h.ctx.emit = sink                              # the sink as the host's emit
+    h.ctx.emit = lambda intent: surface.render([intent])  # the surface as the host's emit
     state.confirmed_topic("Budget", "Geld")
     h.topic(state.main.id, "Budget")
     h.clock.advance(46)
