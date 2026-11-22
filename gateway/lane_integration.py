@@ -9,9 +9,9 @@
 
 It owns two `gateway.lanes.LaneQueue`s (call, coach), each wrapping its
 own `gateway.worker.WorkerClient` process and its own
-`gateway.lane_context.LaneContext` window, plus one
-`gateway.topic_hysteresis.TopicHysteresis` that turns the decider's
-noisy per-block numbers into confirmed topic changes.
+`gateway.lane_context.LaneContext` window. Confirmed topic changes
+arrive from the `topics` block through the block host's `on_output`
+listener (`Lanes.on_topic`).
 
 Kept out of `gateway/consumer.py` itself on purpose: that file is huge
 and runs live meetings (AGENTS.md's "the service may be running right
@@ -54,8 +54,6 @@ from correction_prefilter import prefilter  # noqa: E402
 from lane_context import ROLL_EVERY, WINDOW_SIZE, LaneContext  # noqa: E402
 from lanes import TIMEOUT_MARKER, Job, LaneQueue  # noqa: E402
 import stage_image  # noqa: E402
-from shared.text import derived_title, one_line  # noqa: E402
-from topic_hysteresis import MIN_TOPIC_AGE_S, THRESHOLD, TopicHysteresis  # noqa: E402
 from worker import WorkerClient  # noqa: E402
 
 # Operator's point 3 (2026-10-20): the coach's full reply is EITHER exactly
@@ -340,9 +338,6 @@ class Lanes:
                  call_turn_timeout_s: float = CALL_TURN_TIMEOUT_S,
                  coach_turn_timeout_s: float = COACH_TURN_TIMEOUT_S,
                  coach_rhythm: bool = False,
-                 topic_threshold: float = THRESHOLD,
-                 topic_min_age_s: float = MIN_TOPIC_AGE_S,
-                 titler_factory: Optional[Callable] = None,
                  call_lane_factory: Optional[Callable] = None,
                  coach_lane_factory: Optional[Callable] = None,
                  coach_briefing: str = "",
@@ -357,8 +352,6 @@ class Lanes:
         self.coach_min_delay_s = coach_min_delay_s
         self.call_turn_timeout_s = call_turn_timeout_s
         self.coach_turn_timeout_s = coach_turn_timeout_s
-        self.hysteresis = TopicHysteresis(
-            threshold=topic_threshold, min_topic_age_s=topic_min_age_s, now=now)
         self.call_paths = call_paths
         # Where a `BILD:` path may point (project folder + extra dirs);
         # None/empty = images off, the marker line is just dropped.
@@ -369,7 +362,10 @@ class Lanes:
         self.coach_ctx = LaneContext(project_agenda=project_agenda,
                                     window_size=window_size, roll_every=roll_every)
         self._lock = threading.Lock()
-        self._coach_topic_started_at = self.hysteresis.topic_started_at
+        self._coach_topic_started_at = now()
+        # The block text of the decider result being processed; the
+        # `topics` block's `topic` output carries no text (see on_topic).
+        self._decider_block_text = ""
         self._coach_eligible = False
         self._coach_contributed = False
         self._current_topic_id = ""
@@ -423,13 +419,6 @@ class Lanes:
                 on_result=self._on_coach_result,
                 on_dropped=self._on_coach_dropped,
                 log=log)
-        # --topic-titles (default off): None keeps today's behaviour --
-        # the provisional title from the block's first line stays.
-        # The factory gets the two callbacks and returns an object with
-        # `request(entry_id, provisional, block, previous)` and `stop()`
-        # (gateway/topic_title.py's TopicTitler).
-        self.titler = (titler_factory(self._on_title, self._on_title_failed)
-                       if titler_factory is not None else None)
 
     # ---------------------------------------------------------- lifecycle
     def start(self) -> tuple[bool, bool]:
@@ -441,8 +430,6 @@ class Lanes:
     def stop(self) -> None:
         self.call_lane.stop()
         self.coach_lane.stop()
-        if self.titler is not None:
-            self.titler.stop()
 
     def stats(self) -> dict:
         return {
@@ -530,29 +517,30 @@ class Lanes:
                 out.append((speaker, line))
         return out or [(speaker, text)]
 
-    def on_decider_result(self, result, snap, reason: str) -> None:
-        """Chained onto `gateway/decider.py`'s `DeciderWorker.on_result`.
+    def note_decider_block(self, block_text: str) -> None:
+        """The consumer's decider callback calls this just before it hands
+        the result to the block host: the `topics` block's `topic` output
+        carries no block text, and `on_topic` needs it for the history
+        entry. The host dispatches synchronously on the same thread."""
+        self._decider_block_text = str(block_text or "")
 
-        Reads `neues_thema`/`rueckkehr_thema` off `result.by_id()` and
-        feeds the hysteresis. A confirmed, genuinely new topic opens a
-        45s-minimum coach-eligibility window AND gets exactly one new
-        history entry (point 6a); a confirmed return does neither (per
-        spec, a return never triggers a new coach contribution, and
-        reactivating an old topic does not invent a new history row for
-        it).
+    def on_topic(self, topic) -> None:
+        """The block host's `on_output` listener for `{"topic": ...}`.
+
+        The `topics` block (blocks/topics) confirms a genuinely NEW topic
+        (or a RETURN, `topic["return"]`: coach state reset only, no entry)
+        and emits it; this opens the coach-eligibility window AND gives it
+        exactly one new history entry (point 6a). This is the ONLY writer
+        of topic history entries: the legacy stage sink only rewrites the
+        stage file and swaps a final title in place.
         """
-        by_id = result.by_id()
-        p_neu = (by_id.get("neues_thema") or {}).get("p")
-        p_ruek = (by_id.get("rueckkehr_thema") or {}).get("p")
-        decision = self.hysteresis.on_result(p_neu, p_ruek)
-        if not decision.changed:
-            return
-        block_text = str(getattr(snap, "block", "") or "")
-        title = derived_title(block_text) or one_line(block_text) or "Thema"
-        if decision.returned:
-            self.log(f"topic: return p={p_ruek}")
+        returned = bool(topic.get("return"))
+        title = str(topic.get("title") or "Thema")
+        block_text = self._decider_block_text
+        if returned:
+            self.log("topic: return")
         else:
-            self.log(f"topic: new {title} p={p_neu}")
+            self.log(f"topic: new {title}")
         if self.coach_rhythm:
             # END: the topic that just closed gets its structure, filed
             # into ITS entry -- built before the new entry is pushed, so
@@ -560,14 +548,15 @@ class Lanes:
             self._fire_rhythm_end()
         with self._lock:
             self._coach_topic_started_at = self.now()
-            self._coach_eligible = decision.coach_eligible
+            # A return never triggers a new coach contribution.
+            self._coach_eligible = not returned
             self._coach_contributed = False
             self._rhythm_tries = {"start": 0, "pause": 0}
             self._rhythm_done = {"start": False, "pause": False}
             self._rhythm_next_try_at = 0.0
             self._rhythm_entry_id = ""
-        if decision.returned:
-            return
+        if returned:
+            return          # reactivating an old topic adds no history row
         # A CONFIRMED change (p >= threshold AND min topic age, the
         # hysteresis' own pacing) always gets its entry -- the stage's
         # automatic-change brake must not refuse it a second time (the
@@ -579,13 +568,6 @@ class Lanes:
         with self._lock:
             self._current_topic_id = self.state.main.id
             self._rhythm_entry_id = self.state.main.id
-        if self.titler is not None:
-            # --topic-titles: the provisional title is up NOW; one model
-            # call off this thread may replace it in place later.
-            entry = self.state.main
-            previous = list(getattr(snap, "previous", None) or [])
-            self.titler.request(entry.id, entry.title, block_text,
-                                str(previous[-1]) if previous else "")
         # Point 6d: a Nachtrag notice is about a topic that is no longer
         # current -- the moment a genuinely NEW topic lands, it no
         # longer applies (the round has moved on again).
@@ -594,20 +576,6 @@ class Lanes:
             self.writer.write()
         except Exception as e:                # noqa: BLE001
             self.log("lane: topic push not written:", repr(e))
-
-    def _on_title(self, entry_id: str, old: str, new: str, ms: int) -> None:
-        """Titler callback (its own thread): swap the title in place."""
-        changed = self.state.retitle(entry_id, old, new)
-        self.log(f"topic: title {old!r} -> {new!r} {ms}ms"
-                 + ("" if changed else " (not applied: entry changed)"))
-        if changed:
-            try:
-                self.writer.write()
-            except Exception as e:            # noqa: BLE001
-                self.log("lane: retitle not written:", repr(e))
-
-    def _on_title_failed(self, entry_id: str, token: str, ms: int) -> None:
-        """The provisional title stays; TopicTitler already logged it."""
 
     # ----------------------------------------------------------- internal
     def _topic_header(self) -> str:
@@ -945,7 +913,7 @@ class Lanes:
         """Point 6d: a small, collapsible notice for a late result that
         landed on a topic no longer shown as current. Several pending
         Nachtraege collapse into one line; cleared by the next genuinely
-        new topic (`on_decider_result`). Paging back to the entry itself
+        new topic (`on_topic`). Paging back to the entry itself
         cannot clear it -- the stage has no channel for "which entry is
         a viewer looking at right now" (plain HTTP polling, no session
         state), so that half of the spec is NOT implemented; documented,

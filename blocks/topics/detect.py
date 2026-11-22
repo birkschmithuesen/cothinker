@@ -11,7 +11,7 @@
            baseline, replayed by bench/replay.py, no code here.
   drift    embedding drift over a sliding window (DriftDetector).
   laya     a typed decision model on CPU (LayaDetector, which speaks to
-           gateway/topic_laya_worker.py in a subprocess).
+           blocks/topics/laya_worker.py in a subprocess).
   jev      a typed decision model behind OpenRouter's decisions API
            (JevDetector, over gateway/openrouter_jev.py). A US provider:
            BENCH-ONLY, see that module's docstring.
@@ -264,7 +264,7 @@ class LayaError(Exception):
 
 
 class LayaDetector(Detector):
-    """Asks gateway/topic_laya_worker.py, one decision at a time.
+    """Asks blocks/topics/laya_worker.py, one decision at a time.
 
     The worker runs under a different interpreter (3.11 + torch), so
     this is a process boundary and not an import. Everything that can go
@@ -436,7 +436,7 @@ JEV_NEU_CHARS = 600
 JEV_VORHER_BLOCKS = 2
 
 JEV_NOUL_ID = "neues_thema"
-# The SAME wording the laya worker asks (gateway/topic_laya_worker.py),
+# The SAME wording the laya worker asks (blocks/topics/laya_worker.py),
 # so the two typed models answer literally the same question.
 JEV_NOUL_INSTRUCTIONS = "Eroeffnet `neu` ein neues Thema gegenueber `vorher`?"
 JEV_CHOICE_ID = "gleiches_thema_vertiefung_neu_rueckkehr"

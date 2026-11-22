@@ -17,7 +17,7 @@ already requires that -- infomaniak_chat.py's own DEFAULT_BASE comment).
 Off the hot path: `CandidateWorker.request()` hands a job to a bounded
 queue and a dedicated daemon thread and returns immediately, the same
 "never blocks, never raises" contract gateway/correction.py's
-CorrectionWorker and gateway/topic_title.py's TopicTitler both keep for
+CorrectionWorker and blocks/topics/title.py's TopicTitler both keep for
 their own async model calls.
 
 THE SCHEMA, NOT THE MODEL, DECIDES WHAT IS TRUSTED. A verdict is only
@@ -200,7 +200,7 @@ class CandidateWorker:
 
     `request()` is called from the SSE loop: it must never block and
     never raise (same rule as gateway/correction.py's enqueue() and
-    gateway/topic_title.py's request()). Returns False, without raising,
+    blocks/topics/title.py's request()). Returns False, without raising,
     when the queue has no room -- the caller simply does not get a
     candidate check for this final, which is always safe: the rule stage
     already stands, and a missed LLM check just means one fewer

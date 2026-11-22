@@ -27,6 +27,7 @@ from typing import Callable, Mapping, Optional
 from blocks.knowledge_link import KnowledgeLinkBlock
 import blocks.status_line as status_line_block
 from blocks.condense import CondenseBlock
+from blocks.topics import TopicsBlock
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
 from blocks.minutes_document import MinutesDocumentBlock
 from gateway.sync_safe import atomic_write_text
@@ -42,6 +43,7 @@ REGISTRY: dict[str, Callable[[], Block]] = {
     "knowledge-link": KnowledgeLinkBlock,
     "status-line": status_line_block.StatusLineBlock,
     "minutes-document": MinutesDocumentBlock,
+    "topics": TopicsBlock,
 }
 
 REGISTRY["condense"] = CondenseBlock
