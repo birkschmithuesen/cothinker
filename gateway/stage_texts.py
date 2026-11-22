@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
-# CoThinker - the operating line
+# CoThinker — gateway/stage_texts.py: the stage's German display texts
 # Copyright (C) 2026 Birk Schmithuesen
 #
 # This program is free software under the GNU Affero General Public
 # License, version 3. It comes WITHOUT ANY WARRANTY. See LICENSE.
-"""The operating line: written by the consumer, deterministically.
+"""The operating line's German texts: written by the consumer,
+deterministically.
 
 It answers three questions the round actually asked during the analysed
 meeting: did you hear me, are you still alive, are you behind. It cannot
@@ -38,6 +39,11 @@ header zone: the warning about a sync service writing along is sticky
 until its condition clears -- one conflict file at ten o'clock used to
 cost the round the answer to "did you hear me" for the rest of the
 meeting. Both fit; neither wins.
+
+`pick()` -- which of these states wins when several apply at once --
+moved to `blocks/status_line/line.py` with the Wave B.4 split (issue
+#41, ADR 0018): that decision now belongs to the block, not to the
+rendering.
 """
 from __future__ import annotations
 
@@ -105,22 +111,6 @@ def warning(key: str, **fields) -> str:
     if template is None:
         return ""
     return template.format_map(_SafeDict(fields))
-
-
-# Highest first. One ranking, now carried by two lines: the top two
-# (`warning`, `failed`) are trouble and go to `trouble()`, the rest are
-# the routine states and go to `pick()`. Nothing changed about who
-# outranks whom -- only that the acknowledgement no longer has to lose
-# its seat for a condition that can stand for hours.
-PRECEDENCE = ("failed", "working", "backlog", "listening")
-
-
-def pick(states: list[str]) -> str:
-    """The winning state out of everything that currently applies."""
-    for candidate in PRECEDENCE:
-        if candidate in states:
-            return candidate
-    return "listening"
 
 
 def trouble(warning: str = "", failed: bool = False) -> str:
