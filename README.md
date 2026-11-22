@@ -95,6 +95,7 @@ example instance contains and why.
 | understand the instance directory format (configuration and content for one deployment) | [`docs/instance-format.md`](docs/instance-format.md) |
 | understand the module format (optional, pluggable session behaviour) | [`docs/module-format.md`](docs/module-format.md) |
 | see a complete, invented instance | [`instances/example/README.md`](instances/example/README.md) |
+| follow what is being built, week by week (German) | [Werkstattbericht — cothinker.eu/dev](https://cothinker.eu/dev/) |
 
 ## Repo map
 
