@@ -22,26 +22,25 @@ the Zuruf "Robo, leg dafuer eine Seite an" (`ZURUF_SEITE`, a regex) both
 create `<session>/entwuerfe/<slug>.md` with its related notes under
 `Verwandt:` (`WikiLayer.page_links`) -- through ONE path,
 `consumer.StageWriter.file_topic_page`, which also files the backlink.
+The wiki layer belongs to the knowledge-link block
+(`blocks/knowledge_link/__init__.py`), which owns it.
 
 NEVER RAISES into the consumer. Every step is best-effort: a failure costs
 the links, never the topic block.
 """
 from __future__ import annotations
 
-import sys
 import threading
 import time
 import re
 import unicodedata
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from shared.events import is_token                                  # noqa: E402
-from shared.minutes_format import clean_line                          # noqa: E402
-from shared.wiki_names import PAGE_DIR, _normalise, page_path, page_slug, slugify  # noqa: E402
-from graph.neighbours import HardEdges                       # noqa: E402
-from graph.vault_notes import Note, NoteIndex, scan_vault    # noqa: E402
+from shared.events import is_token
+from shared.minutes_format import clean_line
+from shared.wiki_names import PAGE_DIR, _normalise, page_path, page_slug, slugify
+from graph.neighbours import HardEdges
+from graph.vault_notes import Note, NoteIndex, scan_vault
 
 # How long one scan of the project folder is reused. A topic change is
 # rare (minutes apart), a scan walks the whole folder; a note written a
@@ -306,6 +305,23 @@ class WikiLayer:
             return stems
         except Exception:                 # noqa: BLE001 -- never raise
             return []
+
+    def link_paths(self, titel: str, k: int = PAGE_LINKS, *,
+                   session_dir=None) -> list[str] | None:
+        """The related notes of `titel` as paths relative to the project
+        folder (posix), best first; same uniqueness and session-folder
+        filter as `page_links`. None when there is no vault: the scan
+        failed or the folder holds no notes. Never raises."""
+        try:
+            paar = self._edges()
+            if paar is None or not paar[0].notes:
+                return None
+            index, edges = paar
+            stems = self._unique_stems(index, edges, titel, max(0, k),
+                                       skip=self._inside(session_dir))
+            return [index.resolve(s).rel.replace("\\", "/") for s in stems]
+        except Exception:                 # noqa: BLE001 -- never raise
+            return None
 
     def _inside(self, session_dir):
         """A `skip(note)` predicate: the note lies in `session_dir`. None

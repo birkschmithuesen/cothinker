@@ -94,8 +94,6 @@ from conflict_triage import triage as triage_conflicts  # noqa: E402
 from thought_end_live import (DEFAULT_THRESHOLD as THOUGHT_END_THRESHOLD,  # noqa: E402
                               FINISH_TIMEOUT_S as THOUGHT_END_FINISH_TIMEOUT_S,
                               ThoughtEndLane, default_laya_argv)
-from wiki import (TITLE_MAX, WikiLayer, bare_title,  # noqa: E402
-                  create_topic_page, topic_title, wants_page)
 from worker import WorkerClient  # noqa: E402
 import lane_integration as lane_integration_mod  # noqa: E402
 import stage_image as stage_image_mod  # noqa: E402
@@ -104,6 +102,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from graph.graph_build import GraphSource            # noqa: E402
 from graph.seed_note import find_or_create_seed      # noqa: E402
 from graph.vault_notes import DEFAULT_EXCLUDE        # noqa: E402
+from blocks.knowledge_link import KnowledgeLinkBlock  # noqa: E402
 from gateway.block_host_wiring import build_session_blocks, feed_utterance  # noqa: E402
 from gateway.legacy_stage_sink import make_sink      # noqa: E402
 
@@ -1865,7 +1864,7 @@ def page_call_out(writer, policy_runner, b, *, session_dir, project_dir,
     """
     try:
         if (not getattr(b, "wake_word", False) or writer.protocol is None
-                or not wants_page(getattr(b, "text", ""))):
+                or not writer.knowledge_link.wants_page(getattr(b, "text", ""))):
             return None
         if policy_runner is not None:
             seite = policy_runner.page_order(b.text)
@@ -2599,10 +2598,12 @@ class StageWriter:
         # on: gives an order id's marker and hears when it arrived. None
         # keeps every proposal exactly as it was before level 2.
         self.policy = None
-        # The wiki layer (gateway/wiki.WikiLayer) over the project folder:
-        # a new topic block gets the related notes as wikilinks. None
-        # writes the block exactly as before.
-        self.wiki = None
+        # The knowledge-link block (blocks/knowledge_link), which owns the
+        # wiki layer: a new topic block gets the related notes as
+        # wikilinks. Until `main()` hands over the session host's own
+        # instance this one has no vault and writes the block exactly as
+        # before. Interim handle (Wave B.5).
+        self.knowledge_link = KnowledgeLinkBlock()
         # MM-G: at most ONE topic page per protocol topic block per run.
         # Block key (`Protocol.current_topic`) -> the page. Both threads
         # that create pages (the decider via level 2, the agent via the
@@ -2733,19 +2734,21 @@ class StageWriter:
         block the stage's main title stands in; without that, ""
         (`seite-HHMM`). Never raises.
 
-        Returned CLEANED (`clean_line`, `wiki.TITLE_MAX`): the level-2
+        Returned CLEANED (`clean_line`, `title_max()`): the level-2
         guard slugs this very string, and `file_topic_page` passes it on
         unchanged to the links and the page (review item 8)."""
         try:
             lesen = getattr(self.protocol, "current_topic_title", None)
-            titel = bare_title(lesen()) if callable(lesen) else ""
+            titel = (self.knowledge_link.bare_title(lesen())
+                     if callable(lesen) else "")
             titel = clean_line(titel if isinstance(titel, str) else "",
-                               TITLE_MAX)
+                               self.knowledge_link.title_max())
         except Exception:                 # noqa: BLE001 -- never raise
             titel = ""
         if not titel:
             try:
-                titel = clean_line(self.state.main.title or "", TITLE_MAX)
+                titel = clean_line(self.state.main.title or "",
+                                   self.knowledge_link.title_max())
             except Exception:             # noqa: BLE001 -- never raise
                 titel = ""
         return titel if isinstance(titel, str) else ""
@@ -2756,8 +2759,8 @@ class StageWriter:
 
         THE page path: level 2's `document` action and the Zuruf "Robo,
         leg dafuer eine Seite an" both end here. The page is created by
-        `wiki.create_topic_page`; then the consumer itself -- not the
-        agent -- files `[notiz] Themenseite [[<stem>]]` into the current
+        the knowledge-link block's `create_topic_page`; then the consumer
+        itself -- not the agent -- files `[notiz] Themenseite [[<stem>]]` into the current
         topic block, and traces `wiki_create links=<n>`. None when no page
         was created. Never raises: a failure costs the page or the entry,
         never the turn.
@@ -2816,18 +2819,16 @@ class StageWriter:
         """`file_topic_page` without the one-per-block guard; the caller
         holds `_page_lock`."""
         try:
-            wiki = self.wiki
+            block = self.knowledge_link
             # Cleaned ONCE: links and page are about the same string
             # (idempotent on a `page_title()`, which is already clean).
             titel = clean_line(titel if isinstance(titel, str) else "",
-                               TITLE_MAX)
-            links = (wiki.page_links(titel, session_dir=session_dir)
-                     if wiki is not None else [])
+                               block.title_max())
+            links = block.page_links(titel, session_dir=session_dir)
             protokoll = getattr(self.protocol, "path", "") or ""
-            pfad = create_topic_page(
+            pfad = block.create_topic_page(
                 session_dir, project_dir, titel, links, mark, created,
-                protokoll, taken=wiki.taken if wiki is not None else None,
-                report=report)
+                protokoll, report=report)
         except Exception as e:            # noqa: BLE001 -- never raise
             self.log("topic page not created:", repr(e))
             return None
@@ -2930,15 +2931,15 @@ class StageWriter:
                 # which never raises: a failing wiki costs the links only.
                 # The protocol's folder is this run's session folder: its
                 # notes are not linked, as for the topic page (page_links).
-                titel, links = topic_title(
-                    step[1], step[2], self.wiki,
+                titel, links = self.knowledge_link.topic_title(
+                    step[1], step[2],
                     session_dir=Path(self.protocol.path).parent)
                 if not self.protocol.open_topic(titel):
                     self.log("topic block not written")
                     self.trace("entry_failed", kind="topic",
                                reason="not_written")
                     return False
-                if self.wiki is not None:
+                if self.knowledge_link.has_vault:
                     self.trace("wiki_link", links=links)
                 return True
             if step[0] == "decision":
@@ -3743,7 +3744,12 @@ def main() -> int:
     # which holds only this run's machine files. v2 only -- in v1 the
     # agent writes the topic blocks.
     if writer.protocol is not None:
-        writer.wiki = WikiLayer(folder)
+        kl_block = session_blocks.get("knowledge-link")
+        if kl_block is not None:
+            writer.knowledge_link = kl_block
+        else:
+            log("knowledge-link block not in the template: default instance")
+        writer.knowledge_link.use_project(folder)
     # Level 2 (docs/entwurf-meeting-modi.md §3): opt-in, and only where
     # every part it relies on is there -- the decider's answers, a
     # protocol the consumer files into, an agent to formulate the orders.

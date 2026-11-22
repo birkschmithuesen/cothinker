@@ -55,7 +55,7 @@ from graph.vault_notes import scan_vault, _FRONTMATTER_RE  # noqa: E402
 SESSIONS_DIR = "sessions"
 SESSIONS_DIR_ALT = "sitzungen"
 
-# Mirrors gateway/wiki.py MIN_PAGE_LINKS.
+# Mirrors blocks/knowledge_link/wiki.py MIN_PAGE_LINKS.
 MIN_PAGE_LINKS = 2
 
 _FLAT_PROTOCOL_RE = re.compile(r"^protokoll-(\d{4}-\d{2}-\d{2})\.md$")

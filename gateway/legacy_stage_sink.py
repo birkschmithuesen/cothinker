@@ -22,7 +22,18 @@ from typing import Callable, Mapping
 from shared.surface import ViewIntent
 
 # One line per block, added by the pull request that builds it.
-HANDLERS: dict[str, Callable[[object, ViewIntent], None]] = {}
+def _links(writer: object, intent: ViewIntent) -> None:
+    """`links:<topic_id>` (knowledge-link): the stage's link list, the same
+    update as the surface action `links`."""
+    items = [{"file": path, "label": path.rsplit("/", 1)[-1].removesuffix(".md")}
+             for path in intent.payload.get("links", ())]
+    writer.state.apply({"action": "links", "items": items})
+    writer.write()
+
+
+HANDLERS: dict[str, Callable[[object, ViewIntent], None]] = {
+    "links": _links,
+}
 
 
 def _prefix(intent_id: str) -> str:

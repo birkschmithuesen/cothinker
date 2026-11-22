@@ -96,3 +96,26 @@ def test_legacy_sink_unknown_prefix_logged_once():
                     audience="room", payload={}))
     unknown_logs = [line for line in logs if "capture-bullets" in line]
     assert len(unknown_logs) == 1
+
+
+def test_legacy_sink_links_row_updates_state_and_writes():
+    from gateway.stage_state import StageState
+
+    class FakeWriter:
+        def __init__(self):
+            self.state = StageState()
+            self.writes = 0
+
+        def write(self):
+            self.writes += 1
+
+    writer = FakeWriter()
+    sink = lss.make_sink(writer, lambda line: None)
+    sink(ViewIntent(id="links:T1", block="knowledge-link", kind="artefact",
+                    audience="room",
+                    payload={"links": ["notes/Alpha.md", "Beta.md"]}))
+    assert writer.state.links == [
+        {"file": "notes/Alpha.md", "label": "Alpha"},
+        {"file": "Beta.md", "label": "Beta"},
+    ]
+    assert writer.writes == 1
