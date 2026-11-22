@@ -22,7 +22,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[1]
 
-if str(REPO / "tools") not in sys.path:
+if str(REPO) not in sys.path:
     sys.path.insert(0, str(REPO))
 
 import tools.publish_check as publish_check  # noqa: E402
