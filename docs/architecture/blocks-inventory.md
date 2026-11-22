@@ -26,7 +26,7 @@ python3 docs/architecture/inventory_check.py
 Expected output (exactly these two lines, exit code 0):
 
 ```
-cothinker@HEAD: 100 source files, 100 mapped, 0 unmapped, 0 stale, 0 unknown targets
+cothinker@HEAD: 120 source files, 120 mapped, 0 unmapped, 0 stale, 0 unknown targets
 OK
 ```
 
