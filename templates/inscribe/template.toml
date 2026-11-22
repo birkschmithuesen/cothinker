@@ -198,3 +198,143 @@ titles = { en = "Closing", de = "Abschluss" }
 blocks = ["timer", "release", "graph", "poster"]
 surfaces = ["wall", "floor", "phone"]
 enter_when = ["operator"]
+
+# --- production format (issue #104): the piece and the group's material,
+# kept across sessions, written through seven phases entered by the group
+# itself (never an operator). Appended after the workshop format above;
+# nothing above this comment is touched by this format.
+[formats.production]
+surfaces = ["inscribe-production"]
+optional_surfaces = ["external-display"]
+
+# --- blocks: production format -------------------------------------------
+# state_scope = "group": every block below keeps its state for the whole
+# group across sessions; there is no room/table split in this format.
+[[blocks]]
+id = "piece-model"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "quote-anchoring"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "characters"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "forms-styles"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "write-text"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "translation"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "research"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "choice-list"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "interview-questions"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "capture-terms"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "conversation-agent"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "status-line"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "condense"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "interview-round"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "dramaturgy-checks"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "export"
+format = "production"
+state_scope = "group"
+
+# --- phases: production format, seven phases, entered by the group only --
+[[phases]]
+id = "terms"
+format = "production"
+titles = { en = "Terms", de = "Begriffe" }
+goal = { en = "Take in and sort the list of terms collected in the plenary." }
+blocks = ["capture-terms", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "questions"
+format = "production"
+titles = { en = "Questions", de = "Fragen" }
+goal = { en = "Develop interview questions from the terms." }
+blocks = ["interview-questions", "choice-list", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "interviews"
+format = "production"
+titles = { en = "Interviews", de = "Interviews" }
+goal = { en = "Conduct the interviews, summarise the material." }
+blocks = ["interview-round", "condense", "quote-anchoring", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "frame"
+format = "production"
+titles = { en = "Frame", de = "Rahmen" }
+goal = { en = "Invent freely: where it is set, who is in it, what happens." }
+blocks = ["piece-model", "characters", "forms-styles", "write-text", "choice-list", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "selection"
+format = "production"
+titles = { en = "Interview Selection", de = "Interviewauswahl" }
+goal = { en = "Pick and edit the interview passages for each scene." }
+blocks = ["quote-anchoring", "piece-model", "research", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "cards"
+format = "production"
+titles = { en = "Scene Cards", de = "Szenenkarten" }
+goal = { en = "Turn each scene into a concept card -- one at a time." }
+blocks = ["piece-model", "dramaturgy-checks", "forms-styles", "characters", "translation", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "script"
+format = "production"
+titles = { en = "Stage Script", de = "Buehnenskript" }
+goal = { en = "Write the stage script in your group's format, scene by scene." }
+blocks = ["write-text", "dramaturgy-checks", "translation", "characters", "export", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]

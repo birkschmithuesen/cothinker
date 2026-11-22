@@ -1,0 +1,63 @@
+{
+  "title": "Piece Material -- Example Production",
+  "subtitle": "A fabricated, invented example instance for the inscribe production format (issue #104); every term, question, interview, character, scene and line below is made up for this example and is not drawn from any real group, interview or production.",
+  "terms": ["Waiting", "Leaving", "Noise", "A Key"],
+  "own_questions": {
+    "Waiting": ["Tell me about a time you were waiting for something and didn't know how long it would take."],
+    "Leaving": ["Describe the last time you left a place you weren't sure you'd return to."],
+    "Noise": ["What is a sound you can't get out of your head, and why?"],
+    "A Key": ["Tell me about a key you once had and what it opened."]
+  },
+  "interviews": [
+    {
+      "nr": 1,
+      "summary": "An invented account of a long wait at a closed gate, and the small routines that made it bearable.",
+      "quotes": ["I counted the tiles on the ground until I lost count and started again."],
+      "status": "invented"
+    },
+    {
+      "nr": 2,
+      "summary": "An invented account of leaving a shared flat, carrying a key that no longer opened anything.",
+      "quotes": ["I kept the key in my pocket for a month after I'd already given the other one back."],
+      "status": "invented"
+    }
+  ],
+  "setting": "A fabricated night bus station, between the last bus and the first.",
+  "characters": [
+    {"name": "The Watcher", "wants": "to be relieved of the watching, but won't say so"},
+    {"name": "The Arriver", "wants": "to find the key that was supposed to be left for them"}
+  ],
+  "arc": "An invented arc: a long wait resolves into a small, unexpected departure.",
+  "scene_count": 3,
+  "scenes": [
+    {
+      "nr": 1,
+      "title": "Closed Gate",
+      "type": "spoken text",
+      "about": "The Watcher waits at a gate that won't open.",
+      "cast": ["The Watcher"],
+      "quotes_used": [{"interview": 1, "quote": "I counted the tiles on the ground until I lost count and started again."}]
+    },
+    {
+      "nr": 2,
+      "title": "Wrong Key",
+      "type": "spoken text",
+      "about": "The Arriver tries a key that doesn't fit.",
+      "cast": ["The Arriver"],
+      "quotes_used": [{"interview": 2, "quote": "I kept the key in my pocket for a month after I'd already given the other one back."}]
+    },
+    {
+      "nr": 3,
+      "title": "First Bus",
+      "type": "moment in the room",
+      "about": "Both characters board the same bus without speaking.",
+      "cast": ["The Watcher", "The Arriver"],
+      "quotes_used": []
+    }
+  ],
+  "script_excerpt": {
+    "scene": 1,
+    "text": "THE WATCHER: Still closed. I counted the tiles on the ground until I lost count and started again. Then I counted the ones I'd already counted."
+  },
+  "notes": "Example data only, fabricated for the template test (issue #104)."
+}
