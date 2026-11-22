@@ -21,7 +21,7 @@ Reflect template), W = one-day workshop (`workshop/`, an example one-day-worksho
 I = InScribe long format (interview-theater, an example production instance),
 K = Kollektivgedächtnis (kollektivgedaechtnis). **Built** = in how many of
 the four code bases the function exists as separate code (2× / 3×).
-**Reflect** = part of the Reflect template (12 blocks, confirmed by Birk).
+**Reflect** = part of the Reflect template (12 blocks).
 
 ## How to check it
 
@@ -113,8 +113,8 @@ tables below are built from.
 InScribe paths are relative to `interview_theater/`; Kollektivgedächtnis
 paths are given with their top directory.
 
-**Reflect check:** the yellow cells are exactly the 12 blocks Birk
-confirmed for Reflect — capture bullets, topic change, decisions / tasks /
+**Reflect check:** the yellow cells are exactly the 12 blocks confirmed
+for Reflect — capture bullets, topic change, decisions / tasks /
 open questions, condense, minutes document, mirroring / coach question,
 knowledge link, timer, speaker queue, speaking share, status line, session
 graph. Four of them have no meeting code today: condense, timer, speaker
