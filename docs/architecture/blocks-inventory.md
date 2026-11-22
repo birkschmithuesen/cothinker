@@ -52,8 +52,8 @@ tables below are built from.
 | minutes document | Condense + write | `shared/minutes_format.py` 441 | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
 | mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
-| knowledge link (vault) | Agent behaviour | `blocks/knowledge_link/__init__.py` 123, `blocks/knowledge_link/wiki.py` 408, `shared/wiki_names.py` 49 (`graph/*.py`, the vault-note library, is a core library: `core:session`) | Reflect | 1× |
-| status line | Show + share | `blocks/status_line/__init__.py` 86, `line.py` 24 — 110 | Reflect | 1× |
+| knowledge link (vault) | Agent behaviour | `gateway/wiki.py` 424, `shared/wiki_names.py` 49, `graph/__init__.py` 5, `graph_build.py` 89, `neighbours.py` 90, `ring_select.py` 110, `seed_note.py` 84, `vault_notes.py` 239 — 1090 | Reflect | 1× |
+| status line | Show + share | `blocks/status_line/__init__.py` 143, `group.py` 57, `line.py` 24 — 224 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
 | timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
@@ -136,6 +136,7 @@ blocks/speaking_share/__init__.py                                               
 blocks/speaking_share/room_talk_time.py                                           block:speaking-share
 blocks/speaking_share/talk_share.py                                               block:speaking-share
 blocks/status_line/__init__.py                                                   block:status-line
+blocks/status_line/group.py                                                      block:status-line
 blocks/status_line/line.py                                                       block:status-line
 blocks/timer/__init__.py                                                         block:timer
 blocks/timer/clock.py                                                            block:timer
