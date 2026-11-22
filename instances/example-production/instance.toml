@@ -1,0 +1,13 @@
+[instance]
+name = "example-production"
+timezone = "UTC"
+languages = ["en", "de"]
+app_format = "example-app/1"
+poster_format = "example-poster/1"
+
+[template]
+name = "inscribe"
+format = "production"
+
+[secrets]
+hub_secret = "EXAMPLE_HUB_SECRET"

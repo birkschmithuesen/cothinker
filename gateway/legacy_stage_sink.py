@@ -17,6 +17,7 @@ only to bridge the gap.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Callable, Mapping
 
 from shared.surface import ViewIntent
@@ -43,13 +44,47 @@ def _apply_pending(writer: object, intent: ViewIntent,
 
 
 # One line per block, added by the pull request that builds it.
+def _links(writer: object, intent: ViewIntent, ids: dict[str, str]) -> None:
+    """`links:<topic_id>` (knowledge-link): the stage's link list, the same
+    update as the surface action `links`."""
+    items = [{"file": path, "label": path.rsplit("/", 1)[-1].removesuffix(".md")}
+             for path in intent.payload.get("links", ())]
+    writer.state.apply({"action": "links", "items": items})
+    writer.write()
+
+
 HANDLERS: dict[str, Callable[[object, ViewIntent, dict[str, str]], None]] = {
     "pending": _apply_pending,
+    "links": _links,
 }
+
+
+def _log_only(writer: object, intent: ViewIntent, ids: dict[str, str]) -> None:
+    """Today's stage has no place for this intent: it stays on the intent
+    board; this handler does nothing and nothing is drawn."""
+
+
+# Keyed on the block-id prefix, i.e. "condense" for ids "condense:<topic>".
+HANDLERS["condense"] = _log_only
 
 
 def _prefix(intent_id: str) -> str:
     return intent_id.split(":", 1)[0]
+
+
+def _apply_status(writer: object, intent: ViewIntent,
+                  ids: dict[str, str]) -> None:
+    """`status:line` (blocks/status_line/): the intent never carries a
+    clock value, so the "zuletzt {at}" timestamp is stamped here, from
+    this call's own clock, not from the block."""
+    detail = intent.payload.get("detail", {})
+    writer.set_status(intent.payload["state"],
+                      at=datetime.now().strftime("%H:%M:%S"),
+                      count=detail.get("count", 0),
+                      failed=detail.get("failed"))
+
+
+HANDLERS["status"] = _apply_status
 
 
 def make_sink(writer: object, log: Callable[[str], None]) -> Callable[[ViewIntent], None]:

@@ -727,13 +727,14 @@ def rule_close_leaves_foreign_question() -> bool:
 def _wiki_env(mode: str, titel: str) -> Env:
     """A real v2 protocol, a wiki layer over a synthetic project (the temp
     dir), a topic block and the same topic on the stage."""
-    import wiki
+    from blocks.knowledge_link import KnowledgeLinkBlock
     e = Env(mode=mode, real_protocol=True)
     (e.tmp / "kosten.md").write_text("---\ntags: [finanzen]\n---\nZahlen.\n",
                                      encoding="utf-8")
     # The project's index note: stem == project folder name.
     (e.tmp / f"{e.tmp.name}.md").write_text("Start.\n", encoding="utf-8")
-    e.writer.wiki = wiki.WikiLayer(e.tmp)
+    e.writer.knowledge_link = KnowledgeLinkBlock()
+    e.writer.knowledge_link.use_project(e.tmp)
     e.writer.protocol.open_topic(titel)
     if e.state.apply({"action": "topic", "title": titel,
                       "markdown": "- erster Punkt"}):
