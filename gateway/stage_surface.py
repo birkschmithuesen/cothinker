@@ -62,6 +62,7 @@ class StageSurface:
         self._seen: dict[str, Any] = {}        # intent id -> payload last applied
         self._pending_ids: dict[str, str] = {}  # pending intent id -> state id
         self._logged: set[str] = set()
+        self._status_payload: Any = None
         self._rules: dict[str, tuple[str, Callable[[ViewIntent], bool]]] = {
             "topic": ("status", self._topic),
             "pending": ("status", self._pending),
@@ -95,9 +96,10 @@ class StageSurface:
                 present.add(intent.id)
                 if intent.id in self._seen and self._seen[intent.id] == intent.payload:
                     continue
-                self._seen[intent.id] = intent.payload
                 try:
                     changed = rule[1](intent) or changed
+                    # Only after the rule succeeded: a failed intent is retried.
+                    self._seen[intent.id] = intent.payload
                 except Exception as e:  # noqa: BLE001 -- a bad payload must not cost the stage
                     self._log(f"stage surface: intent {intent.id!r} not rendered: "
                               f"{type(e).__name__}: {e}")
@@ -122,16 +124,30 @@ class StageSurface:
         if p.get("settled"):
             state_id = self._pending_ids.pop(intent.id, "")
             return bool(state_id) and self._state.settle(state_id)
-        state_id = self._state.announce(str(p["pending_kind"]), str(p["label"]))
+        # A relabelled, still unsettled entry replaces its predecessor:
+        # the old one is settled so it does not linger or lose its id.
+        old_id = self._pending_ids.pop(intent.id, "")
+        if old_id:
+            self._state.settle(old_id)
+        # The writer path publishes immediately and traces pending_start.
+        state_id = self._writer.announce(str(p["pending_kind"]), str(p["label"]))
         if not state_id:
-            return False
+            return bool(old_id)
         self._pending_ids[intent.id] = state_id
         return True
 
     def _status(self, intent: ViewIntent) -> bool:
         p = intent.payload
         self._writer.set_status(str(p["state"]), at=str(p.get("detail") or ""))
+        self._status_payload = p
         return True
+
+    def status_line(self) -> Any:
+        """The payload of the current `status:line` intent, None when there
+        is none. The consumer's own operating-line publisher defers to it,
+        so there is one writer of the line while an intent is current."""
+        with self._lock:
+            return self._status_payload
 
     def _links(self, intent: ViewIntent) -> bool:
         items = [{"file": str(path), "label": str(path)}
@@ -155,6 +171,8 @@ class StageSurface:
         return rule
 
     def _timer(self, intent: ViewIntent) -> bool:
+        # Until D.4 replaces AgendaRuntime, the legacy AgendaController still
+        # sets state.agenda and can overwrite this intent's agenda.
         agenda = dict(intent.payload)
         old = self._state.agenda or {}
         for key in _AGENDA_PEOPLE_KEYS:
@@ -168,6 +186,8 @@ class StageSurface:
         changed = False
         for intent_id in [i for i in self._seen if i not in present]:
             del self._seen[intent_id]
+            if _prefix(intent_id) == "status":
+                self._status_payload = None
             attribute = {"queue": "queue", "share": "share",
                          "graph": "session_graph"}.get(_prefix(intent_id))
             if attribute is not None and getattr(self._state, attribute) is not None:

@@ -16,9 +16,15 @@ from shared.surface import IntentBoard, ViewIntent
 
 
 class FakeWriter:
-    def __init__(self):
+    def __init__(self, state=None):
+        self.state = state
         self.statuses = []
+        self.announced = []
         self.writes = 0
+
+    def announce(self, kind, label):
+        self.announced.append((kind, label))
+        return self.state.announce(kind, label)
 
     def set_status(self, state, *, at="", count=0, failed=None):
         self.statuses.append((state, at))
@@ -35,7 +41,7 @@ def intent(intent_id, kind, payload, block="b"):
 
 def make(**kw):
     state = StageState(**kw)
-    writer = FakeWriter()
+    writer = FakeWriter(state)
     logs = []
     return StageSurface(writer, state, logs.append), state, writer, logs
 
@@ -57,13 +63,19 @@ def test_topic_rule_confirmed_and_provisional():
 
 
 def test_pending_rule_announces_then_settles():
-    surface, state, _, _ = make()
+    surface, state, writer, _ = make()
     announce = intent("pending:1", "status",
                       {"pending_kind": "decision", "label": "Beschluss", "settled": False})
     surface.render([announce])
     assert [p.label for p in state.pending] == ["Beschluss"]
+    assert writer.announced == [("decision", "Beschluss")]   # via the writer path
     surface.render([announce])                       # unchanged: not announced twice
     assert len(state.pending) == 1
+    # Relabelled while unsettled: one entry, the old one does not linger.
+    surface.render([intent("pending:1", "status",
+                           {"pending_kind": "decision", "label": "Beschluss Budget",
+                            "settled": False})])
+    assert [p.label for p in state.pending] == ["Beschluss Budget"]
     surface.render([intent("pending:1", "status",
                            {"pending_kind": "decision", "label": "Beschluss",
                             "settled": True})])
@@ -78,6 +90,11 @@ def test_status_rule_sets_operating_line():
     surface.render([intent("status:line", "status",
                            {"state": "working", "detail": ""})])
     assert writer.statuses == [("working", "")]
+    # The consumer's publisher defers to a current intent, and stops
+    # deferring once it has left the board.
+    assert surface.status_line() == {"state": "working", "detail": ""}
+    surface.render([])
+    assert surface.status_line() is None
 
 
 def test_links_rule_sets_links():
@@ -158,6 +175,8 @@ def test_fingerprint_ignores_clock():
                                           "anchor_at": 0.0,
                                           "planned_cumulative_min": [1.0]}),
         intent("status:line", "status", {"state": "listening", "detail": ""}),
+        intent("pending:1", "status", {"pending_kind": "decision",
+                                       "label": "Beschluss", "settled": False}),
     ):
         board.put(i)
     surface.render(board.current())

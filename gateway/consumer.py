@@ -3574,6 +3574,8 @@ def main() -> int:
         lost from the raw transcript.
         """
         try:
+            if stage_surface.status_line() is not None:
+                return                  # a current status:line intent wins
             waiting = 0 if a.no_agent else queue.backlog()
             session_blocks.dispatch("tick", {
                 "components": {
