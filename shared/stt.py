@@ -243,7 +243,34 @@ class SseSource:
                 pass
 
 
-def open_stt(cfg: SttConfig) -> SttSource:
+def open_stt(cfg: SttConfig, *, engine_factory: Callable | None = None) -> SttSource:
+    """`"sse"`: the remote-server transport. `"inprocess"`: a started audio
+    session; the only engine is `"speechmatics-eu"` (any other name is an
+    error and nothing else is tried) and `api_key` is required unless a test
+    passes `engine_factory(speakers)` -- an object with the surface of
+    `shared.speechmatics.SpeechmaticsStream`."""
     if cfg.transport == "sse":
         return SseSource(cfg)
+    if cfg.transport == "inprocess":
+        if cfg.engine != "speechmatics-eu":
+            raise ValueError(f"engine {cfg.engine!r} is not available in-process")
+        if engine_factory is None:
+            if not cfg.api_key:
+                raise ValueError("an in-process STT session needs an api_key")
+            engine_factory = _speechmatics_factory(cfg)
+        from shared.stt_inprocess import InprocessSession
+        return InprocessSession(cfg, engine_factory).start()
     raise ValueError(f"unknown STT transport: {cfg.transport!r}")
+
+
+def _speechmatics_factory(cfg: SttConfig) -> Callable:
+    from shared.speechmatics import SPEECHMATICS_URL, SpeechmaticsStream
+
+    def make(speakers):
+        return SpeechmaticsStream(
+            cfg.api_key, cfg.language, list(speakers) if speakers else None,
+            max_delay_s=cfg.max_delay_s, eou_silence_s=cfg.eou_silence_s,
+            url=cfg.engine_url or SPEECHMATICS_URL, max_speakers=cfg.max_speakers,
+            prefer_current_speaker=cfg.prefer_current_speaker,
+            additional_vocab=list(cfg.additional_vocab) if cfg.additional_vocab else None)
+    return make
