@@ -1,5 +1,5 @@
 # CoThinker — tests for gateway/consumer.py's block host wiring (issue
-# #38, Wave B.1): feed_utterance() and the legacy stage sink it writes to.
+# #38, Wave B.1): feed_utterance() and its failure handling.
 # Copyright (C) 2026 Birk Schmithuesen
 #
 # This program is free software: you can redistribute it and/or modify it
@@ -9,9 +9,7 @@
 from __future__ import annotations
 
 from gateway import block_host_wiring as bhw
-from gateway import legacy_stage_sink as lss
 from shared.blocks import BLOCK_API_VERSION
-from shared.surface import ViewIntent
 
 
 class FakeMinutesFile:
@@ -84,26 +82,3 @@ def test_feed_utterance_keeps_raw_when_dispatch_breaks(tmp_path):
     bhw.feed_utterance(minutes, blocks, "hallo", "max", {"at": 1.0})
     assert calls[0] == ("append_raw", "hallo", "max")
     assert any("dispatch failed" in line for line in blocks.log_lines)
-
-
-def test_legacy_sink_links_row_updates_state_and_writes():
-    from gateway.stage_state import StageState
-
-    class FakeWriter:
-        def __init__(self):
-            self.state = StageState()
-            self.writes = 0
-
-        def write(self):
-            self.writes += 1
-
-    writer = FakeWriter()
-    sink = lss.make_sink(writer, lambda line: None)
-    sink(ViewIntent(id="links:T1", block="knowledge-link", kind="artefact",
-                    audience="room",
-                    payload={"links": ["notes/Alpha.md", "Beta.md"]}))
-    assert writer.state.links == [
-        {"file": "notes/Alpha.md", "label": "Alpha"},
-        {"file": "Beta.md", "label": "Beta"},
-    ]
-    assert writer.writes == 1
