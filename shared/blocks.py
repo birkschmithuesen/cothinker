@@ -131,19 +131,21 @@ class BlockHost:
                      "error": f"bad_args: {bad_args}"}
         try:
             raw = spec.fn(**args)
+            if not isinstance(raw, Mapping):
+                raise TypeError(f"tool returned {type(raw).__name__}, not a mapping")
+            result = {
+                "ok": bool(raw.get("ok", True)),
+                "data": raw.get("data", {}),
+                "warnings": list(raw.get("warnings", [])),
+                "rev": raw.get("rev"),
+                "error": raw.get("error"),
+            }
         except Exception as e:  # noqa: BLE001 -- a tool failure must never propagate
             self._log(f"tool {name} (block {block_id}): {type(e).__name__}: {e}")
             result = {"ok": False, "data": {}, "warnings": [], "rev": None,
                       "error": f"tool_failed: {type(e).__name__}"}
             self._record_tool_call(name, block_id, result, spec.read_only)
             return result
-        result = {
-            "ok": bool(raw.get("ok", True)),
-            "data": raw.get("data", {}),
-            "warnings": list(raw.get("warnings", [])),
-            "rev": raw.get("rev"),
-            "error": raw.get("error"),
-        }
         self._record_tool_call(name, block_id, result, spec.read_only)
         if result["ok"] and not spec.read_only:
             self.dispatch(CoreEvent("block_output", {

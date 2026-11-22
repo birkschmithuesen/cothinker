@@ -166,6 +166,14 @@ def test_raising_tool_returns_tool_failed_and_logs(tmp_path):
     assert result == {"ok": False, "data": {}, "warnings": [], "rev": None,
                        "error": "tool_failed: RuntimeError"}
     assert any("a" in line and "RuntimeError" in line for line in logs)
+    # A tool that returns something other than a dict counts as failed, too.
+    a.raise_on_call = False
+    a.set_value = lambda value: None
+    host2 = sb.BlockHost([a], ctx_for=ctx_for(tmp_path), log=logs.append)
+    host2.start({})
+    result = host2.call_tool("set_value", {"value": 1})
+    assert result["ok"] is False
+    assert result["error"].startswith("tool_failed: ")
 
 
 def test_write_tool_dispatches_block_output(tmp_path):
