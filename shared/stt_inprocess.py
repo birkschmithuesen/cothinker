@@ -37,10 +37,10 @@ import time
 from collections import deque
 from typing import Callable, Iterator, List, Optional
 
+from shared.speechmatics import BYTES_PER_S
 from shared.stt import SttConfig, TranscriptEvent, run_stages
 from shared.utterance import UtteranceCollector
 
-BYTES_PER_S = 16000 * 2        # s16le mono, same value as shared.speechmatics
 BACKEND = "speechmatics-rt"
 RETRY_S = (1.0, 2.0, 5.0)
 BUFFER_S = 10.0
@@ -242,12 +242,14 @@ class _StreamSession:
 
     async def _flush(self, s: _Stream) -> bool:
         while self._buffer:
+            if s.dead:                       # the reader saw the stream die: keep the rest buffered
+                return False
             chunk, wall = self._buffer.popleft()
             self._buffer_bytes -= len(chunk)
             s.clock.add(len(chunk), wall)
             try:
-                await s.stream.send_pcm(chunk)
-            except Exception:                # noqa: BLE001
+                await asyncio.wait_for(s.stream.send_pcm(chunk), self._send_timeout_s)
+            except Exception:                # noqa: BLE001 -- includes a send timeout
                 s.dead = True
                 self._buffer.appendleft((chunk, wall))
                 self._buffer_bytes += len(chunk)
@@ -303,6 +305,16 @@ class _StreamSession:
 
 _END = object()
 _STOP = object()
+
+
+class _FlushHandoff:
+    """Who gets the finals of one `flush()`: the caller, or `events()` once it gave up."""
+
+    def __init__(self) -> None:
+        self.lock = threading.Lock()
+        self.abandoned = False
+        self.done = False
+        self.finals: list = []
 
 
 class _StreamState:
@@ -414,20 +426,43 @@ class InprocessSession:
     def flush(self, timeout_s: float = 2.0) -> list[TranscriptEvent]:
         if self._closed:
             return []
-        fut = asyncio.run_coroutine_threadsafe(self._aflush(), self._loop)
+        hand = _FlushHandoff()
+        coro = self._aflush(hand)
         try:
-            return fut.result(timeout_s)
-        except Exception:                      # noqa: BLE001 -- timeout or closed loop
-            fut.cancel()
+            fut = asyncio.run_coroutine_threadsafe(coro, self._loop)
+        except RuntimeError:                   # the loop closed under us
+            coro.close()
             return []
+        try:
+            fut.result(timeout_s)
+        except Exception:                      # noqa: BLE001 -- timeout or closed loop
+            pass
+        # exactly one side gets the finals: the caller (returned) or events() (abandoned)
+        with hand.lock:
+            if hand.done:
+                return hand.finals
+            hand.abandoned = True
+        fut.cancel()
+        return []
 
-    async def _aflush(self) -> list[TranscriptEvent]:
+    async def _aflush(self, hand: "_FlushHandoff") -> None:
+        with hand.lock:
+            abandoned = hand.abandoned
+        if abandoned:                          # the caller gave up: finals go out through events()
+            self._flush_collectors()
+            return
         self._capture = []
         try:
             self._flush_collectors()
-            return list(self._capture)
+            finals = list(self._capture)
         finally:
             self._capture = None
+        with hand.lock:
+            if hand.abandoned:
+                for ev in finals:
+                    self._out.put(ev)
+            else:
+                hand.finals, hand.done = finals, True
 
     def _flush_collectors(self) -> None:
         for st in list(self._streams.values()):

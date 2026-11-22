@@ -124,7 +124,8 @@ def run_stages(stages: Sequence[TranscriptStage], ev: TranscriptEvent,
                log: Callable[[str], None]) -> list[TranscriptEvent]:
     """Feeds `ev` through each stage in order (fan-out allowed). A stage that
     raises is logged once per (stage, exception type) and the event goes on
-    unchanged."""
+    unchanged. The once-per-kind dedupe is kept per `log` callable, so pass a
+    stable callable (not a fresh bound method on every call)."""
     events = [ev]
     for stage in stages:
         out: list[TranscriptEvent] = []
@@ -273,9 +274,9 @@ def _speechmatics_factory(cfg: SttConfig) -> Callable:
 
     def make(speakers):
         return SpeechmaticsStream(
-            cfg.api_key, cfg.language, list(speakers) if speakers else None,
+            cfg.api_key, cfg.language, [dict(m) for m in speakers] if speakers else None,
             max_delay_s=cfg.max_delay_s, eou_silence_s=cfg.eou_silence_s,
             url=cfg.engine_url or SPEECHMATICS_URL, max_speakers=cfg.max_speakers,
             prefer_current_speaker=cfg.prefer_current_speaker,
-            additional_vocab=list(cfg.additional_vocab) if cfg.additional_vocab else None)
+            additional_vocab=[dict(m) for m in cfg.additional_vocab] if cfg.additional_vocab else None)
     return make

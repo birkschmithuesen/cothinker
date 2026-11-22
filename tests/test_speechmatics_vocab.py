@@ -59,3 +59,37 @@ def test_sm_config_carries_the_roles_vocab():
     cfg = sm_config(None, False, "en", 1.0, 0.5, additional_vocab=vocab)
     assert cfg["transcription_config"]["additional_vocab"] == vocab
     assert "Ada" in _contents(cfg["transcription_config"]["additional_vocab"])
+
+
+def test_default_engine_factory_passes_plain_json_ready_config(monkeypatch):
+    import json
+    from types import MappingProxyType
+
+    import shared.speechmatics as sm
+    from shared.stt import SttConfig, _speechmatics_factory
+
+    seen = {}
+
+    class Spy:
+        def __init__(self, *args, **kw):
+            seen["args"], seen["kw"] = args, kw
+
+    monkeypatch.setattr(sm, "SpeechmaticsStream", Spy)
+    speakers = (MappingProxyType({"label": "P1", "speaker_identifiers": ["x"]}),)
+    vocab = (MappingProxyType({"content": "Ada", "sounds_like": ["Adah"]}),)
+    cfg = SttConfig(transport="inprocess", url="", api_key="k", language="en",
+                    speakers=speakers, additional_vocab=vocab, max_speakers=4,
+                    prefer_current_speaker=True, engine_url="wss://example.invalid/v2")
+    _speechmatics_factory(cfg)(cfg.speakers)
+
+    key, language, got_speakers = seen["args"]
+    assert (key, language) == ("k", "en")
+    assert got_speakers == [dict(speakers[0])] and type(got_speakers[0]) is dict
+    kw = seen["kw"]
+    assert kw["additional_vocab"] == [dict(vocab[0])] and type(kw["additional_vocab"][0]) is dict
+    assert kw["url"] == "wss://example.invalid/v2"
+    assert kw["max_speakers"] == 4 and kw["prefer_current_speaker"] is True
+    json.dumps(sm.sm_config(got_speakers, False, language, kw["max_delay_s"], kw["eou_silence_s"],
+                            max_speakers=kw["max_speakers"],
+                            prefer_current_speaker=kw["prefer_current_speaker"],
+                            additional_vocab=kw["additional_vocab"]))

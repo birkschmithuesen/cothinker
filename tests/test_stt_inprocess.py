@@ -472,7 +472,7 @@ def _words(text, start, end, speaker="P1"):
          "alternatives": [{"content": text, "speaker": speaker}]}]}
 
 
-def _engine_for(url, start_gate=None, send_gate=None):
+def _engine_for(url, start_gate=None, send_gate=None, send_entered=None):
     from shared.speechmatics import SpeechmaticsStream
 
     def factory(speakers):
@@ -488,6 +488,8 @@ def _engine_for(url, start_gate=None, send_gate=None):
             real_send = real.send_pcm
 
             async def slow_send(chunk):
+                if send_entered is not None:
+                    send_entered.set()
                 await send_gate.wait()
                 await real_send(chunk)
             real.send_pcm = slow_send
@@ -549,9 +551,9 @@ def test_two_streams_were_opened(sessions, fake_server):
 def test_close_during_flush_ends_the_stream(sessions, fake_server):
     srv = fake_server([])
     gate = Gate()                                     # never set: the flush hangs in send
-    sess = sessions(_engine_for(srv.url, send_gate=gate))
+    entered = threading.Event()
+    sess = sessions(_engine_for(srv.url, send_gate=gate, send_entered=entered))
     sess.send_pcm(CHUNK)
-    assert until(lambda: srv.messages("StartRecognition"))
-    time.sleep(0.1)                                   # the opener now sits in its flush
+    assert entered.wait(5.0)                          # the opener now sits in its flush
     sess.close()
     assert until(lambda: srv.messages("EndOfStream"))
