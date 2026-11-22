@@ -96,9 +96,12 @@ class MinutesDocumentBlock:
     def _open(self, seed: object) -> None:
         if self._ctx is None or not isinstance(seed, Mapping):
             return
+        raw_path = seed.get("path")
+        if not raw_path:
+            return
         ctx = self._ctx
         self._doc = MinutesDocument(
-            Path(str(seed["path"])), mode=str(seed.get("mode") or DEFAULT_MODE),
+            Path(str(raw_path)), mode=str(seed.get("mode") or DEFAULT_MODE),
             write_head=lambda head: ctx.artefact(ARTEFACT_NAME, head))
 
     # ------------------------------------------- reads for the session host
