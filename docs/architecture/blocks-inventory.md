@@ -101,6 +101,7 @@ core:agent                   core Agent API (AgentPort and its adapters)
 core:llm                     core model clients (chat, embeddings, rate limit, reply-language guard)
 core:instance                core Instance API (instance.toml, content, profiles, languages)
 core:module                  core Module API (module/block loader, example module)
+core:surface-api              core Surface API (view intents out, user actions in; in-memory intent board)
 surface:stage                surface — meeting web view (stage)
 block:segment                block — utterance batching / turn boundaries
 block:topics                 block — topic change
@@ -174,6 +175,7 @@ shared/instance.py                                                              
 shared/modules.py                                                                 core:module
 shared/phases.py                                                                  core:session
 shared/profiles.py                                                                core:instance
+shared/surface.py                                                                  core:surface-api
 shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py               block:write-text
 shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py                block:write-text
 shared/speechmatics.py                                                           stt:engine-speechmatics
