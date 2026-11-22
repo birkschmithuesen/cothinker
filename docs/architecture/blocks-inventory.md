@@ -49,7 +49,7 @@ tables below are built from.
 | segment (utterance batching) | Capture | `gateway/segmenter.py` 356, `shared/wake_word.py` 67 — 423 | core | 1× |
 | topic change | Capture | `gateway/topic_detect.py` 571, `topic_hysteresis.py` 95, `topic_laya_worker.py` 138, `topic_title.py` 202 — 1006 | Reflect | 1× |
 | decisions / tasks / open questions | Capture | `gateway/decide.py` 569, `decider.py` 424, `openrouter_jev.py` 269, `policy.py` 668, `policy_runner.py` 567, `proposals.py` 68, `questions.py` 191 — 2756 | Reflect | 1× |
-| minutes document | Condense + write | `shared/minutes_format.py` 441 | Reflect | 1× |
+| minutes document | Condense + write | `shared/minutes_format.py` 441, `blocks/minutes_document/__init__.py`, `blocks/minutes_document/minutes.py` (the session host's `gateway/raw_transcript.py` writes the file) | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
 | mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
 | knowledge link (vault) | Agent behaviour | `gateway/wiki.py` 424, `shared/wiki_names.py` 49, `graph/__init__.py` 5, `graph_build.py` 89, `neighbours.py` 90, `ring_select.py` 110, `seed_note.py` 84, `vault_notes.py` 239 — 1090 | Reflect | 1× |
@@ -132,6 +132,8 @@ blocks/__init__.py                                                              
 blocks/condense/__init__.py                                                       block:condense
 blocks/condense/coverage.py                                                       block:condense
 blocks/condense/quotes.py                                                         block:condense
+blocks/minutes_document/__init__.py                                               block:minutes-document
+blocks/minutes_document/minutes.py                                                block:minutes-document
 blocks/speaking_share/__init__.py                                                 block:speaking-share
 blocks/speaking_share/room_talk_time.py                                           block:speaking-share
 blocks/speaking_share/talk_share.py                                               block:speaking-share
@@ -162,6 +164,7 @@ gateway/openrouter_jev.py                                                       
 gateway/policy.py                                                                 block:decisions-tasks-questions
 gateway/policy_runner.py                                                          block:decisions-tasks-questions
 gateway/proposals.py                                                              block:decisions-tasks-questions
+gateway/raw_transcript.py                                                         core:session
 shared/minutes_format.py                                                          block:minutes-document
 gateway/questions.py                                                              block:decisions-tasks-questions
 gateway/segmenter.py                                                              block:segment
