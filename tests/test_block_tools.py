@@ -215,6 +215,17 @@ def test_tool_calls_since_filters_by_time(tmp_path):
     assert calls[0]["at"] == 5.0
 
 
+def test_tool_calls_since_includes_call_at_exact_boundary(tmp_path):
+    a = Toolable("a")
+    host = sb.BlockHost([a], ctx_for=ctx_for(tmp_path), log=lambda line: None,
+                         clock=lambda: 5.0)
+    host.start({})
+    host.call_tool("set_value", {"value": 1})
+    calls = host.tool_calls_since(5.0)
+    assert len(calls) == 1
+    assert calls[0]["at"] == 5.0
+
+
 def test_observer_sees_every_routed_event(tmp_path):
     observed = []
     a = Echo("a")
