@@ -106,3 +106,27 @@ def test_payload_has_absolute_times_only(tmp_path):
     assert payload["item_budget_s"] == 600.0
     assert payload["planned_cumulative_min"] == (5, 15, 30)
     assert "elapsed" not in payload and "remaining" not in payload
+
+
+def test_next_at_last_item_is_noop(tmp_path):
+    clock_values = iter([0.0, 1.0, 2.0, 3.0, 4.0])
+    ctx, emitted = _ctx(tmp_path, lambda: next(clock_values))
+    block = TimerBlock()
+    block.start(ctx, _config())
+    block.on_event(CoreEvent("action", {"op": "next"}))
+    block.on_event(CoreEvent("action", {"op": "next"}))
+    assert block._index == 2
+    out = block.on_event(CoreEvent("action", {"op": "next"}))
+    assert out == ()
+    assert block._index == 2
+    assert len(emitted) == 2
+
+
+def test_back_at_first_item_is_noop(tmp_path):
+    ctx, emitted = _ctx(tmp_path, lambda: 0.0)
+    block = TimerBlock()
+    block.start(ctx, _config())
+    out = block.on_event(CoreEvent("action", {"op": "back"}))
+    assert out == ()
+    assert emitted == []
+    assert block._index == 0
