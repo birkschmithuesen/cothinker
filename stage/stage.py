@@ -2516,10 +2516,21 @@ sgBlockAnchorJump();
   // `share_part()`), so they are built here via a fixed structure plus
   // the escaped text interpolated into it, the same posture `decisions`/
   // `notices` already have server-side -- and like those, `queueApply()`/
-  // `shareApply()` only run from inside the mark-gated block of `tick()`
-  // below, never on every poll.
+  // `shareApply()` otherwise only run from inside the mark-gated block of
+  // `tick()` below, never on every poll. BUT the page bakes `mark` from
+  // the server's CURRENT fingerprint at render time (see `%MARK%` above),
+  // which already reflects `queue`/`share` if they are present in
+  // `buehne.json` the moment the page loads -- while the `#queue`/
+  // `#share` divs are always server-rendered empty (deliberately, see the
+  // page HTML below). Left alone, the very first poll would find
+  // `j.mark===mark` true by definition and never run `queueApply()`/
+  // `shareApply()` at all, leaving the sections empty forever. So the
+  // first poll ALWAYS applies them once, unconditionally, before the
+  // mark-gate is consulted -- exactly once, via `queueShareFirstPoll`;
+  // every later poll still goes through the normal mark-gated path below.
   var queueEl=document.getElementById('queue');
   var shareEl=document.getElementById('share');
+  var queueShareFirstPoll=true;
   function queueApply(data){
     if(!queueEl) return;
     if(!data || typeof data!=='object'){ queueEl.innerHTML=''; return; }
@@ -2585,6 +2596,21 @@ sgBlockAnchorJump();
       // on the surface happened to move.
       letzte=j;
       verlaufUebernehmen(j);
+      // Same reasoning as `agendaApply()` above, but `queue`/`share` DO
+      // ride the fingerprint (by design, to gate the swap/scroll logic
+      // further down) -- so unlike `agenda` they must NOT be applied on
+      // every poll. The one exception is the very first poll: the page
+      // bakes `mark` from the server's current fingerprint at render
+      // time, so if `queue`/`share` already existed in `buehne.json` when
+      // the page loaded, `j.mark===mark` is true from the start and the
+      // mark-gated call below would never fire. Apply once here,
+      // unconditionally, before the gate; every later poll still goes
+      // through the normal mark-gated call.
+      if(queueShareFirstPoll){
+        queueShareFirstPoll=false;
+        queueApply(j.queue);
+        shareApply(j.share);
+      }
       if(j.mark===mark) return;
       if(busy()) return;                                  // try again later
       mark=j.mark;
