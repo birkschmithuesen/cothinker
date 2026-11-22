@@ -26,7 +26,7 @@ python3 docs/architecture/inventory_check.py
 Expected output (exactly these two lines, exit code 0):
 
 ```
-cothinker@HEAD: 105 source files, 105 mapped, 0 unmapped, 0 stale, 0 unknown targets
+cothinker@HEAD: <N> source files, <N> mapped, 0 unmapped, 0 stale, 0 unknown targets
 OK
 ```
 
@@ -47,13 +47,13 @@ tables below are built from.
 | Block | Group | Source files (lines) | Used by | Built |
 |---|---|---|---|---|
 | segment (utterance batching) | Capture | `gateway/segmenter.py` 356, `shared/wake_word.py` 67 — 423 | core | 1× |
-| topic change | Capture | `gateway/topic_detect.py` 571, `topic_hysteresis.py` 95, `topic_laya_worker.py` 138, `topic_title.py` 202 — 1006 | Reflect | 1× |
+| topic change | Capture | `blocks/topics/detect.py` 571, `hysteresis.py` 95, `laya_worker.py` 138, `title.py` 202 — 1006 | Reflect | 1× |
 | decisions / tasks / open questions | Capture | `blocks/decisions_tasks_questions/{decide,decider,openrouter_jev,policy,policy_runner,questions}.py` — 2688 (`gateway/proposals.py` 68 stays in the session host) | Reflect | 1× |
-| minutes document | Condense + write | `shared/minutes_format.py` 441 | Reflect | 1× |
+| minutes document | Condense + write | `shared/minutes_format.py` 454, `blocks/minutes_document/__init__.py` 130, `blocks/minutes_document/minutes.py` 235 (the session host's `gateway/raw_transcript.py` writes the file) | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
 | mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
 | knowledge link (vault) | Agent behaviour | `blocks/knowledge_link/__init__.py` 123, `blocks/knowledge_link/wiki.py` 408, `shared/wiki_names.py` 49 (`graph/*.py`, the vault-note library, is a core library: `core:session`) | Reflect | 1× |
-| status line | Show + share | `blocks/status_line/__init__.py` 86, `line.py` 24 — 110 | Reflect | 1× |
+| status line | Show + share | `blocks/status_line/__init__.py` 143, `group.py` 57, `line.py` 24 — 224 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
 | timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
@@ -77,7 +77,7 @@ repository yet.
 | STT — thought end | 1594 | `stt/fundusapps/stt_server/thought_end.py` 514; `gateway/thought_end.py` 260, `thought_end_live.py` 402, `thought_end_laya_worker.py` 148, `smart_turn_worker.py` 270 | core |
 | STT — speaker labels | 1566 | `gateway/speaker_enroll.py` 606, `speaker_split.py` 423, `speaker_label.py` 278, `speaker_label_llm.py` 259 | core |
 | STT — correction | 858 | `gateway/correction.py` 733, `correction_prefilter.py` 125 | core |
-| core — session runtime | 5588 | `gateway/consumer.py` 4817, `shared/events.py`, `sync_safe.py`, `timing.py`, `conflict_triage.py`; `shared/__init__.py` | core |
+| core — session runtime | 5934 | `gateway/consumer.py` 4653, `shared/events.py` 179, `gateway/raw_transcript.py` 172, `sync_safe.py` 204, `timing.py` 207, `conflict_triage.py` 186, `block_host_wiring.py` 195, `legacy_stage_sink.py` 46; `shared/phases.py` 82, `shared/__init__.py` 1, `blocks/__init__.py` 9 | core |
 | core — Agent API | 1660 | `shared/agent.py` 387, `gateway/worker.py` 576, `lanes.py` 447, `agent_lane.py` 250 | core |
 | core — model clients | 614 | `gateway/infomaniak_chat.py` 178, `infomaniak_embed.py` 124, `infomaniak_limiter.py` 312 | core |
 | core — Instance API | 211 | `shared/instance.py` 128, `shared/profiles.py` 83 | core |
@@ -132,16 +132,24 @@ blocks/__init__.py                                                              
 blocks/condense/__init__.py                                                       block:condense
 blocks/condense/coverage.py                                                       block:condense
 blocks/condense/quotes.py                                                         block:condense
+blocks/minutes_document/__init__.py                                               block:minutes-document
+blocks/minutes_document/minutes.py                                                block:minutes-document
 blocks/speaking_share/__init__.py                                                 block:speaking-share
 blocks/speaking_share/room_talk_time.py                                           block:speaking-share
 blocks/speaking_share/talk_share.py                                               block:speaking-share
 blocks/status_line/__init__.py                                                   block:status-line
+blocks/status_line/group.py                                                      block:status-line
 blocks/status_line/line.py                                                       block:status-line
 blocks/timer/__init__.py                                                         block:timer
 blocks/timer/clock.py                                                            block:timer
 blocks/decisions_tasks_questions/__init__.py                                      block:decisions-tasks-questions
 blocks/speaker_queue/__init__.py                                                  block:speaker-queue
 blocks/speaker_queue/queue.py                                                     block:speaker-queue
+blocks/topics/__init__.py                                                         block:topics
+blocks/topics/detect.py                                                           block:topics
+blocks/topics/hysteresis.py                                                       block:topics
+blocks/topics/laya_worker.py                                                      block:topics
+blocks/topics/title.py                                                            block:topics
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
 gateway/conflict_triage.py                                                        core:session
@@ -162,6 +170,7 @@ blocks/decisions_tasks_questions/openrouter_jev.py                              
 blocks/decisions_tasks_questions/policy.py                                        block:decisions-tasks-questions
 blocks/decisions_tasks_questions/policy_runner.py                                 block:decisions-tasks-questions
 gateway/proposals.py                                                              core:session
+gateway/raw_transcript.py                                                         core:session
 shared/minutes_format.py                                                          block:minutes-document
 blocks/decisions_tasks_questions/questions.py                                     block:decisions-tasks-questions
 gateway/segmenter.py                                                              block:segment
@@ -178,10 +187,6 @@ gateway/thought_end.py                                                          
 gateway/thought_end_laya_worker.py                                                stt:thought-end
 gateway/thought_end_live.py                                                       stt:thought-end
 gateway/timing.py                                                                 core:session
-gateway/topic_detect.py                                                           block:topics
-gateway/topic_hysteresis.py                                                       block:topics
-gateway/topic_laya_worker.py                                                      block:topics
-gateway/topic_title.py                                                            block:topics
 blocks/knowledge_link/__init__.py                                                 block:knowledge-link
 blocks/knowledge_link/wiki.py                                                     block:knowledge-link
 gateway/worker.py                                                                 core:agent
@@ -202,10 +207,10 @@ shared/modules.py                                                               
 shared/phases.py                                                                  core:session
 shared/profiles.py                                                                core:instance
 shared/templates.py                                                               core:instance
-shared/surface.py                                                                  core:surface-api
 shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py               block:write-text
 shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py                block:write-text
-shared/speechmatics.py                                                           stt:engine-speechmatics
+shared/speechmatics.py                                                            stt:engine-speechmatics
+shared/surface.py                                                                  core:surface-api
 shared/text.py                                                                    surface:stage
 shared/utterance.py                                                              stt:engine-speechmatics
 shared/wake_word.py                                                               block:segment

@@ -53,9 +53,27 @@ def _links(writer: object, intent: ViewIntent, ids: dict[str, str]) -> None:
     writer.write()
 
 
+def _topic(writer: object, intent: ViewIntent, ids: dict[str, str]) -> None:
+    """A topic intent: the provisional one only needs the stage file
+    rewritten (the lane integration pushes the history entry from the
+    block's `topic` output); the final one swaps the provisional title in
+    place, as the lane integration's titler callback did, then rewrites."""
+    payload = intent.payload
+    if not payload.get("provisional", True):
+        old = payload.get("replaces")
+        state = getattr(writer, "state", None)
+        if old and state is not None:
+            for entry in reversed(list(state.history)):
+                if entry.title == old:
+                    state.retitle(entry.id, old, payload["title"])
+                    break
+    writer.write()
+
+
 HANDLERS: dict[str, Callable[[object, ViewIntent, dict[str, str]], None]] = {
     "pending": _apply_pending,
     "links": _links,
+    "topic": _topic,
 }
 
 

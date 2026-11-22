@@ -25,7 +25,7 @@ THE PROTOCOL (see gateway/thought_end.py for the shared description):
   out  {"id": -1, "error": "bad_request"}
 
 A SEPARATE FILE FROM THE TOPIC WORKER ON PURPOSE. Sub-project C ships
-`gateway/topic_laya_worker.py`, the same protocol with a different pinned
+`blocks/topics/laya_worker.py`, the same protocol with a different pinned
 question. Merging the two is a later card; doing it while both cards are
 open would mean two branches editing one file for no gain.
 

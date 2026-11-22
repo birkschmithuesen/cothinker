@@ -232,6 +232,9 @@ check("a failing wiki costs the links, never the title",
 # ================================================================ consumer
 print("\nconsumer: a topic action writes the links into the v2 protocol")
 from gateway import consumer  # noqa: E402
+import threading  # noqa: E402
+import gateway.block_host_wiring as bhw  # noqa: E402
+from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
 from shared import events as _events  # noqa: E402
 from stage_state import StageState  # noqa: E402
 
@@ -239,10 +242,23 @@ sitzung = projekt / "sitzungen" / "2026-09-26-obstwiese"
 sitzung.mkdir(parents=True)
 _HEAD = dict(title="Synthetischer Termin", entity="obstwiese", day="2026-09-26",
              pslug="obstwiese", participants="A, B", start="10:00")
+
+
+def _make_protocol(path, repo):
+    """`consumer.Protocol(path, repo)` moved out (issue #44): the raw
+    file plus a block host running only the minutes-document block,
+    wired exactly as `consumer.main()` wires them."""
+    minutes_file = consumer.MinutesFile(path, threading.RLock())
+    session_blocks = bhw.build_session_blocks(
+        session_dir=path.parent, sink=lambda intent: None, log=lambda *a: None,
+        registry={"minutes-document": MinutesDocumentBlock})
+    return consumer.MinutesPort(minutes_file, session_blocks, session_dir=path.parent)
+
+
 p_prot = sitzung / "protokoll.md"
 p_prot.write_text(consumer.protocol_header(**_HEAD, mode="sitzung"),
                   encoding="utf-8")
-prot = consumer.Protocol(p_prot, tmp)
+prot = _make_protocol(p_prot, tmp)
 check("fixture protocol is v2", prot.is_v2)
 zst = StageState()
 schreiber = consumer.StageWriter(sitzung, zst, log=lambda *a: None,
@@ -278,7 +294,7 @@ p2.write_text(consumer.protocol_header(**_HEAD, mode="sitzung"), encoding="utf-8
 schreiber2 = consumer.StageWriter(d2, zst2, log=lambda *a: None,
                                   proposals=d2 / "vorschlag.jsonl",
                                   events=_events.EventLog(d2 / "events.jsonl"))
-schreiber2.protocol = consumer.Protocol(p2, tmp)
+schreiber2.protocol = _make_protocol(p2, tmp)
 attach_wiki(schreiber2, Kaputt())
 with (d2 / "vorschlag.jsonl").open("a", encoding="utf-8") as fh:
     fh.write(json.dumps({"action": "topic", "title": "Kosten",
@@ -412,7 +428,7 @@ z_st = StageState()
 z_w = consumer.StageWriter(z_dir, z_st, log=lambda *a: None,
                            proposals=z_dir / "vorschlag.jsonl",
                            events=_events.EventLog(z_dir / "events.jsonl"))
-z_w.protocol = consumer.Protocol(z_prot, tmp)
+z_w.protocol = _make_protocol(z_prot, tmp)
 attach_wiki(z_w, wiki.WikiLayer(projekt))
 logs: list = []
 
@@ -569,7 +585,7 @@ class Kaputt2:
         raise RuntimeError("kaputt")
 
 
-z_w.protocol = consumer.Protocol(z_prot, tmp)
+z_w.protocol = _make_protocol(z_prot, tmp)
 check("a failing level 2 never raises into the turn",
       zuruf(z_w, Kaputt2(), "Robo, leg eine Seite an") is None)
 check("turn_orders runs page_call_out before policy_turn",
@@ -710,7 +726,7 @@ check("topic_title passes the session folder on",
 s_w = consumer.StageWriter(z_dir, StageState(), log=lambda *a: None,
                            proposals=z_dir / "vorschlag-suffix.jsonl",
                            events=_events.EventLog(z_dir / "events-suffix.jsonl"))
-s_w.protocol = consumer.Protocol(z_prot, tmp)
+s_w.protocol = _make_protocol(z_prot, tmp)
 attach_wiki(s_w, wiki.WikiLayer(projekt))
 with (z_dir / "vorschlag-suffix.jsonl").open("a", encoding="utf-8") as fh:
     fh.write(json.dumps({"action": "topic", "title": "Ausgaben",
@@ -749,7 +765,7 @@ e_st = StageState()
 e_w = consumer.StageWriter(e_dir, e_st, log=lambda *a: None,
                            proposals=e_dir / "vorschlag.jsonl",
                            events=_events.EventLog(e_dir / "events.jsonl"))
-e_w.protocol = consumer.Protocol(e_prot, tmp)
+e_w.protocol = _make_protocol(e_prot, tmp)
 attach_wiki(e_w, wiki.WikiLayer(projekt))
 lint_0 = wiki_lint.lint_project(projekt)
 

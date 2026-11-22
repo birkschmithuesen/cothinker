@@ -5,10 +5,13 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""The status-line block (ADR 0008, ADR 0018): picks the winning operating
-state (`listening`/`backlog`/`working`/`failed`) from `tick.components` and
-emits the view intent `status:line` only when the picked state or its
-detail actually changes.
+"""The status-line block (ADR 0008, ADR 0018), two users of the same
+package (issue #67):
+
+`mode = "meeting"` (default, Wave B.4): picks the winning operating state
+(`listening`/`backlog`/`working`/`failed`) from `tick.components` and emits
+the view intent `status:line` only when the picked state or its detail
+actually changes.
 
 `tick.components` is filled by two different callers today: the session
 ticker (`gateway/consumer.py`'s `ticker()`, once a second, only carries
@@ -28,11 +31,22 @@ transition, not on every single utterance the way the old direct
 `publish_status()` -> `set_status()` call did -- the alternative (putting
 a clock value in the payload, or re-emitting unconditionally) would have
 made the "only on change" rule pointless.
+
+`mode = "group"` (issue #67): the long format's group status (phase,
+progress of the piece), for the room and the operator. It tracks `phase`
+events and `block_output` facts (`piece_rev`, `interviews`, `findings`,
+each sticky the same way) and emits `status:group` (audience `room`) and
+`status:operator` (audience `operator`) only when the picked phase or
+progress actually changes. The progress derivation itself
+(`pick_progress()` and the two payload shapes) lives in
+`blocks/status_line/group.py` -- internals specific to this second user,
+kept out of the first user's file.
 """
 from __future__ import annotations
 
 from typing import Mapping, Sequence
 
+from blocks.status_line.group import group_payload, operator_payload
 from blocks.status_line.line import pick
 from shared.blocks import BLOCK_API_VERSION, BlockContext
 from shared.modules import CoreEvent
@@ -45,15 +59,58 @@ class StatusLineBlock:
 
     def __init__(self) -> None:
         self._ctx: BlockContext | None = None
+        self._mode = "meeting"
         self._queue_backlog = 0
         self._turn_running = False
         self._run_failed = False
         self._last_emitted: tuple | None = None
+        self._phase: str | None = None
+        self._piece_rev = None
+        self._interviews = None
+        self._findings = None
+        self._last_emitted_group: tuple | None = None
 
     def start(self, ctx: BlockContext, config: Mapping[str, object]) -> None:
         self._ctx = ctx
+        self._mode = config.get("mode", "meeting")
 
     def on_event(self, ev: CoreEvent) -> Sequence[CoreEvent]:
+        if self._mode == "group":
+            return self._on_event_group(ev)
+        return self._on_event_meeting(ev)
+
+    def _on_event_group(self, ev: CoreEvent) -> Sequence[CoreEvent]:
+        if ev.kind == "phase":
+            self._phase = ev.payload.get("id")
+        elif ev.kind == "block_output":
+            if "piece_rev" in ev.payload:
+                self._piece_rev = ev.payload["piece_rev"]
+            elif "interviews" in ev.payload:
+                self._interviews = ev.payload["interviews"]
+            elif "findings" in ev.payload:
+                self._findings = ev.payload["findings"]
+            else:
+                return ()
+        else:
+            return ()
+
+        current = (self._phase, repr(self._piece_rev), repr(self._interviews),
+                   repr(self._findings))
+        if current == self._last_emitted_group:
+            return ()
+        self._last_emitted_group = current
+        self._ctx.emit(ViewIntent(
+            id="status:group", block=self.id, kind="status", audience="room",
+            payload=group_payload(self._phase, self._piece_rev,
+                                   self._interviews, self._findings)))
+        self._ctx.emit(ViewIntent(
+            id="status:operator", block=self.id, kind="status",
+            audience="operator",
+            payload=operator_payload(self._phase, self._piece_rev,
+                                      self._interviews, self._findings)))
+        return ()
+
+    def _on_event_meeting(self, ev: CoreEvent) -> Sequence[CoreEvent]:
         if ev.kind != "tick":
             return ()
         components = ev.payload.get("components", {})

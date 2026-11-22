@@ -101,7 +101,11 @@ from graph.graph_build import GraphSource            # noqa: E402
 from graph.seed_note import find_or_create_seed      # noqa: E402
 from graph.vault_notes import DEFAULT_EXCLUDE        # noqa: E402
 from blocks.knowledge_link import KnowledgeLinkBlock  # noqa: E402
-from gateway.block_host_wiring import build_session_blocks, feed_utterance  # noqa: E402
+from gateway.block_host_wiring import (SessionBlocks, build_session_blocks,  # noqa: E402
+                                       feed_utterance)
+from gateway.raw_transcript import MinutesFile  # noqa: E402
+from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
+from blocks.minutes_document import minutes as minutes_block  # noqa: E402
 from gateway.legacy_stage_sink import make_sink      # noqa: E402
 
 ENTITIES = Path(os.environ.get(
@@ -488,7 +492,7 @@ und veraltet.
 # which is exactly the kind of half-rejected proposal the trace cannot
 # describe cleanly. One generic action keeps the two paths apart: stage
 # actions go through `StageState`, `tag_entry` goes straight to
-# `Protocol.add_entry()` (handled in `StageWriter.ingest()` before
+# `MinutesPort.add_entry()` (handled in `StageWriter.ingest()` before
 # `apply()`), and a v1 run refuses it with one reason (`v1_protocol`).
 #
 # `decision` doubles as `beschluss`: an accepted decision is shown on the
@@ -1204,7 +1208,7 @@ def sse_events(url: str, timeout: float | None = 300.0) -> Iterator[dict]:
         yield from parse_sse(r)
 
 
-# =============================================================== Protocol
+# ======================================================= session files
 def _flock(f) -> bool:
     """File lock across process boundaries, where the platform has one."""
     try:
@@ -1215,58 +1219,14 @@ def _flock(f) -> bool:
         return False
 
 
-@dataclass
-class EntryResult:
-    """What `Protocol.add_entry()` did. `reason` is "" when it landed.
+class SessionGit:
+    """Commits (and syncs) the session's files with git.
 
-    Reasons are fixed English words (the trace turns the space into an
-    underscore): "unknown tag", "no text", "not v2", "not written", and
-    "duplicate" for an entry identical to the last one of the current
-    block or a decision whose text is already filed as a decision anywhere
-    in the document. The link counts come from the wikilink check and are numbers
-    only, so they can go into the trace as they are.
-    """
-    reason: str = ""
-    links_seen: int = 0
-    links_dead: int = 0
-
-
-_HHMM_RE = re.compile(r"\A([01]\d|2[0-3]):[0-5]\d\Z")
-
-
-def _decision_key(text: str) -> str:
-    """A decision's text for comparison: lower case, whitespace collapsed."""
-    return " ".join(text.split()).casefold()
-
-
-def _stamp_or_now(stamp) -> str:
-    """`stamp` if it is a proper HH:MM, otherwise the current minute."""
-    if isinstance(stamp, str) and _HHMM_RE.match(stamp.strip()):
-        return stamp.strip()
-    return f"{datetime.now():%H:%M}"
-
-
-class Protocol:
-    """The protocol in the vault.
-
-    Only the consumer writes into `## Rohtranskript`. In v1 the agent
-    maintains the sections above it. Because the agent is a separate
-    process and replaces the whole file, it can lose appended raw lines
-    between its own read and write. `restore_missing()` detects that and
-    writes them back — the lock alone cannot prevent this, because the
-    agent never takes it.
-
-    In v2 (`is_v2`) the consumer is the ONLY writer of the whole file: the
-    agent proposes tagged entries, `open_topic()` / `add_entry()` put them
-    in. Those two read, splice and replace the file under `self.lock`, the
-    same lock every raw append takes -- so no raw line can land between
-    the read and the replace and be lost by it.
+    A session-host concern, nothing to do with rendering the minutes: it
+    commits the protocol file and whatever else the session wrote.
     """
 
     def __init__(self, path: Path, repo: Path,
-                 report: Callable[[bool], None] | None = None,
-                 conflict_dirs: Iterable[Path] | None = None,
-                 mode: str = DEFAULT_MODE,
                  commit_scope: Iterable[str] = ()):
         self.path = Path(path)
         self.repo = Path(repo)
@@ -1274,330 +1234,10 @@ class Protocol:
         # files the call lane wrote in a COTHINKER_PROJECT_DIR repo).
         # Empty = only the protocol, as before.
         self.commit_scope = [str(s) for s in commit_scope]
-        # The mode picks the sections of the derived view (render_view).
-        self.mode = mode if mode in MODES else DEFAULT_MODE
-        # Decided by the file as it is at start: a v1 file of the same day
-        # continues as v1. Re-checked on every v2 write.
-        try:
-            text = self.path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        self.is_v2 = is_v2_text(text)
-        # An existing v2 file keeps the mode it was created with: the flag
-        # only chooses the mode of a NEW file. A restart with another
-        # `--mode` must not re-render this meeting's overview under other
-        # section headings.
-        if self.is_v2:
-            recorded = read_mode(text)
-            if recorded is not None and recorded != self.mode:
-                log(f"mode flag {self.mode} ignored: the protocol was "
-                    f"created as {recorded}")
-                self.mode = recorded
-        # Where to look for sync conflict copies. The protocol's own folder
-        # always; the project folder as well once the protocol sits one
-        # level down in `sessions/<YYYY-MM-DD>-<slug>/`, because rclone
-        # bisync writes its `.conflictN` copies wherever the second writer
-        # touched a file -- and the round's documents, the ones a parallel
-        # session is most likely to edit, are still in the project folder.
-        # Looking only next to the protocol would have made the warning
-        # blind to exactly the case AGENTS.md documents.
-        self.conflict_dirs = [Path(d) for d in
-                              (conflict_dirs
-                               if conflict_dirs is not None
-                               else [self.path.parent])]
-        self.lock = threading.RLock()
-        self._rohzeilen: list[str] = []
         self._git_faden: threading.Thread | None = None
         self._git_sperre = threading.Lock()
         self._fernstelle: bool | None = None
-        # Called after every write attempt with True or False. A failed
-        # write to the protocol is the most expensive failure this program
-        # has -- the raw transcript is unrecoverable -- and it used to be
-        # one line on stdout that nobody in the room ever sees.
-        self.report = report or (lambda ok: None)
 
-    # -------------------------------------------------------------- write
-    @staticmethod
-    def line(text, speaker=None, stempel: str | None = None) -> str:
-        """One raw-transcript line. Exactly one line, always.
-
-        The recognized text is foreign text: line breaks in it would tear
-        the list apart and could put a heading into the protocol that the
-        agent would then mistake for its own. It is scrubbed for the same
-        reason it is scrubbed on the way to the stage -- a lone surrogate
-        in it makes `f.write()` raise inside the SSE reader, which is
-        exactly where nothing may raise.
-        """
-        text = re.sub(r"\s+", " ", scrub(str(text))).strip()
-        stempel = stempel or f"{datetime.now():%H:%M}"
-        wer = ""
-        if speaker:
-            wer = "*" + re.sub(r"\s+", " ", str(speaker)).strip() + ":* "
-        return f"- **{stempel}** {wer}{text}\n"
-
-    def append_raw(self, text, speaker=None) -> None:
-        zeile = self.line(text, speaker)
-        with self.lock:
-            self._rohzeilen.append(zeile)
-            self._write(zeile)
-
-    def append_note(self, inhalt: str) -> bool:
-        """Append a note of the consumer's own to the protocol file.
-
-        The public way in for everything that is not an utterance -- the
-        closing line at the end of the meeting. Returns whether it landed.
-        """
-        return self._write(inhalt)
-
-    def _write(self, inhalt: str) -> bool:
-        """Append to the protocol. Returns whether it actually landed.
-
-        The return value is not decoration: `restore_missing()` used to
-        report N restored lines whether or not the write succeeded, so a
-        full disk announced "🧵 N Rohzeilen nachgetragen — jemand anders
-        hat ins Protokoll geschrieben" to the round: a foreign writer that
-        does not exist, and a restoration that did not happen, while the
-        raw transcript was in fact running into nothing.
-
-        `UnicodeEncodeError` is caught alongside `OSError`: it is a
-        `ValueError`, not an `OSError`, and speech recognition delivers
-        foreign text. `line()` scrubs, so this is the second net.
-        """
-        ok = False
-        with self.lock:
-            try:
-                with open(self.path, "a", encoding="utf-8") as f:
-                    _flock(f)
-                    f.write(inhalt)
-                    f.flush()
-                    os.fsync(f.fileno())
-                ok = True
-            except (OSError, UnicodeError) as e:
-                log("protocol not writable:", e)
-        # The report reaches into the stage writer, i.e. it takes
-        # `StageWriter._lock` while `Protocol.lock` may still be held by a
-        # caller. That direction is the only one there is: nothing that
-        # holds the writer's lock ever touches the protocol.
-        try:
-            self.report(ok)
-        except Exception as e:            # noqa: BLE001 — never fail a write
-            log("protocol report failed:", repr(e))
-        return ok
-
-    # ------------------------------------------------------------ v2 writes
-    def open_topic(self, title, stamp=None) -> bool:
-        """Append `### HH:MM Titel` -- a new topic block. v2 only.
-
-        Called once per ACCEPTED `topic` action, the same trigger as the
-        stage's topic change; there is no second one. Never raises.
-        """
-        clean = clean_line(title if isinstance(title, str) else "", 120)
-        if not clean:
-            return False
-        when = _stamp_or_now(stamp)
-
-        def build(topics: list) -> str:
-            topics.append(Topic(time=when, title=clean, entries=[]))
-            return topic_line(when, clean)
-
-        return self._rewrite(build) == ""
-
-    def add_entry(self, tag, text, *, stamp=None,
-                  names: Iterable[str] | None = None) -> EntryResult:
-        """Append `- HH:MM [tag] Text` to the current topic block. v2 only.
-
-        An entry before any topic block opens `### HH:MM Beginn`. With
-        `names` (the project's file stems) every `[[wikilink]]` is checked
-        and a dead one is reduced to plain text BEFORE it is written --
-        the protocol must not promise a file that is not there. An entry
-        identical (tag and text) to the last one of the current block is
-        not appended again, and neither is a `beschluss` whose text
-        (case-insensitive, whitespace-normalised) equals ANY decision
-        already in the document: the same decision can reach this method
-        twice -- once via `decision`, once as a `tag_entry` -- and the
-        overview must not list it twice. Never raises; see `EntryResult`.
-        """
-        if not isinstance(tag, str) or tag not in TAGS:
-            return EntryResult("unknown tag")
-        if not isinstance(text, str):
-            return EntryResult("no text")
-        seen = dead = 0
-        # The pre-processing sits inside the same never-raise promise as
-        # the write: `names` comes from the caller and a stray value in it
-        # (not iterable, not a string) must cost this entry, not the turn.
-        try:
-            if names is not None:
-                text, seen, dead = clean_wikilinks(
-                    text, {n for n in names if isinstance(n, str)})
-            clean = clean_line(text, 500)
-            when = _stamp_or_now(stamp)
-        except Exception as e:            # noqa: BLE001 -- see the docstring
-            log("entry not prepared:", repr(e))
-            return EntryResult("not written", seen, dead)
-        if not clean:
-            return EntryResult("no text", seen, dead)
-
-        def build(topics: list) -> str | None:
-            append = ""
-            if not topics:
-                topics.append(Topic(time=when, title="Beginn", entries=[]))
-                append = topic_line(when, "Beginn")
-            current = topics[-1]
-            last = current.entries[-1] if current.entries else None
-            if last is not None and last.tag == tag and last.text == clean:
-                return None
-            if tag == "beschluss":
-                key = _decision_key(clean)
-                if any(entry.tag == "beschluss"
-                       and _decision_key(entry.text) == key
-                       for topic in topics for entry in topic.entries):
-                    return None
-            current.entries.append(Entry(time=when, tag=tag, text=clean))
-            return append + entry_line(when, tag, clean)
-
-        return EntryResult(self._rewrite(build), seen, dead)
-
-    def current_topic(self) -> tuple[str, str]:
-        """(key, title) of the LAST topic block; ("", "") when there is
-        none (or the file cannot be read, or is not v2). The key names the
-        block for this run: its position, time and title line -- two blocks
-        with the same heading still differ by position. Read under the
-        lock, like every v2 write. Never raises."""
-        try:
-            with self.lock:
-                with open(self.path, encoding="utf-8", newline="",
-                          errors="surrogateescape") as f:
-                    text = f.read()
-            if not is_v2_text(text):
-                return "", ""
-            topics = parse_topics(text)
-            if not topics:
-                return "", ""
-            t = topics[-1]
-            return f"{len(topics)}|{t.time}|{t.title}", t.title
-        except Exception as e:            # noqa: BLE001 -- see the docstring
-            log("protocol not read:", repr(e))
-            return "", ""
-
-    def current_topic_title(self) -> str:
-        """The title line of the LAST topic block, "" when there is none.
-        Never raises."""
-        return self.current_topic()[1]
-
-    def _rewrite(self, build: Callable[[list], str | None]) -> str:
-        """Read, splice, replace -- the one way a v2 write happens.
-
-        Everything under `self.lock`: `append_raw()` takes the same lock,
-        so a raw line cannot be appended between the read and the replace
-        and then be lost by it. The raw section is carried through
-        byte-identically by `splice()`; reading and writing with
-        `newline=""` and `surrogateescape` keeps it byte-identical on disk
-        as well, whatever line endings or stray bytes it holds.
-
-        `build(topics)` gets the parsed topic blocks, adds what it appends
-        to them (so the view includes it) and returns the lines to append,
-        or None for "nothing to do" (a duplicate). Returns "" on success or
-        the reason. Never raises: this runs on the agent thread, and a
-        failure is logged and reported like any other protocol write.
-        """
-        ok: bool | None = None
-        reason = ""
-        with self.lock:
-            try:
-                with open(self.path, encoding="utf-8", newline="",
-                          errors="surrogateescape") as f:
-                    text = f.read()
-                if not is_v2_text(text):
-                    self.is_v2 = False
-                    return "not v2"
-                topics = parse_topics(text)
-                append = build(topics)
-                if append is None:
-                    return "duplicate"
-                new = splice(text, view=render_view(topics, self.mode),
-                             append=append)
-                self._replace(new)
-                ok = True
-            except Exception as e:        # noqa: BLE001 -- see the docstring
-                log("protocol not written:", repr(e))
-                ok, reason = False, "not written"
-        try:
-            self.report(ok)
-        except Exception as e:            # noqa: BLE001 — never fail a write
-            log("protocol report failed:", repr(e))
-        return reason
-
-    def _replace(self, text: str) -> None:
-        """Write `text` to a temp file next to the protocol, fsync, replace.
-
-        Next to it, not in /tmp: `os.replace()` is atomic only within one
-        file system. A failed attempt leaves no temp file behind.
-        """
-        tmp = self.path.with_name(f".{self.path.name}.tmp")
-        try:
-            with open(tmp, "w", encoding="utf-8", newline="",
-                      errors="surrogateescape") as f:
-                f.write(text)
-                f.flush()
-                os.fsync(f.fileno())
-            try:
-                shutil.copymode(self.path, tmp)
-            except OSError:
-                pass
-            os.replace(tmp, self.path)
-        except BaseException:
-            try:
-                tmp.unlink()
-            except OSError:
-                pass
-            raise
-        # The rename itself lives in the directory entry: without an fsync
-        # of the folder a crash right after can bring back the OLD file.
-        # Best effort -- not every file system lets a directory be opened
-        # or synced, and the new content is already safely on disk.
-        try:
-            fd = os.open(self.path.parent, os.O_RDONLY)
-            try:
-                os.fsync(fd)
-            finally:
-                os.close(fd)
-        except OSError:
-            pass
-
-    # ------------------------------------------------------ restore_missing
-    def restore_missing(self) -> int:
-        """Checks whether all written raw lines are still in the file, and
-        writes back any that are missing. Returns the number RESTORED --
-        zero when the write back failed, because the warning this feeds
-        claims both that a foreign writer touched the file and that the
-        lines are back."""
-        with self.lock:
-            if not self._rohzeilen:
-                return 0
-            try:
-                inhalt = self.path.read_text(encoding="utf-8", errors="replace")
-            except OSError as e:
-                log("protocol not readable:", e)
-                return 0
-            vorhanden = set(inhalt.splitlines())
-            fehlend = [z for z in self._rohzeilen if z.rstrip("\n") not in vorhanden]
-            if not fehlend:
-                return 0
-            log(f"warning: {len(fehlend)} raw lines were missing from the "
-                f"protocol — restoring (external write?)")
-            kopf = (f"\n*Nachgetragen {datetime.now():%H:%M} — {len(fehlend)} "
-                    f"Zeilen waren aus dem Rohtranskript verschwunden.*\n")
-            if not self._write(kopf + "".join(fehlend)):
-                log("  restoring failed — the lines are still missing")
-                return 0
-            return len(fehlend)
-
-    def conflict_files(self) -> list[Path]:
-        """Conflict files (Nextcloud, Syncthing, git) in the watched folders."""
-        # Patterns shared with the post-meeting triage (conflict_triage.py).
-        return find_conflicts(self.conflict_dirs)
-
-    # ---------------------------------------------------------------- git
     def _git(self, *args: str, timeout: float = 180) -> subprocess.CompletedProcess:
         return subprocess.run(
             ["git", *args], cwd=self.repo, capture_output=True, text=True,
@@ -1672,6 +1312,155 @@ class Protocol:
             faden.join(timeout)
 
 
+class MinutesPort:
+    """The session host's adapter to the minutes-document block.
+
+    The minutes document's face for the rest of the host: `add_entry`,
+    `open_topic`, `current_topic*`, `is_v2`, `mode`. The block renders the sections; this
+    class sends it events and carries its rendered head into the file through
+    `MinutesFile.write_sections` -- the host stays the file's only writer.
+
+    The block host dispatches synchronously on the caller's thread, so the
+    block's result (`last_result()`) and the `_tl.write_failed` flag set by
+    `_on_output` belong to the thread that is inside `_send`.
+
+    Every call holds `file.lock` across the dispatch (the same span
+    the old in-consumer minutes class held); `write_sections` re-enters it. The lock order
+    stays file.lock -> StageWriter._lock (via report).
+    """
+
+    def __init__(self, file: MinutesFile, blocks: SessionBlocks, *,
+                 session_dir: Path, mode: str = DEFAULT_MODE,
+                 block_id: str = "minutes-document", log=log):
+        self.file = file
+        self.blocks = blocks
+        self.session_dir = Path(session_dir)
+        self.block_id = block_id
+        self._log = log
+        self._tl = threading.local()
+        blocks.on_output(self._on_output)
+        with file.lock:
+            blocks.dispatch("block_output", {"minutes_open": {
+                "path": str(file.path), "mode": mode}})
+
+    # --------------------------------------------------------- properties
+    @property
+    def path(self) -> Path:
+        return self.file.path
+
+    @property
+    def lock(self):
+        return self.file.lock
+
+    def _block(self):
+        return self.blocks.get(self.block_id)
+
+    @property
+    def is_v2(self) -> bool:
+        b = self._block()
+        return bool(b.is_v2) if b is not None else False
+
+    @property
+    def mode(self) -> str:
+        b = self._block()
+        return b.mode if b is not None else DEFAULT_MODE
+
+    # -------------------------------------------------------------- calls
+    def append_raw(self, text, speaker=None) -> bool:
+        """Host-only convenience: the raw line, never through a block."""
+        return self.file.append_raw(text, speaker)
+
+    def current_topic(self) -> tuple[str, str]:
+        """(key, title) of the last topic block; ("", "") if none. Never raises."""
+        try:
+            b = self._block()
+            if b is None:
+                return "", ""
+            with self.file.lock:
+                return b.current_topic()
+        except Exception as e:            # noqa: BLE001 -- see the docstring
+            self._log("protocol not read:", repr(e))
+            return "", ""
+
+    def current_topic_title(self) -> str:
+        return self.current_topic()[1]
+
+    def add_entry(self, tag, text, *, stamp=None,
+                  names: Iterable[str] | None = None) -> "minutes_block.EntryResult":
+        """Never raises; see `blocks.minutes_document.minutes.EntryResult`."""
+        # `names` goes through untouched: the block's own never-raise guard
+        # covers a stray value (not iterable, not a string) in it.
+        return self._send("entry", {
+            "tag": tag, "text": text, "stamp": stamp, "names": names})
+
+    def open_topic(self, title, stamp=None) -> bool:
+        return self._send("topic", {"title": title, "stamp": stamp}).reason == ""
+
+    def _send(self, key: str, body: dict) -> "minutes_block.EntryResult":
+        res = minutes_block.EntryResult("not written")
+        with self.file.lock:
+            self._tl.write_failed = False
+            try:
+                self.blocks.dispatch("block_output", {key: body})
+                b = self._block()
+                got = b.last_result() if b is not None else None
+                res = got or minutes_block.EntryResult("not written")
+            except Exception as e:        # noqa: BLE001 -- never raise
+                self._log("protocol not written:", repr(e))
+            if res.reason == "" and getattr(self._tl, "write_failed", False):
+                res = minutes_block.EntryResult(
+                    "not written", res.links_seen, res.links_dead)
+        ok = {"": True, "not written": False}.get(res.reason)
+        if not getattr(res, "attempted", True):
+            ok = None       # failed before any write: nothing to report
+        if ok is not None:
+            try:
+                self.file.report(ok)
+            except Exception as e:        # noqa: BLE001 -- never fail a write
+                self._log("protocol report failed:", repr(e))
+        return res
+
+    def _on_output(self, payload) -> None:
+        """Splice the block's rendered head into the file, then drop the artefact."""
+        try:
+            changed = payload.get("minutes_changed") if hasattr(payload, "get") else None
+            if not changed:
+                return
+            art = (self.session_dir / "artefacts" / self.block_id
+                   / str(changed.get("name", "protokoll.md")))
+            try:
+                with open(art, encoding="utf-8", newline="",
+                          errors="surrogateescape") as f:
+                    text = f.read()
+                self.file.write_sections(text)
+            except Exception as e:        # noqa: BLE001 -- see below
+                self._log("protocol not written:", repr(e))
+                self._tl.write_failed = True
+                return
+            try:
+                art.unlink()
+            except OSError:
+                pass
+        except Exception as e:            # noqa: BLE001 -- listeners never raise
+            self._log("minutes output not handled:", repr(e))
+            self._tl.write_failed = True
+
+
+def open_minutes(path: Path, *, mode: str = DEFAULT_MODE,
+                 report: Callable[[bool], None] | None = None,
+                 session_dir: Path | None = None,
+                 log=lambda *a: None) -> MinutesPort:
+    """A MinutesPort over a private block host holding only the minutes
+    block. For tests and helpers; `main()` builds its own."""
+    path = Path(path)
+    file = MinutesFile(path, threading.RLock(), report)
+    sdir = Path(session_dir) if session_dir is not None else path.parent
+    blocks = build_session_blocks(
+        session_dir=sdir, sink=lambda i: None, log=log,
+        registry={"minutes-document": MinutesDocumentBlock})
+    return MinutesPort(file, blocks, session_dir=sdir, mode=mode)
+
+
 # ============================================================ prefilter
 # German: this lands on a surface a meeting reads (AGENTS.md naming
 # convention). Distinct from correction.HEADER on purpose: that one
@@ -1696,7 +1485,7 @@ def write_prefiltered(path: Path, text, speaker=None, stamp: str | None = None) 
     SSE reader, right after the raw line is already on disk.
 
     Never raises: a broken prefilter must cost this display file a line,
-    never the raw transcript that `Protocol.append_raw` already wrote
+    never the raw transcript that `MinutesFile.append_raw` already wrote
     (AGENTS.md -- every utterance lands in the raw transcript first).
     On failure the raw text is written instead, so the display file
     never gets gaps.
@@ -1706,7 +1495,7 @@ def write_prefiltered(path: Path, text, speaker=None, stamp: str | None = None) 
     except Exception as e:                    # noqa: BLE001 -- see docstring
         log("prefilter skipped:", type(e).__name__)
         gefiltert = text
-    zeile = Protocol.line(gefiltert, speaker, stamp)
+    zeile = MinutesFile.line(gefiltert, speaker, stamp)
     try:
         neu = not path.exists() or path.stat().st_size == 0
         with open(path, "a", encoding="utf-8") as f:
@@ -1824,7 +1613,7 @@ def turn_protocol_format(writer, log) -> tuple[int, bool]:
     """The protocol format of the NEXT turn: (fmt, switched).
 
     v2 only while `writer.protocol` is set AND the file is still v2.
-    `Protocol._rewrite()` flips `is_v2` off when it finds the file is no
+    The minutes block flips `is_v2` off when it finds the file is no
     longer v2 (someone rewrote it as v1 mid-run). From then on the file
     is the agent's again, the v1 way: the writer lets go of it (a
     `tag_entry` is refused as `v1_protocol`, a decision is no longer
@@ -2351,8 +2140,7 @@ def default_lane_command(*, python_exe: str, worker_py: Path, model: str,
 
 def build_lanes(a, log: Callable[..., None], *, call_command: list,
                 coach_command: list, session_id: str, project_agenda: str,
-                state, writer, folder: Path, path: Path, run_dir: Path,
-                titler_factory: Callable | None = None):
+                state, writer, folder: Path, path: Path, run_dir: Path):
     """The meeting's `lane_integration.Lanes`, including the agent-seam
     wiring for `COTHINKER_AGENT=api`.
 
@@ -2406,9 +2194,6 @@ def build_lanes(a, log: Callable[..., None], *, call_command: list,
                 os.environ.get("COTHINKER_EXTRA_DIRS", ""))),
         history_path=run_dir / "coach-history.jsonl",
         coach_min_delay_s=a.lane_coach_delay,
-        topic_threshold=a.topic_threshold,
-        topic_min_age_s=a.topic_min_s,
-        titler_factory=titler_factory,
         coach_rhythm=a.coach_rhythm,
         call_lane_factory=call_lane_factory,
         coach_lane_factory=coach_lane_factory,
@@ -2492,7 +2277,7 @@ class StageWriter:
         # project file stems every entry's wikilinks are checked against,
         # refreshed by `run_turn` at the start of a turn and again right
         # before its proposals are read; None means "no check".
-        self.protocol: Protocol | None = None
+        self.protocol: MinutesPort | None = None
         self.link_names: set[str] | None = None
         # Level 2 (the decisions-tasks-questions block) when `--policy` is
         # on: gives an order id's marker and hears when it arrived. None
@@ -2505,11 +2290,11 @@ class StageWriter:
         # before. Interim handle (Wave B.5).
         self.knowledge_link = KnowledgeLinkBlock()
         # MM-G: at most ONE topic page per protocol topic block per run.
-        # Block key (`Protocol.current_topic`) -> the page. Both threads
+        # Block key (`MinutesPort.current_topic`) -> the page. Both threads
         # that create pages (the decider via level 2, the agent via the
         # Zuruf) meet in `file_topic_page`, which holds `_page_lock` from
         # the check to the registration. LOCK ORDER: `_page_lock` FIRST,
-        # then `Protocol.lock` / this writer's `_lock` -- nobody takes it
+        # then `MinutesPort.lock` / this writer's `_lock` -- nobody takes it
         # while holding either.
         self._page_lock = threading.Lock()
         self._topic_pages: dict[str, Path] = {}
@@ -2606,7 +2391,7 @@ class StageWriter:
 
         Traces `entry_added kind=<tag>` and the wikilink counts -- numbers
         and tokens only, the entry's text never reaches the trace. The
-        caller decides what a refusal is called in the trace. Protocol
+        caller decides what a refusal is called in the trace. Minutes
         writes are not surface changes: `self.applied` is not touched.
 
         `mark` is a level-2 marker (`*(autonom)*`, `*(bestätigt HH:MM)*`):
@@ -2680,7 +2465,7 @@ class StageWriter:
         agent thread both call this.
 
         CALLER'S DUTY: hold neither `StageWriter._lock` nor
-        `StageState._lock` -- filing takes `Protocol.lock`, whose report
+        `StageState._lock` -- filing takes `MinutesPort.lock`, whose report
         takes the writer's lock.
         """
         with self._page_lock:
@@ -2965,7 +2750,7 @@ class StageWriter:
             # purpose -- so the documented order is unchanged.
             if isinstance(action, dict) and action.get("action") == "tag_entry":
                 # Protocol v2: an entry for the protocol, not the surface.
-                # Never under a lock of ours -- Protocol takes its own.
+                # Never under a lock of ours -- the minutes port takes its own.
                 self._tag_entry(action)
                 continue
             if isinstance(action, dict) and action.get("action") == "graph":
@@ -3018,7 +2803,7 @@ class StageWriter:
                 self.trace("decision_dropped", id=dropped)
             if protocol_step is not None:
                 # Outside every lock but the protocol's own (lock order:
-                # nothing holding StageState._lock calls into Protocol).
+                # nothing holding StageState._lock calls into the minutes port).
                 if self._apply_protocol_step(protocol_step):
                     # Here too, outside the state's lock: delivered()
                     # settles a pending and writes the stage.
@@ -3319,18 +3104,6 @@ def main() -> int:
                     help="minimum seconds after a confirmed topic start "
                          "before the coach lane may contribute (default: "
                          f"{lane_integration_mod.COACH_MIN_DELAY_S:.0f})")
-    ap.add_argument("--topic-threshold", type=float,
-                    default=lane_integration_mod.THRESHOLD,
-                    help="neues_thema probability (single block) that "
-                         "confirms a topic change -- FINAL per the operator's "
-                         "2026-10-20 measurement across 4 sessions "
-                         f"(default: {lane_integration_mod.THRESHOLD:.2f})")
-    ap.add_argument("--topic-min-s", type=float,
-                    default=lane_integration_mod.MIN_TOPIC_AGE_S,
-                    help="minimum age in seconds of the running topic "
-                         "before a change can be confirmed -- FINAL, same "
-                         "measurement (default: "
-                         f"{lane_integration_mod.MIN_TOPIC_AGE_S:.0f})")
     ap.add_argument("--coach-rhythm", action="store_true",
                     default=os.environ.get("COTHINKER_COACH_RHYTHM") == "1",
                     help="--lanes only: the coach speaks at a topic's START "
@@ -3340,13 +3113,6 @@ def main() -> int:
                          "[SILENT] costs no slot, spoken: >= 8 min apart, "
                          "<= 4/h. Off = the one-shot-per-topic trigger. "
                          "Env COTHINKER_COACH_RHYTHM=1.")
-    ap.add_argument("--topic-titles", action="store_true",
-                    help="--lanes only: a confirmed topic change gets a "
-                         "short model-made title (2-5 words, one "
-                         "claude-haiku-4-5 call over the plan proxy, off "
-                         "the hot path, 4 s budget) that replaces the "
-                         "provisional first-line title in place. Off by "
-                         "default. gateway/topic_title.py.")
     ap.add_argument("--speaker-split", action="store_true",
                     help="--speakers only: an utterance >= 4 s is embedded "
                          "in 1.5 s windows; a speaker change inside it "
@@ -3616,24 +3382,30 @@ def main() -> int:
         else:
             writer.clear_warning(warning_text("protocol"))
 
+    minutes_file = MinutesFile(path, threading.RLock(), report=protocol_report)
+    minutes_doc = MinutesPort(minutes_file, session_blocks, session_dir=run_dir,
+                              mode=a.mode)
     # With COTHINKER_PROJECT_DIR the project is its own git repo (a plain
     # clone outside $COTHINKER_ENTITIES): git must run there, not in
     # ENTITIES.parent, or every commit -- the shutdown one included -- fails.
-    prot = Protocol(path, (folder if os.environ.get("COTHINKER_PROJECT_DIR",
-                                                    "").strip()
-                           else ENTITIES.parent),
-                    report=protocol_report,
-                    # The session folder AND the project folder above it:
-                    # the round's documents stay in the project folder, and
-                    # that is where a second writer produces `.conflictN`.
-                    conflict_dirs=([run_dir] if orte["flat"]
-                                   else [run_dir, folder]),
-                    mode=a.mode,
-                    commit_scope=project_commit_scope(folder, run_dir))
+    session_git = SessionGit(
+        path,
+        (folder if os.environ.get("COTHINKER_PROJECT_DIR", "").strip()
+         else ENTITIES.parent),
+        commit_scope=project_commit_scope(folder, run_dir))
+    # Where to look for sync conflict copies. The protocol's own folder
+    # always; the project folder as well once the protocol sits one
+    # level down in `sessions/<YYYY-MM-DD>-<slug>/`, because rclone
+    # bisync writes its `.conflictN` copies wherever the second writer
+    # touched a file -- and the round's documents, the ones a parallel
+    # session is most likely to edit, are still in the project folder.
+    # Looking only next to the protocol would have made the warning
+    # blind to exactly the case AGENTS.md documents.
+    conflict_dirs = [run_dir] if orte["flat"] else [run_dir, folder]
     # v2: the consumer files the protocol's entries itself. v1: the agent
     # does, and the writer refuses `tag_entry`.
-    writer.protocol = prot if prot.is_v2 else None
-    log("protocol format:", 2 if prot.is_v2 else 1)
+    writer.protocol = minutes_doc if minutes_doc.is_v2 else None
+    log("protocol format:", 2 if minutes_doc.is_v2 else 1)
     # The decisions-tasks-questions block owns the level-1 decider (OFF
     # unless COTHINKER_DECIDER is set -- no surprise network call in a
     # running meeting; a backend that cannot be built is one log line) and,
@@ -3641,13 +3413,13 @@ def main() -> int:
     # and only where every part it relies on is there -- the decider's
     # answers, a protocol the consumer files into, an agent to formulate
     # the orders. Anything missing is one log line and the meeting runs
-    # as before. `prot.mode` is the mode the existing file was created
-    # with, not the flag's: the policy table must match the protocol.
+    # as before. `minutes_doc.mode` is the mode the existing file was
+    # created with, not the flag's: the policy table must match it.
     decisions = session_blocks.get("decisions-tasks-questions")
     decisions.attach(
         writer, decisions_path=orte["decisions"], session_dir=run_dir,
         project_dir=folder, events=trace, log=log, policy=a.policy,
-        no_agent=a.no_agent, mode=prot.mode,
+        no_agent=a.no_agent, mode=minutes_doc.mode,
         wants_page=writer.knowledge_link.wants_page,
         order_note_for=order_note_for)
     if writer.protocol is not None:
@@ -3670,7 +3442,7 @@ def main() -> int:
         clear, and the restored-lines warning is a past event.
         """
         try:
-            files = prot.conflict_files()
+            files = find_conflicts(conflict_dirs)
         except OSError as e:
             log("conflict check skipped:", repr(e))
             return False
@@ -3683,14 +3455,14 @@ def main() -> int:
     conflicts_seen = [refresh_conflicts()]
     if conflicts_seen[0]:
         log("warning: conflict files in the project folder:",
-            ", ".join(p.name for p in prot.conflict_files()[:5]))
+            ", ".join(p.name for p in find_conflicts(conflict_dirs)[:5]))
         log("    A sync service is writing too. Better switch it off during the meeting.")
     writer.write()
     if (not a.no_agent and not a.dry_agent and not a.worker_command
             and shutil.which("hermes") is None):
         log("warning: 'hermes' is not in PATH — the worker will start under "
             f"{sys.executable}, which most likely cannot import Hermes.")
-    prot.git(f"Live-Mitschrift begonnen: {title}")
+    session_git.git(f"Live-Mitschrift begonnen: {title}")
 
     # One long-lived agent per meeting. It is started lazily, on the first
     # turn: the round should be transcribed from the first second, and a
@@ -3758,17 +3530,11 @@ def main() -> int:
         # bare participant list.
         project_agenda = project_agenda_text(title, a.participants, agenda)
 
-        def _titler_factory(on_title, on_fail):
-            from topic_title import TopicTitler
-            log("topic titles on: claude-haiku-4-5 via the plan proxy, 4 s")
-            return TopicTitler(on_title, on_fail=on_fail, log=log)
-
         lanes = build_lanes(
             a, log, call_command=call_command, coach_command=coach_command,
             session_id=session_id, project_agenda=project_agenda,
             state=state, writer=writer, folder=folder, path=path,
-            run_dir=run_dir,
-            titler_factory=(_titler_factory if a.topic_titles else None))
+            run_dir=run_dir)
         if a.coach_rhythm:
             log("coach rhythm on: start / end / long pause, pause >= "
                 f"{lane_integration_mod.COACH_PAUSE_S:.0f} s")
@@ -3776,9 +3542,27 @@ def main() -> int:
         log(f"lanes on: call started={call_started}, "
             f"coach started={coach_started}")
         if decisions.decider_on:
-            # Runs after the block's own handling (level 2 first), the
-            # coach's hysteresis feed -- it reads the same result.
-            decisions.add_result_hook(lanes.on_decider_result)
+            # Confirmed topic changes come from the `topics` block
+            # (issue #39): the block's `topic` output reaches the coach
+            # lane through the host listener; this hook is what feeds
+            # the block.
+            def _lanes_feeds_topics(result, snap, reason) -> None:
+                by_id = result.by_id()
+                previous = list(getattr(snap, "previous", None) or [])
+                block_text = str(getattr(snap, "block", "") or "")
+                lanes.note_decider_block(block_text)
+                session_blocks.dispatch("block_output", {"decider_result": {
+                    "neues_thema": (by_id.get("neues_thema") or {}).get("p"),
+                    "rueckkehr_thema":
+                        (by_id.get("rueckkehr_thema") or {}).get("p"),
+                    "block": block_text,
+                    "previous": str(previous[-1]) if previous else "",
+                }})
+
+            decisions.add_result_hook(_lanes_feeds_topics)
+            session_blocks.on_output(
+                lambda payload: lanes.on_topic(payload["topic"])
+                if "topic" in payload else None)
         else:
             log("lanes: coach gets no topic signal -- needs COTHINKER_DECIDER")
 
@@ -3925,7 +3709,7 @@ def main() -> int:
             # along with this very turn.
             extra_note, gesprochen = decisions.turn_orders(fmt, b)
             prompt = build_prompt(
-                prot.path, proposals_path, b, state,
+                minutes_file.path, proposals_path, b, state,
                 backlog_note=(BACKLOG_NOTE if b.reason in ("batch", "carry")
                               else ""),
                 order_note=order_note_for(fmt, b.wake_word) + extra_note,
@@ -4229,7 +4013,7 @@ def main() -> int:
                 continue
             naechste = time.monotonic() + a.check_every
             try:
-                restored = prot.restore_missing()
+                restored = minutes_file.restore_missing()
                 if restored:
                     writer.warn(warning_text("restored", count=restored))
                     writer.write()
@@ -4242,7 +4026,7 @@ def main() -> int:
                     conflicts_seen[0] = now_conflicted
                     log("warning: conflict files in the project folder:"
                         if now_conflicted else "conflict files are gone.",
-                        ", ".join(p.name for p in prot.conflict_files()[:5]))
+                        ", ".join(p.name for p in find_conflicts(conflict_dirs)[:5]))
                 writer.write()
             except Exception as e:        # noqa: BLE001
                 log("watchdog error (continuing):", repr(e))
@@ -4260,7 +4044,7 @@ def main() -> int:
         try:
             if time.monotonic() - letzter_commit[0] > a.commit_every:
                 letzter_commit[0] = time.monotonic()
-                prot.git("Live-Mitschrift laeuft")
+                session_git.git("Live-Mitschrift laeuft")
         except Exception as e:            # noqa: BLE001
             log("commit skipped:", repr(e))
 
@@ -4439,11 +4223,11 @@ def main() -> int:
                     try:
                         if turns:
                             for turn in turns:
-                                feed_utterance(prot, session_blocks, turn.text, turn.name,
+                                feed_utterance(minutes_file, session_blocks, turn.text, turn.name,
                                               {"t_start": turn.t_start, "t_end": turn.t_end,
                                                "at": time.time()})
                         else:
-                            feed_utterance(prot, session_blocks, text, spk,
+                            feed_utterance(minutes_file, session_blocks, text, spk,
                                           {"t_start": t_start, "t_end": t_end,
                                            "at": time.time()})
                     except Exception as e:         # noqa: BLE001
@@ -4678,18 +4462,18 @@ def main() -> int:
     # the evening.
     writer.set_status("listening", at=datetime.now().strftime("%H:%M:%S"))
     writer.write()
-    prot.restore_missing()
+    minutes_file.restore_missing()
     # Closes this meeting in the append-only trace: everything between
     # `meeting_started` and here belongs to one run.
     trace.record("meeting_ended", count=n)
-    prot.append_note(f"\n*Mitschrift beendet {datetime.now():%H:%M} — "
+    minutes_file.append_note(f"\n*Mitschrift beendet {datetime.now():%H:%M} — "
                      f"{n} Aeusserungen.*\n")
     if queue.failed:
         log(f"note: {queue.failed} agent runs failed.")
     if worker.restarts:
         log(f"note: the worker was restarted {worker.restarts} times.")
-    prot.git_wait(60)
-    prot._git_run(f"Live-Mitschrift beendet ({n} Aeusserungen)")
+    session_git.git_wait(60)
+    session_git._git_run(f"Live-Mitschrift beendet ({n} Aeusserungen)")
     # Last step, still under the sync lock and as the folder's only
     # writer: sort `.conflictN` fragments into konflikte-<date>/ (moved,
     # never deleted). A triage problem must never break the shutdown.

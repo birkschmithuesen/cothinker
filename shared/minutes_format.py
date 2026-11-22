@@ -372,6 +372,19 @@ def splice(text: str, *, view: str, append: str) -> str:
     return prefix + view + themen_section + raw
 
 
+def split_raw(text: str) -> tuple[str, str]:
+    """(head, tail): the tail starts at the raw section's heading line.
+
+    `head + tail == text`. The tail is "" when there is no such heading.
+    Lets a caller that renders the document hand over only the part in
+    front of the raw section.
+    """
+    m = _ROH_LINE_RE.search(text)
+    if m is None:
+        return text, ""
+    return text[:m.start()], text[m.start():]
+
+
 # --- wikilinks -----------------------------------------------------------
 
 _WIKILINK_RE = re.compile(r"\[\[([^\]|]+)(?:\|([^\]]+))?\]\]")

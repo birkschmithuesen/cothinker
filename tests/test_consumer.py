@@ -604,7 +604,7 @@ def sec_03(sec_02):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot = k.Protocol(pfad, tmp)
+        prot = k.MinutesFile(pfad, threading.RLock())
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
 
@@ -669,11 +669,12 @@ def sec_03(sec_02):
         skript = f"""
 import sys
 sys.path.insert(0, {str(Path(__file__).resolve().parents[1])!r})
-from gateway.consumer import Protocol
+import threading
+from gateway.raw_transcript import MinutesFile
 from pathlib import Path
 p = Path({str(tmp / 'locale-test.md')!r})
 p.write_text("## Rohtranskript\\n", encoding="utf-8")
-Protocol(p, p.parent).append_raw("Gr\\u00fc\\u00dfe aus dem \\u20ac-Raum", None)
+MinutesFile(p, threading.RLock()).append_raw("Gr\\u00fc\\u00dfe aus dem \\u20ac-Raum", None)
 print("ok")
 """
     except Exception:  # noqa: BLE001
@@ -697,7 +698,7 @@ print("ok")
 
     # 16 — lost raw lines are detected and restored
     try:
-        prot2 = k.Protocol(tmp / "verlust.md", tmp)
+        prot2 = k.MinutesFile(tmp / "verlust.md", threading.RLock())
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -756,8 +757,8 @@ print("ok")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(58, "conflict file detected", len(prot.conflict_files()) == 1,
-              repr([p.name for p in prot.conflict_files()]))
+        _chk(58, "conflict file detected", len(k.find_conflicts([tmp])) == 1,
+              repr([p.name for p in k.find_conflicts([tmp])]))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     return rec
@@ -812,7 +813,7 @@ def sec_04(sec_03):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        gprot = k.Protocol(gdatei, grepo)
+        gprot = k.SessionGit(gdatei, grepo)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
 
@@ -888,7 +889,7 @@ def sec_04(sec_03):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        gprot2 = k.Protocol(gdatei, grepo)          # fresh look at the remote
+        gprot2 = k.SessionGit(gdatei, grepo)          # fresh look at the remote
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -3236,8 +3237,8 @@ def sec_27(sec_26):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_weg = k.Protocol(d_prot / "gibt-es-nicht" / "protokoll.md", d_prot,
-                              report=gemeldet.append)
+        prot_weg = k.MinutesFile(d_prot / "gibt-es-nicht" / "protokoll.md",
+                                 threading.RLock(), report=gemeldet.append)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -3268,7 +3269,8 @@ def sec_27(sec_26):
             schreibgeschuetzt = d_prot / "readonly.md"
             schreibgeschuetzt.write_text("## Rohtranskript\n", encoding="utf-8")
             gemeldet2 = []
-            prot_ro = k.Protocol(schreibgeschuetzt, d_prot, report=gemeldet2.append)
+            prot_ro = k.MinutesFile(schreibgeschuetzt, threading.RLock(),
+                                   report=gemeldet2.append)
             k.log = lambda *a: None
             prot_ro.append_raw("Satz eins")
             prot_ro.append_raw("Satz zwei")
@@ -5387,7 +5389,7 @@ def sec_38(sec_37):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_v2 = k.Protocol(p_neu, _v2)
+        prot_v2 = k.open_minutes(p_neu)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5403,7 +5405,7 @@ def sec_38(sec_37):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_v1 = k.Protocol(p_alt, _v2)
+        prot_v1 = k.open_minutes(p_alt)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5412,93 +5414,16 @@ def sec_38(sec_37):
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(356, "a missing file is not v2 and does not raise",
-              k.Protocol(_v2 / "fehlt" / "x.md", _v2).is_v2 is False)
+              k.open_minutes(_v2 / "fehlt" / "x.md", session_dir=_v2).is_v2 is False)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     return rec
 
 
-@pytest.fixture(scope="module")
-def sec_39(sec_38):
-    """Scenario: v2: an existing file keeps the mode it was created with"""
-    global _REC
-    _REC = rec = _Recorder()
-    global mode_log, prot_m, prot_m2, text_m
-
-    try:
-        print("\nv2: an existing file keeps the mode it was created with")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        mode_log = []
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k.log = lambda *a: mode_log.append(" ".join(map(str, a)))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        prot_m = k.Protocol(v2_datei("modus.md", mode="arbeit"), _v2, mode="sitzung")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k.log = alt_log
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(357, "the frontmatter's modus wins over the flag", prot_m.mode == "arbeit",
-              prot_m.mode)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(358, "the difference is logged",
-              any("sitzung" in z and "arbeit" in z for z in mode_log), str(mode_log))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        prot_m.add_entry("idee", "Vorschlag", stamp="10:10")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_m = prot_m.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(359, "the re-rendered view keeps the arbeit sections",
-              "### Ideen" in text_m and "### Beschlüsse" not in text_m, text_m[:700])
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        mode_log.clear()
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k.log = lambda *a: mode_log.append(" ".join(map(str, a)))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        prot_m2 = k.Protocol(v2_datei("modus2.md", mode="folge"), _v2, mode="folge")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k.log = alt_log
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(360, "a matching flag is taken silently",
-              prot_m2.mode == "folge" and mode_log == [], str(mode_log))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(361, "a v1 file keeps the flag's mode (no v2 frontmatter to read)",
-              k.Protocol(p_alt, _v2, mode="arbeit").mode == "arbeit")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    return rec
 
 
 @pytest.fixture(scope="module")
-def sec_40(sec_39):
+def sec_40(sec_38):
     """Scenario: v1: a tag_entry is refused, the file is not touched"""
     global _REC
     _REC = rec = _Recorder()
@@ -5541,380 +5466,12 @@ def sec_40(sec_39):
     return rec
 
 
-@pytest.fixture(scope="module")
-def sec_41(sec_40):
-    """Scenario: v2: tagged entries land in the current block"""
-    global _REC
-    _REC = rec = _Recorder()
-    global _alt_stamp, d2, gruende, jetzt, prot_a, roh_teil, st2, text_a, vor2, w2, zeilen
 
-    try:
-        print("\nv2: tagged entries land in the current block")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        prot_a = k.Protocol(v2_datei("a.md"), _v2)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k.log = lambda *a: None
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        prot_a.append_raw("Roh eins")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        w2, st2, d2 = v2_schreiber("w2", prot_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        vor2 = w2.applied
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        vorschlagen(w2, d2, {"action": "tag_entry", "tag": "aufgabe",
-                             "text": "Kosten klaeren", "time": "10:05"})
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_a = prot_a.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(365, "an entry before any topic opens `Beginn`",
-              "### 10:05 Beginn\n- 10:05 [aufgabe] Kosten klaeren\n" in text_a, text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(366, "entry_added kind=aufgabe is traced",
-              any(e["event"] == "entry_added" and e.get("kind") == "aufgabe"
-                  for e in spur(d2 / "events.jsonl")))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(367, "a tag_entry does not count as a surface change", w2.applied == vor2)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(368, "the view lists it under Aufgaben",
-              "- 10:05 Kosten klaeren (Thema: Beginn)" in
-              text_a.split("## Themen")[0].split("### Aufgaben")[1], text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        prot_a.append_raw("Roh zwei")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
 
-    # Pin the clock for the topic change: the "10:30" decision below must
-    # predate the block, which a real-clock stamp only does after 10:30.
-    try:
-        jetzt = "11:00"
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _alt_stamp = k._stamp_or_now
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k._stamp_or_now = lambda stamp=None: (
-            jetzt if not (isinstance(stamp, str) and k._HHMM_RE.match(stamp.strip()))
-            else stamp.strip())
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        try:
-            vorschlagen(w2, d2, {"action": "topic", "title": "Budget 2027",
-                                 "markdown": "## Budget"})
-        finally:
-            k._stamp_or_now = _alt_stamp
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_a = prot_a.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(369, "an accepted topic opens `### HH:MM Titel`",
-              re.search(r"^### \d\d:\d\d Budget 2027$", text_a, re.M) is not None
-              and st2.main.title == "Budget 2027", text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(370, "stamped with the time of the change (the pinned clock)",
-              f"### {jetzt} Budget 2027" in text_a, text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(371, "an accepted topic stays a surface change",
-              w2.applied == vor2 + 1, f"{vor2} -> {w2.applied}")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        vorschlagen(w2, d2, {"action": "topic", "title": "Zu frueh",
-                             "markdown": "## Nein"})
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_a = prot_a.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(372, "a brake-rejected topic opens no block", "Zu frueh" not in text_a, text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    try:
-        vorschlagen(w2, d2, {"action": "tag_entry", "tag": "idee",
-                             "text": "Stiftung fragen"})
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        vorschlagen(w2, d2, {"action": "tag_entry", "tag": "idee",
-                             "text": "Stiftung fragen"})
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_a = prot_a.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(373, "the entry lands in the current block with the current time",
-              re.search(r"### \d\d:\d\d Budget 2027\n- \d\d:\d\d \[idee\] Stiftung fragen\n",
-                        text_a) is not None, text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(374, "an identical consecutive entry is not appended twice",
-              text_a.count("[idee] Stiftung fragen") == 1, text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    try:
-        vorschlagen(w2, d2, {"action": "decision", "time": "10:30",
-                             "text": "Antrag wird gestellt"})
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_a = prot_a.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(375, "an accepted decision becomes a beschluss entry",
-              "- 10:30 [beschluss] Antrag wird gestellt\n" in text_a, text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(376, "the view is re-rendered: Beschlüsse lists it",
-              # this version files an entry under the LAST open block, whatever
-              # its stamp says
-              "- 10:30 Antrag wird gestellt (Thema: Budget 2027)"
-              in text_a.split("### Beschlüsse")[1].split("### Aufgaben")[0], text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(377, "the view no longer says *noch keine* for Beschlüsse",
-              "*noch keine*" not in
-              text_a.split("### Beschlüsse")[1].split("### Aufgaben")[0], text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(378, "a decision's protocol entry is traced as entry_added kind=beschluss",
-              any(e["event"] == "entry_added" and e.get("kind") == "beschluss"
-                  for e in spur(d2 / "events.jsonl")))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        vorschlagen(w2, d2, {"action": "tag_entry", "tag": "idee", "text": "Dazwischen"})
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        vorschlagen(w2, d2, {"action": "tag_entry", "tag": "beschluss",
-                             "text": "  antrag   WIRD gestellt "})
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_a = prot_a.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(379, "the same decision as a later tag_entry is not filed twice",
-              text_a.lower().count("[beschluss] antrag wird gestellt") == 1, text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k.log = lambda *a: None
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(380, "add_entry says why: duplicate",
-              prot_a.add_entry("beschluss", "ANTRAG wird  gestellt").reason
-              == "duplicate")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(381, "another decision still lands",
-              prot_a.add_entry("beschluss", "Antrag wird vertagt").reason == "")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k.log = alt_log
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_a = prot_a.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(382, "the overview lists the decision once",
-              text_a.split("### Beschlüsse")[1].split("### Aufgaben")[0]
-              .lower().count("antrag wird gestellt") == 1, text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    try:
-        vorschlagen(w2, d2, {"action": "tag_entry", "tag": "meinung", "text": "egal"},
-                    {"action": "tag_entry", "tag": "frage", "text": "   "})
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        gruende = [e.get("reason") for e in spur(d2 / "events.jsonl")
-                   if e["event"] == "proposal_rejected"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(383, "an unknown tag is refused", "unknown_tag" in gruende, str(gruende))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(384, "an empty text is refused", "no_text" in gruende, str(gruende))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_a = prot_a.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(385, "neither reached the file", "meinung" not in text_a
-              and "[frage]" not in text_a, text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    try:
-        prot_a.append_raw("Roh drei")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_a = prot_a.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        roh_teil = text_a[text_a.index("## Rohtranskript"):]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        zeilen = [z for z in roh_teil.splitlines() if z.startswith("- **")]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(386, "raw lines before, between and after the rewrites all survive, in order",
-              [z.split("** ", 1)[1] for z in zeilen] == ["Roh eins", "Roh zwei", "Roh drei"],
-              roh_teil)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(387, "byte-identical to what append_raw wrote",
-              roh_teil == "## Rohtranskript\n" + "".join(prot_a._rohzeilen), roh_teil)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(388, "restore_missing() finds nothing missing after the rewrites",
-              prot_a.restore_missing() == 0)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(389, "no temp file is left behind",
-              [p.name for p in _v2.iterdir() if p.name.startswith(".a.md")] == [])
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(390, "topic blocks appear in the order they were opened",
-              text_a.index("\n### 10:05 Beginn") < text_a.index("Budget 2027\n- "),
-              text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    return rec
 
 
 @pytest.fixture(scope="module")
-def sec_42(sec_41):
-    """Scenario: v2: wikilinks are checked when the entry is written"""
-    global _REC
-    _REC = rec = _Recorder()
-    global ev, text_a
-
-    try:
-        print("\nv2: wikilinks are checked when the entry is written")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        w2.link_names = {"kostenplan", "leitfaden"}
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        vorschlagen(w2, d2, {"action": "tag_entry", "tag": "aufgabe",
-                             "text": "Zahlen aus [[kostenplan]] und [[gibtsnicht|Altplan]]"})
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        text_a = prot_a.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(391, "the existing link stays, the dead one becomes its label",
-              "[aufgabe] Zahlen aus [[kostenplan]] und Altplan\n" in text_a, text_a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = spur(d2 / "events.jsonl")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(392, "wikilink_seen count=2", any(e["event"] == "wikilink_seen"
-                                           and e.get("count") == 2 for e in ev), str(ev[-4:]))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(393, "wikilink_dead count=1", any(e["event"] == "wikilink_dead"
-                                           and e.get("count") == 1 for e in ev), str(ev[-4:]))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        vorschlagen(w2, d2, {"action": "tag_entry", "tag": "notiz",
-                             "text": "nur [[leitfaden]]"})
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = spur(d2 / "events.jsonl")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(394, "no wikilink_dead when nothing was dead",
-              sum(1 for e in ev if e["event"] == "wikilink_dead") == 1, str(ev[-4:]))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(395, "no text reaches the trace",
-              "Stiftung" not in (d2 / "events.jsonl").read_text(encoding="utf-8")
-              and "Budget" not in (d2 / "events.jsonl").read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    return rec
-
-
-@pytest.fixture(scope="module")
-def sec_43(sec_42):
+def sec_43(sec_40):
     """Scenario: v2: what fell off the stage is filed by the consumer itself"""
     global _REC
     _REC = rec = _Recorder()
@@ -5938,7 +5495,7 @@ def sec_43(sec_42):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_u = k.Protocol(v2_datei("u.md"), _v2)
+        prot_u = k.open_minutes(v2_datei("u.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6026,64 +5583,10 @@ def sec_43(sec_42):
     return rec
 
 
-@pytest.fixture(scope="module")
-def sec_44(sec_43):
-    """Scenario: v2: a write failure is reported, never raised"""
-    global _REC
-    _REC = rec = _Recorder()
-    global d_ro, e, erg, erg_weg, gemeldet_v2, oeffnen, p_ro, prot_ro2, vorher_ro
-
-    try:
-        print("\nv2: a write failure is reported, never raised")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        if os.geteuid() != 0:
-            d_ro = _v2 / "ro"
-            d_ro.mkdir()
-            p_ro = d_ro / "protokoll.md"
-            p_ro.write_text(consumer.protocol_header(**_HEAD, mode="sitzung"),
-                            encoding="utf-8")
-            gemeldet_v2 = []
-            prot_ro2 = k.Protocol(p_ro, _v2, report=gemeldet_v2.append)
-            vorher_ro = p_ro.read_bytes()
-            os.chmod(d_ro, 0o555)
-            try:
-                erg = prot_ro2.add_entry("aufgabe", "geht nicht")
-                oeffnen = prot_ro2.open_topic("Auch nicht")
-            except Exception as e:  # noqa: BLE001
-                erg, oeffnen = e, e
-            finally:
-                os.chmod(d_ro, 0o755)
-            _chk(404, "add_entry returns 'not written' instead of raising",
-                  getattr(erg, "reason", None) == "not written", repr(erg))
-            _chk(405, "open_topic returns False instead of raising", oeffnen is False,
-                  repr(oeffnen))
-            _chk(406, "the failure is reported", gemeldet_v2 and not any(gemeldet_v2),
-                  str(gemeldet_v2))
-            _chk(407, "the file is untouched", p_ro.read_bytes() == vorher_ro)
-            _chk(408, "no temp file is left behind",
-                  sorted(p.name for p in d_ro.iterdir()) == ["protokoll.md"])
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        erg_weg = k.Protocol(_v2 / "fehlt2" / "p.md", _v2).add_entry("frage", "x")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(409, "a missing file is 'not v2' (never v2 at start) and does not raise",
-              erg_weg.reason in ("not v2", "not written"), erg_weg.reason)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k.log = alt_log
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    return rec
 
 
 @pytest.fixture(scope="module")
-def sec_45(sec_44):
+def sec_45(sec_43):
     """Scenario: v2 prompt: the agent proposes tagged entries, the protocol is read-only"""
     global _REC
     _REC = rec = _Recorder()
@@ -6425,7 +5928,7 @@ def sec_49(sec_48):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_fb = k.Protocol(p_fb, _v2)
+        prot_fb = k.open_minutes(p_fb)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6499,7 +6002,7 @@ def sec_50(sec_49):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_pr = k.Protocol(v2_datei("pr.md"), _v2)
+        prot_pr = k.open_minutes(v2_datei("pr.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6567,138 +6070,12 @@ def sec_50(sec_49):
     return rec
 
 
-@pytest.fixture(scope="module")
-def sec_51(sec_50):
-    """Scenario: add_entry never raises on odd input"""
-    global _REC
-    _REC = rec = _Recorder()
-    global args, e, kw, odd_results, prot_odd
 
-    try:
-        print("\nadd_entry never raises on odd input")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        prot_odd = k.Protocol(v2_datei("odd.md"), _v2)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k.log = lambda *a: None
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        odd_results = []
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        for args, kw in ((("aufgabe", "x"), {"names": 5}),
-                         (("aufgabe", "x [[a]]"), {"names": [None, 3, "a"]}),
-                         ((["aufgabe"], "x"), {}),
-                         (("aufgabe", None), {}),
-                         (("aufgabe", "kaputt \ud800 text"), {}),
-                         (("aufgabe", "y"), {"stamp": object()}),
-                         (("aufgabe", 12), {})):
-            try:
-                odd_results.append(prot_odd.add_entry(*args, **kw))
-            except Exception as e:  # noqa: BLE001
-                odd_results.append(e)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        k.log = alt_log
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(457, "every odd call returns an EntryResult",
-              all(isinstance(r, k.EntryResult) for r in odd_results), repr(odd_results))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(458, "the file is still v2 and parseable afterwards",
-              _pd.is_v2(prot_odd.path.read_text(encoding="utf-8", errors="replace")))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    return rec
+
 
 
 @pytest.fixture(scope="module")
-def sec_52(sec_51):
-    """Scenario: _replace fsyncs the folder after the rename (best effort)"""
-    global _REC
-    _REC = rec = _Recorder()
-    global _dir_fsync_kaputt, _zaehl_fsync, dir_syncs, echt_fsync, erg_fs, prot_fs
-
-    try:
-        print("\n_replace fsyncs the folder after the rename (best effort)")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        prot_fs = k.Protocol(v2_datei("fs.md"), _v2)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        echt_fsync = k.os.fsync
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        dir_syncs = []
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-
-    def _zaehl_fsync(fd):
-        import stat as _stat
-        if _stat.S_ISDIR(os.fstat(fd).st_mode):
-            dir_syncs.append(fd)
-        return echt_fsync(fd)
-
-
-    try:
-        k.os.fsync = _zaehl_fsync
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        try:
-            prot_fs.add_entry("notiz", "mit Ordner-fsync")
-        finally:
-            k.os.fsync = echt_fsync
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(459, "the parent directory was fsynced", len(dir_syncs) >= 1)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-
-    def _dir_fsync_kaputt(fd):
-        import stat as _stat
-        if _stat.S_ISDIR(os.fstat(fd).st_mode):
-            raise OSError("synthetic: no dir fsync here")
-        return echt_fsync(fd)
-
-
-    try:
-        k.os.fsync = _dir_fsync_kaputt
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        try:
-            erg_fs = prot_fs.add_entry("notiz", "trotzdem geschrieben")
-        finally:
-            k.os.fsync = echt_fsync
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(460, "a failing directory fsync does not fail the write",
-              erg_fs.reason == "" and "trotzdem geschrieben"
-              in prot_fs.path.read_text(encoding="utf-8"), erg_fs.reason)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    return rec
-
-
-@pytest.fixture(scope="module")
-def sec_53(sec_52):
+def sec_53(sec_50):
     """Scenario: level 2: a proposal answering an order gets its marker"""
     global _REC
     _REC = rec = _Recorder()
@@ -6747,7 +6124,7 @@ def sec_53(sec_52):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_o = k.Protocol(v2_datei("order.md"), _v2)
+        prot_o = k.open_minutes(v2_datei("order.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6789,7 +6166,7 @@ def sec_53(sec_52):
         rec.error += traceback.format_exc()[-1200:]
 
     try:
-        prot_t = k.Protocol(v2_datei("order-topic.md"), _v2)
+        prot_t = k.open_minutes(v2_datei("order-topic.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6832,7 +6209,7 @@ def sec_53(sec_52):
         rec.error += traceback.format_exc()[-1200:]
 
     try:
-        prot_b = k.Protocol(v2_datei("order-decision.md"), _v2)
+        prot_b = k.open_minutes(v2_datei("order-decision.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6875,7 +6252,7 @@ def sec_53(sec_52):
         rec.error += traceback.format_exc()[-1200:]
 
     try:
-        prot_g = k.Protocol(v2_datei("order-garbage.md"), _v2)
+        prot_g = k.open_minutes(v2_datei("order-garbage.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6933,11 +6310,11 @@ def sec_54(sec_53):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_off = k.Protocol(v2_datei("order-off.md"), _v2)
+        prot_off = k.open_minutes(v2_datei("order-off.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        prot_ref = k.Protocol(v2_datei("order-ref.md"), _v2)
+        prot_ref = k.open_minutes(v2_datei("order-ref.md"))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -7974,7 +7351,7 @@ def sec_73(sec_72):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _pw.protocol = consumer.Protocol(_ppath, _ptmp, mode="sitzung")
+        _pw.protocol = consumer.open_minutes(_ppath, mode="sitzung")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -8084,145 +7461,6 @@ def sec_74(sec_73):
         rec.error += traceback.format_exc()[-1200:]
     return rec
 
-
-@pytest.fixture(scope="module")
-def sec_75(sec_74):
-    """Scenario: lagging entry: filed under the topic block its stamp belongs to"""
-    global _REC
-    _REC = rec = _Recorder()
-    global _lp, _lp_before, _lp_roh, _lp_t, _lp_top
-
-    try:
-        print("\nlagging entry: filed under the topic block its stamp belongs to")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp = k.Protocol(v2_datei("lagging.md"), _v2)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp.open_topic("Thema A", stamp="12:20")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp.add_entry("notiz", "Erste in A", stamp="12:21")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp.open_topic("Thema B", stamp="12:25")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp.add_entry("notiz", "Erste in B", stamp="12:26")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp_before = _lp.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp_roh = _lp_before[_lp_before.index("## Rohtranskript"):]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp.add_entry("aufgabe", "Nachzuegler A", stamp="12:23")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp_t = _lp.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp_top = _pd.parse_topics(_lp_t)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(567, "(a) stamp 12:23 lands in block A, after its entries",
-              [e.text for e in _lp_top[0].entries] == ["Erste in A", "Nachzuegler A"],
-              str([[e.text for e in t.entries] for t in _lp_top]))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(568, "(a) block B untouched and heading order unchanged",
-              [e.text for e in _lp_top[1].entries] == ["Erste in B"]
-              and [t.title for t in _lp_top] == ["Thema A", "Thema B"])
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(569, "(a) the new line sits before B's heading",
-              # looked up within the topics section: the derived overview above
-              # it also names the line, which would make a plain index() pass
-              _lp_t.index("Nachzuegler A", _lp_t.index("## Themen"))
-              < _lp_t.index("### 12:25 Thema B"))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(1567, "(a) a lagging stamp 12:23 lands in the last block, after its entries",
-              [e.text for e in _lp_top[1].entries] == ["Erste in B", "Nachzuegler A"],
-              str([[e.text for e in t.entries] for t in _lp_top]))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(1568, "(a) block A untouched and heading order unchanged (lagging line goes to the last block)",
-              [e.text for e in _lp_top[0].entries] == ["Erste in A"]
-              and [t.title for t in _lp_top] == ["Thema A", "Thema B"])
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(1569, "(a) the new line sits after B's heading",
-              _lp_t.rindex("Nachzuegler A") > _lp_t.index("### 12:25 Thema B"))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp.add_entry("aufgabe", "Nachzuegler B", stamp="12:26")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp_top = _pd.parse_topics(_lp.path.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(570, "(b) stamp 12:26 lands in block B",
-              [e.text for e in _lp_top[1].entries]
-              == ["Erste in B", "Nachzuegler A", "Nachzuegler B"])
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp.add_entry("notiz", "Ohne Stempel")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp_top = _pd.parse_topics(_lp.path.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(571, "(c) no stamp -> last block",
-              _lp_top[-1].entries[-1].text == "Ohne Stempel")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp.add_entry("notiz", "Zu frueh", stamp="11:00")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp_top = _pd.parse_topics(_lp.path.read_text(encoding="utf-8"))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(572, "no block qualifies -> last block (fallback)",
-              _lp_top[-1].entries[-1].text == "Zu frueh")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _lp_t = _lp.path.read_text(encoding="utf-8")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(573, "(d) Rohtranskript unchanged",
-              _lp_t[_lp_t.index("## Rohtranskript"):] == _lp_roh)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    return rec
 
 
 
@@ -8818,15 +8056,6 @@ def test_38_protocol_v2_the_consumer_is_the_only_writer_of_pro(sec_38, site, occ
     _assert_site(sec_38, site, occ)
 
 
-@pytest.mark.parametrize("site, occ", [
-    pytest.param(357, None, id="the frontmatter's modus wins over the flag"),
-    pytest.param(358, None, id='the difference is logged'),
-    pytest.param(359, None, id='the re-rendered view keeps the arbeit sections'),
-    pytest.param(360, None, id='a matching flag is taken silently'),
-    pytest.param(361, None, id="a v1 file keeps the flag's mode (no v2 frontmatter to read)"),
-])
-def test_39_v2_an_existing_file_keeps_the_mode_it_was_created_(sec_39, site, occ):
-    _assert_site(sec_39, site, occ)
 
 
 @pytest.mark.parametrize("site, occ", [
@@ -8838,47 +8067,8 @@ def test_40_v1_a_tag_entry_is_refused_the_file_is_not_touched(sec_40, site, occ)
     _assert_site(sec_40, site, occ)
 
 
-@pytest.mark.parametrize("site, occ", [
-    pytest.param(365, None, id='an entry before any topic opens `Beginn`'),
-    pytest.param(366, None, id='entry_added kind=aufgabe is traced'),
-    pytest.param(367, None, id='a tag_entry does not count as a surface change'),
-    pytest.param(368, None, id='the view lists it under Aufgaben'),
-    pytest.param(369, None, id='an accepted topic opens `### HH:MM Titel`'),
-    pytest.param(370, None, id='stamped with the time of the change (the pinned clock)'),
-    pytest.param(371, None, id='an accepted topic stays a surface change'),
-    pytest.param(372, None, id='a brake-rejected topic opens no block'),
-    pytest.param(373, None, id='the entry lands in the current block with the current time'),
-    pytest.param(374, None, id='an identical consecutive entry is not appended twice'),
-    pytest.param(375, None, id='an accepted decision becomes a beschluss entry'),
-    pytest.param(376, None, id='the view is re-rendered: Beschlüsse lists it'),
-    pytest.param(377, None, id='the view no longer says *noch keine* for Beschlüsse'),
-    pytest.param(378, None, id="a decision's protocol entry is traced as entry_added kind=beschluss"),
-    pytest.param(379, None, id='the same decision as a later tag_entry is not filed twice'),
-    pytest.param(380, None, id='add_entry says why: duplicate'),
-    pytest.param(381, None, id='another decision still lands'),
-    pytest.param(382, None, id='the overview lists the decision once'),
-    pytest.param(383, None, id='an unknown tag is refused'),
-    pytest.param(384, None, id='an empty text is refused'),
-    pytest.param(385, None, id='neither reached the file'),
-    pytest.param(386, None, id='raw lines before, between and after the rewrites all survive, in order'),
-    pytest.param(387, None, id='byte-identical to what append_raw wrote'),
-    pytest.param(388, None, id='restore_missing() finds nothing missing after the rewrites'),
-    pytest.param(389, None, id='no temp file is left behind'),
-    pytest.param(390, None, id='topic blocks appear in the order they were opened'),
-])
-def test_41_v2_tagged_entries_land_in_the_current_block(sec_41, site, occ):
-    _assert_site(sec_41, site, occ)
 
 
-@pytest.mark.parametrize("site, occ", [
-    pytest.param(391, None, id='the existing link stays, the dead one becomes its label'),
-    pytest.param(392, None, id='wikilink_seen count=2'),
-    pytest.param(393, None, id='wikilink_dead count=1'),
-    pytest.param(394, None, id='no wikilink_dead when nothing was dead'),
-    pytest.param(395, None, id='no text reaches the trace'),
-])
-def test_42_v2_wikilinks_are_checked_when_the_entry_is_written(sec_42, site, occ):
-    _assert_site(sec_42, site, occ)
 
 
 @pytest.mark.parametrize("site, occ", [
@@ -8895,16 +8085,6 @@ def test_43_v2_what_fell_off_the_stage_is_filed_by_the_consume(sec_43, site, occ
     _assert_site(sec_43, site, occ)
 
 
-@pytest.mark.parametrize("site, occ", [
-    pytest.param(404, None, id="add_entry returns 'not written' instead of raising"),
-    pytest.param(405, None, id='open_topic returns False instead of raising'),
-    pytest.param(406, None, id='the failure is reported'),
-    pytest.param(407, None, id='the file is untouched'),
-    pytest.param(408, None, id='no temp file is left behind'),
-    pytest.param(409, None, id="a missing file is 'not v2' (never v2 at start) and does not raise"),
-])
-def test_44_v2_a_write_failure_is_reported_never_raised(sec_44, site, occ):
-    _assert_site(sec_44, site, occ)
 
 
 @pytest.mark.parametrize("site, occ", [
@@ -8990,20 +8170,8 @@ def test_50_v2_turn_preparation_never_raises_into_the_turn(sec_50, site, occ):
     _assert_site(sec_50, site, occ)
 
 
-@pytest.mark.parametrize("site, occ", [
-    pytest.param(457, None, id='every odd call returns an EntryResult'),
-    pytest.param(458, None, id='the file is still v2 and parseable afterwards'),
-])
-def test_51_add_entry_never_raises_on_odd_input(sec_51, site, occ):
-    _assert_site(sec_51, site, occ)
 
 
-@pytest.mark.parametrize("site, occ", [
-    pytest.param(459, None, id='the parent directory was fsynced'),
-    pytest.param(460, None, id='a failing directory fsync does not fail the write'),
-])
-def test_52_replace_fsyncs_the_folder_after_the_rename_best_ef(sec_52, site, occ):
-    _assert_site(sec_52, site, occ)
 
 
 @pytest.mark.parametrize("site, occ", [
@@ -9234,20 +8402,6 @@ def test_74_protocol_lane_gate_unhashable_non_string_action_do(sec_74, site, occ
     _assert_site(sec_74, site, occ)
 
 
-@pytest.mark.parametrize("site, occ", [
-    pytest.param(567, None, id='(a) stamp 12:23 lands in block A, after its entries', marks=_ABSENT),
-    pytest.param(568, None, id='(a) block B untouched and heading order unchanged', marks=_ABSENT),
-    pytest.param(569, None, id="(a) the new line sits before B's heading", marks=_ABSENT),
-    pytest.param(1567, None, id='(a) a lagging stamp 12:23 lands in the last block, after its entries'),
-    pytest.param(1568, None, id='(a) block A untouched and heading order unchanged (lagging line goes to the last block)'),
-    pytest.param(1569, None, id="(a) the new line sits after B's heading"),
-    pytest.param(570, None, id='(b) stamp 12:26 lands in block B'),
-    pytest.param(571, None, id='(c) no stamp -> last block'),
-    pytest.param(572, None, id='no block qualifies -> last block (fallback)'),
-    pytest.param(573, None, id='(d) Rohtranskript unchanged'),
-])
-def test_75_lagging_entry_filed_under_the_topic_block_its_stam(sec_75, site, occ):
-    _assert_site(sec_75, site, occ)
 
 
 def _scenarios_with_expected_failures():

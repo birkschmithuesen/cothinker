@@ -28,7 +28,9 @@ from blocks.decisions_tasks_questions import DecisionsBlock
 from blocks.knowledge_link import KnowledgeLinkBlock
 import blocks.status_line as status_line_block
 from blocks.condense import CondenseBlock
+from blocks.topics import TopicsBlock
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
+from blocks.minutes_document import MinutesDocumentBlock
 from gateway.sync_safe import atomic_write_text
 from shared.blocks import BLOCK_API_VERSION, Block, BlockContext, BlockHost
 from shared.modules import CoreEvent, StateStore
@@ -42,6 +44,8 @@ REGISTRY: dict[str, Callable[[], Block]] = {
     "decisions-tasks-questions": DecisionsBlock,
     "knowledge-link": KnowledgeLinkBlock,
     "status-line": status_line_block.StatusLineBlock,
+    "minutes-document": MinutesDocumentBlock,
+    "topics": TopicsBlock,
 }
 
 REGISTRY["condense"] = CondenseBlock
@@ -226,18 +230,19 @@ def build_session_blocks(
     return SessionBlocks(host=host, intents=intents, by_id=by_id, log=log)
 
 
-def feed_utterance(protocol, blocks: SessionBlocks, text: str,
+def feed_utterance(minutes, blocks: SessionBlocks, text: str,
                    speaker: Optional[str], meta: Mapping[str, object]) -> None:
     """Feeds one STT final into the session: the raw transcript first,
     then the block host.
 
-    `protocol.append_raw` runs FIRST and unguarded -- the transcript is
-    the evidence, the event is a convenience, and a raw-append failure
-    must propagate exactly as it did before this wiring existed. A
+    `minutes` is the session host's `MinutesFile`. `minutes.append_raw`
+    runs FIRST and unguarded -- the transcript is the evidence, the event
+    is a convenience, and a raw-append failure must propagate exactly as
+    it did before this wiring existed. A
     dispatch failure, in contrast, is logged and swallowed: a block
     breaking must never cost a line of the transcript.
     """
-    protocol.append_raw(text, speaker)
+    minutes.append_raw(text, speaker)
     payload = {
         "text": text,
         "speaker": speaker,

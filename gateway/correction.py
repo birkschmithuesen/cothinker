@@ -26,7 +26,7 @@ a display feature an action path.
 
 This module deliberately does NOT import gateway/consumer.py (circular,
 and the consumer starts processes on import-time paths). `_line()`
-mirrors `Protocol.line` instead, and a test compares the two outputs
+mirrors `MinutesFile.line` instead, and a test compares the two outputs
 character for character so a drift is visible.
 """
 from __future__ import annotations
@@ -435,7 +435,7 @@ HEADER = ("# Korrigiertes Transkript\n"
 def _flock(f) -> bool:
     """File lock across process boundaries, where the platform has one.
 
-    A six-line copy of `Protocol._flock` rather than an import: this
+    A six-line copy of `consumer._flock` rather than an import: this
     module must not import gateway/consumer.py (circular, and importing
     it drags in the graph surface and a live CLI).
     """
@@ -680,7 +680,7 @@ class CorrectionWorker:
     def _line(self, stamp, speaker, text) -> str:
         """One display line, in exactly the raw transcript's shape.
 
-        Mirrors `Protocol.line` in gateway/consumer.py on purpose (no
+        Mirrors `MinutesFile.line` in gateway/raw_transcript.py on purpose (no
         import: circular). A test compares both outputs character for
         character, so a drift shows up as a red test rather than as two
         transcripts that no longer line up.
