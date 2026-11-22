@@ -48,13 +48,13 @@ def test_fake_agent_port_satisfies_the_agent_port_shape():
 
 def test_open_session_returns_the_context_id_back():
     fake = FakeAgentPort()
-    session = fake.open_session("tisch-01", "Du bist Assistant.")
+    session = fake.open_session("tisch-01", "Du bist der Assistent.")
     assert session.context_id == "tisch-01"
 
 
 def test_open_session_is_recorded():
     fake = FakeAgentPort()
-    session = fake.open_session("tisch-01", "Du bist Assistant.")
+    session = fake.open_session("tisch-01", "Du bist der Assistent.")
     assert session in fake.opened
 
 

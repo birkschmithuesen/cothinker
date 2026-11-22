@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# CoThinker — Assistant K2: per-role share of spoken words
+# CoThinker — per-role share of spoken words
 # Copyright (C) 2026 Birk Schmithuesen
 
 # This program is free software: you can redistribute it and/or modify it

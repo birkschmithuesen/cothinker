@@ -160,11 +160,11 @@ check("the scan fills the links of a note",
 print("tags, from the frontmatter and from the text")
 from graph.vault_notes import extract_tags                       # noqa: E402
 
-FM_LISTE = "---\ntags: [projekt-x, conf-demo]\ntitel: x\n---\n\nText\n"
+FM_LISTE = "---\ntags: [projekt-x, projekt-y]\ntitel: x\n---\n\nText\n"
 FM_SKALAR = "---\ntags: kontakt\n---\n\nText\n"
 FM_BLOCK = "---\ntags:\n  - leader\n  - festival\n---\n\nText\n"
 check("frontmatter inline list", extract_tags(FM_LISTE)
-      == ["projekt-x", "conf-demo"], str(extract_tags(FM_LISTE)))
+      == ["projekt-x", "projekt-y"], str(extract_tags(FM_LISTE)))
 check("frontmatter scalar", extract_tags(FM_SKALAR) == ["kontakt"],
       str(extract_tags(FM_SKALAR)))
 check("frontmatter block list", extract_tags(FM_BLOCK)

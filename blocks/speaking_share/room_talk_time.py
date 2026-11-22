@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-# CoThinker — Assistant Q8: speaking time per person in the room-wide feedback round
+# CoThinker — speaking time per person in the room-wide feedback round
 # Copyright (C) 2026 Birk Schmithuesen
 #
 # This program is free software: you can redistribute it and/or modify it
