@@ -246,6 +246,7 @@ shared/speechmatics.py                                                          
 shared/surface.py                                                                  core:surface-api
 shared/text.py                                                                    surface:stage
 shared/stt.py                                                                     stt:api-client
+shared/stt_inprocess.py                                                           stt:engine-speechmatics
 shared/utterance.py                                                              stt:engine-speechmatics
 shared/wake_word.py                                                               block:segment
 shared/wiki_names.py                                                              block:knowledge-link
