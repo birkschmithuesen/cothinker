@@ -590,7 +590,7 @@ check("a failing level 2 never raises into the turn",
       zuruf(z_w, Kaputt2(), "Robo, leg eine Seite an") is None)
 check("turn_orders runs page_call_out before policy_turn",
       (lambda src: 0 < src.index("seite = self._page_call_out(segment)")
-       < src.index("self._policy_turn(fmt, segment)"))(
+       < src.index("self._policy_turn(segment)"))(
           Path(decisions_mod.__file__).read_text(encoding="utf-8")))
 
 print("\nconsumer: the prompt of a Zuruf turn")
@@ -599,7 +599,7 @@ import blocks.decisions_tasks_questions.policy_runner as _pr  # noqa: E402
 ZURUF = "Robo, leg dafür eine Seite an"
 
 
-def _turn_orders(writer, runner, fmt, b, *, session_dir, project_dir, log,
+def _turn_orders(writer, runner, b, *, session_dir, project_dir, log,
                  clock):
     """Mirrors `DecisionsBlock.turn_orders` for a bare writer/runner
     stand-in, without going through `attach()`."""
@@ -611,7 +611,7 @@ def _turn_orders(writer, runner, fmt, b, *, session_dir, project_dir, log,
         auftraege = runner.take_turn()
         extra_note = auftraege.note
         if auftraege.wake and not b.wake_word:
-            extra_note += consumer.order_note_for(fmt, True)
+            extra_note += consumer.order_note_for(True)
         gesprochen = b.text + (" " + auftraege.spoken if auftraege.spoken else "")
     return (extra_note + page_call_out_note(seite, runner is not None),
             gesprochen)
@@ -620,12 +620,12 @@ def _turn_orders(writer, runner, fmt, b, *, session_dir, project_dir, log,
 def zuruf_prompt(runner):
     b = blk(ZURUF, True)
     extra, gesprochen = _turn_orders(
-        z_w, runner, 2, b, session_dir=z_dir, project_dir=projekt,
+        z_w, runner, b, session_dir=z_dir, project_dir=projekt,
         log=zlog, clock=lambda: JETZT)
     return consumer.build_prompt(
-        z_prot, z_dir / "vorschlag.jsonl", b, z_st,
-        order_note=consumer.order_note_for(2, True) + extra,
-        project_dir=projekt, fmt=2), gesprochen
+        z_prot, b, z_st,
+        order_note=consumer.order_note_for(True) + extra,
+        project_dir=projekt), gesprochen
 
 
 z_w.protocol.open_topic("Zuruf ohne Stufe zwei")

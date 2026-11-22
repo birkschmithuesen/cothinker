@@ -13,6 +13,7 @@ import time
 from collections import deque
 from datetime import datetime
 from pathlib import Path
+from types import SimpleNamespace
 from typing import Callable, Mapping, Optional, Sequence
 
 from shared.minutes_format import marker
@@ -101,8 +102,8 @@ def page_call_out_note(page, level2: bool) -> str:
     """The prompt note of a Zuruf turn whose page already exists (German,
     ASCII like the rest of the prompt). "" without a page.
 
-    The block carries the wake word, so the turn also gets ORDER_NOTE_V2
-    ("Fuehre ihn AUS ... tag_entry notiz erledigt [[dateiname]]") -- read
+    The block carries the wake word, so the turn also gets ORDER_NOTE
+    ("Fuehre ihn AUS ... `verlauf` **erledigt** [[dateiname]]") -- read
     alone, that makes the agent create a second page and file a second
     entry. This note says the order is already done. With level 2 the
     fill order (`ORDER_TEXTS["document"]`) rides along in the same turn,
@@ -116,7 +117,7 @@ def page_call_out_note(page, level2: bool) -> str:
             f"ist schon angelegt, der Verweis [[{pfad.stem}]] steht schon im "
             "Protokoll. Das geht dem DIREKTEN AUFTRAG oben vor: lege fuer "
             "diesen Zuruf KEINE weitere Datei und KEINEN Protokolleintrag "
-            "an (auch keinen `tag_entry` mit **erledigt**).")
+            "an (auch keinen Eintrag mit **erledigt**).")
     if not level2:
         text += (" Ergaenze die Seite unterhalb ihrer ersten Zeilen (die "
                  "bleiben stehen) um 3-7 Stichpunkte zum Thema, in eigenen "
@@ -131,11 +132,19 @@ class DecisionsBlock:
     that the next event the block host feeds it (a `tick` at the latest)
     hands back.
 
-    Host handles -- called directly by the session host (`gateway/consumer.py`)
-    until the main agent turn becomes a block, and by nothing else:
-    `attach`, `turn_orders`, `page_order`, `open_ask_id`, `end_turn`,
-    `stage_context`, plus the stage's own hooks `marker_for` / `delivered`,
-    `add_result_hook` and `finish`.
+    The turn's share travels as events: the host dispatches `block_output`
+    `{"turn_open": {"turn", "text", "wake_word"}}` before it builds the
+    prompt; the block answers with `block_output` `{"from", "kind":
+    "turn_orders", "turn", "note", "spoken", "open_ask_id"}` (level 2's order
+    note, the spoken text the proposals' quotes are checked against, the id
+    of level 2's open question). After the turn the host dispatches
+    `{"turn_closed": {"turn", "ok", "answered"}}`; the block settles the
+    orders that brought nothing. Without level 2 the answer is the plain
+    text and no ids.
+
+    Host handles -- called directly by the session host (`gateway/consumer.py`):
+    `attach`, `page_order`, `stage_context`, plus the stage's own hooks
+    `marker_for` / `delivered`, `add_result_hook` and `finish`.
     """
     id = BLOCK_ID
     api_version = API_VERSION
@@ -153,7 +162,7 @@ class DecisionsBlock:
         self._project_dir = Path(".")
         self._clock: Callable = datetime.now
         self._wants_page: Callable = lambda text: False
-        self._order_note_for: Callable = lambda fmt, wake_word: ""
+        self._order_note_for: Callable = lambda wake_word: ""
 
     # ------------------------------------------------ block contract
     def start(self, ctx, config: Mapping[str, object]) -> None:
@@ -162,6 +171,11 @@ class DecisionsBlock:
     def on_event(self, ev: CoreEvent) -> Sequence[CoreEvent]:
         if ev.kind == "segment":
             self._on_segment(ev.payload)
+        elif ev.kind == "block_output" and isinstance(ev.payload, Mapping):
+            if "turn_open" in ev.payload:
+                self._on_turn_open(ev.payload["turn_open"])
+            elif "turn_closed" in ev.payload:
+                self._on_turn_closed(ev.payload["turn_closed"])
         return self._drain()
 
     def stop(self) -> None:
@@ -239,13 +253,31 @@ class DecisionsBlock:
     def stage_context(self, state) -> dict:
         return _stage_context(state)
 
-    def turn_orders(self, fmt: int, segment) -> tuple:
+    def _on_turn_open(self, body) -> None:
+        if not isinstance(body, Mapping):
+            return
+        seg = SimpleNamespace(text=str(body.get("text") or ""),
+                              wake_word=bool(body.get("wake_word")))
+        note, spoken = self._turn_orders(seg)
+        self._outbox.append({
+            "from": BLOCK_ID, "kind": "turn_orders", "turn": body.get("turn"),
+            "note": note, "spoken": spoken,
+            "open_ask_id": (self._runner.open_ask_id()
+                            if self._runner is not None else "")})
+
+    def _on_turn_closed(self, body) -> None:
+        if not isinstance(body, Mapping) or self._runner is None:
+            return
+        self._runner.end_turn(ok=bool(body.get("ok")),
+                              answered=bool(body.get("answered")))
+
+    def _turn_orders(self, segment) -> tuple:
         """What one turn adds to `order_note`, and the spoken text: the Zuruf
         page first (so level 2's fill order rides along with THIS turn),
         then level 2's orders, then the note that the Zuruf's page already
         exists. Without level 2: ("", segment.text) plus the page note."""
         seite = self._page_call_out(segment)
-        extra_note, gesprochen = self._policy_turn(fmt, segment)
+        extra_note, gesprochen = self._policy_turn(segment)
         return (extra_note + page_call_out_note(seite, self._runner is not None),
                 gesprochen)
 
@@ -255,13 +287,6 @@ class DecisionsBlock:
         if self._runner is None:
             return None
         return self._runner.page_order(text)
-
-    def open_ask_id(self) -> str:
-        return self._runner.open_ask_id() if self._runner is not None else ""
-
-    def end_turn(self, *args, **kw) -> None:
-        if self._runner is not None:
-            self._runner.end_turn(*args, **kw)
 
     def marker_for(self, order_id) -> str:
         return self._runner.marker_for(order_id) if self._runner is not None else ""
@@ -341,7 +366,7 @@ class DecisionsBlock:
             out.append(CoreEvent("block_output", payload))
 
     # ------------------------------------------------ the turn's share
-    def _policy_turn(self, fmt: int, b) -> tuple:
+    def _policy_turn(self, b) -> tuple:
         """Level 2's share of one turn: (extra order note, spoken).
 
         Takes the orders the policy decided since the last turn -- they ride
@@ -358,7 +383,7 @@ class DecisionsBlock:
         auftraege = self._runner.take_turn()
         extra_note = auftraege.note
         if auftraege.wake and not b.wake_word:
-            extra_note += self._order_note_for(fmt, True)
+            extra_note += self._order_note_for(True)
         spoken = b.text + (" " + auftraege.spoken if auftraege.spoken else "")
         return extra_note, spoken
 

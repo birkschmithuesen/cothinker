@@ -23,22 +23,26 @@ Write events (`entry`, `bullet`, `condensed`, `topic`) must be dispatched
 under the host's file lock: the artefact path is shared and the block reads
 the file fresh each time, so an unlocked dispatch risks a stale read.
 
-Output: `block_output {"minutes_changed": {"name": "protokoll.md"}}`, only
-after a write that landed.
+- `minutes_query {}`: asks for the document's state.
 
-Methods the session host reads until the main agent turn becomes a block
-(nothing else calls them): `is_v2`, `mode`, `current_topic()`,
-`current_topic_title()`, `last_result()`.
+Output, all `block_output` payloads:
 
-`last_result()` and the result slot behind it are per thread: the host
-dispatches synchronously on the caller's thread and reads the result right
-after. A producer that writes outside the host's file lock can render from
-a stale read; the raw section is safe regardless, the host re-reads it
-under its lock when it splices.
+- `{"minutes_changed": {"name": "protokoll.md"}}`, only after a write that
+  landed.
+- `{"from": "minutes-document", "kind": "entry_result", "reason",
+  "links_seen", "links_dead", "attempted"}` after every write event
+  (`entry`, `bullet`, `condensed`, `topic`): what the write came to.
+  `reason` is "" when it landed.
+- `{"from": "minutes-document", "kind": "minutes_state", "is_v2", "mode",
+  "topic_key", "topic_title"}` as the answer to `minutes_query`.
+
+The session host reads these with its output listener; it calls no method
+of the block. A producer that writes outside the host's file lock can
+render from a stale read; the raw section is safe regardless, the host
+re-reads it under its lock when it splices.
 """
 from __future__ import annotations
 
-import threading
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
@@ -49,18 +53,19 @@ from shared.modules import CoreEvent
 
 ARTEFACT_NAME = "protokoll.md"
 
+BLOCK_ID = "minutes-document"
+
 _CHANGED = CoreEvent("block_output",
                      {"minutes_changed": {"name": ARTEFACT_NAME}})
 
 
 class MinutesDocumentBlock:
-    id = "minutes-document"
+    id = BLOCK_ID
     api_version = BLOCK_API_VERSION
 
     def __init__(self) -> None:
         self._ctx: Optional[BlockContext] = None
         self._doc: Optional[MinutesDocument] = None
-        self._tl = threading.local()
 
     def start(self, ctx: BlockContext, config: Mapping[str, object]) -> None:
         self._ctx = ctx
@@ -76,12 +81,14 @@ class MinutesDocumentBlock:
         if "minutes_open" in p:
             self._open(p["minutes_open"])
             return []
-        if self._doc is None and any(
-                k in p for k in ("entry", "bullet", "condensed", "topic")):
-            self._tl.result = EntryResult("not written")
+        if "minutes_query" in p:
+            return [self._state()]
+        write_keys = ("entry", "bullet", "condensed", "topic")
+        if not any(k in p for k in write_keys):
             return []
         doc = self._doc
-        res: Optional[EntryResult] = None
+        if doc is None:
+            return [_result_event(EntryResult("not written"))]
         if "entry" in p:
             e = p["entry"] or {}
             res = doc.add_entry(e.get("tag"), e.get("text"),
@@ -89,13 +96,17 @@ class MinutesDocumentBlock:
         elif "bullet" in p or "condensed" in p:
             e = p.get("bullet") or p.get("condensed") or {}
             res = doc.add_entry("notiz", e.get("text"), stamp=e.get("stamp"))
-        elif "topic" in p:
+        else:
             e = p["topic"] or {}
             res = EntryResult(doc.open_topic(e.get("title"), e.get("stamp")))
-        if res is None:
-            return []
-        self._tl.result = res
-        return [_CHANGED] if res.reason == "" else []
+        out = [_CHANGED] if res.reason == "" else []
+        return out + [_result_event(res)]
+
+    def _state(self) -> CoreEvent:
+        key, title = self.current_topic()
+        return CoreEvent("block_output", {
+            "from": BLOCK_ID, "kind": "minutes_state", "is_v2": self.is_v2,
+            "mode": self.mode, "topic_key": key, "topic_title": title})
 
     def _open(self, seed: object) -> None:
         if self._ctx is None or not isinstance(seed, Mapping):
@@ -108,7 +119,7 @@ class MinutesDocumentBlock:
             Path(str(raw_path)), mode=str(seed.get("mode") or DEFAULT_MODE),
             write_head=lambda head: ctx.artefact(ARTEFACT_NAME, head))
 
-    # ------------------------------------------- reads for the session host
+    # ------------------------------------------------ the block's own state
     @property
     def is_v2(self) -> bool:
         return self._doc.is_v2 if self._doc is not None else False
@@ -120,11 +131,9 @@ class MinutesDocumentBlock:
     def current_topic(self) -> tuple[str, str]:
         return self._doc.current_topic() if self._doc is not None else ("", "")
 
-    def current_topic_title(self) -> str:
-        return self.current_topic()[1]
 
-    def last_result(self) -> Optional[EntryResult]:
-        """The result of this thread's last write event; clears it."""
-        res = getattr(self._tl, "result", None)
-        self._tl.result = None
-        return res
+def _result_event(res: EntryResult) -> CoreEvent:
+    return CoreEvent("block_output", {
+        "from": BLOCK_ID, "kind": "entry_result", "reason": res.reason,
+        "links_seen": res.links_seen, "links_dead": res.links_dead,
+        "attempted": res.attempted})

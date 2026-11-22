@@ -49,6 +49,7 @@ tables below are built from.
 | segment (utterance batching) | Capture | `gateway/segmenter.py` 356, `shared/wake_word.py` 67 — 423 | core | 1× |
 | topic change | Capture | `blocks/topics/detect.py` 571, `hysteresis.py` 95, `laya_worker.py` 138, `title.py` 202 — 1006 | Reflect | 1× |
 | decisions / tasks / open questions | Capture | `blocks/decisions_tasks_questions/{decide,decider,openrouter_jev,policy,policy_runner,questions}.py` — 2688 (`gateway/proposals.py` 68 stays in the session host) | Reflect | 1× |
+| capture bullets | Condense + write | `blocks/capture_bullets/__init__.py` 67, `parse.py` 108 | Reflect | 1× |
 | minutes document | Condense + write | `shared/minutes_format.py` 454, `blocks/minutes_document/__init__.py` 130, `blocks/minutes_document/minutes.py` 235 (the session host's `gateway/raw_transcript.py` writes the file) | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
 | mirroring / coach question | Agent behaviour | `blocks/mirroring_coach/context.py` 130, `coach.py` 588 (the call lane in `gateway/call_lane.py` and scheduling in `lanes.py`/`agent_lane.py` belong to the Agent API) — 718 | Reflect | 1× |
@@ -59,12 +60,11 @@ tables below are built from.
 | timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
 | speaker queue | Show + share | `blocks/speaker_queue/__init__.py` 102, `queue.py` 82 — 184 | Reflect | 1× |
 
-**Reflect check:** 10 of the 12 blocks Birk confirmed for Reflect already
-have code in this repository — topic change, decisions / tasks / open
-questions, minutes document, mirroring / coach question, knowledge link,
-status line, session graph, speaking share, timer, speaker queue. The other
-2 confirmed blocks (capture bullets, condense) have no code in this
-repository yet.
+**Reflect check:** all 12 of the blocks Birk confirmed for Reflect now have
+code in this repository — topic change, capture bullets, condense,
+decisions / tasks / open questions, minutes document, mirroring / coach
+question, knowledge link, status line, session graph, speaking share, timer,
+speaker queue.
 
 ## STT module, surfaces, core (not blocks)
 
@@ -77,7 +77,7 @@ repository yet.
 | STT — thought end | 1594 | `stt/fundusapps/stt_server/thought_end.py` 514; `gateway/thought_end.py` 260, `thought_end_live.py` 402, `thought_end_laya_worker.py` 148, `smart_turn_worker.py` 270 | core |
 | STT — speaker labels | 1566 | `gateway/speaker_enroll.py` 606, `speaker_split.py` 423, `speaker_label.py` 278, `speaker_label_llm.py` 259 | core |
 | STT — correction | 858 | `gateway/correction.py` 733, `correction_prefilter.py` 125 | core |
-| core — session runtime | 5934 | `gateway/consumer.py` 4653, `shared/events.py` 179, `gateway/raw_transcript.py` 172, `sync_safe.py` 204, `timing.py` 207, `conflict_triage.py` 186, `block_host_wiring.py` 195, `legacy_stage_sink.py` 46; `shared/phases.py` 82, `shared/__init__.py` 1, `blocks/__init__.py` 9 | core |
+| core — session runtime | 5934 | `gateway/consumer.py` 4653, `shared/events.py` 179, `gateway/raw_transcript.py` 172, `sync_safe.py` 204, `timing.py` 207, `conflict_triage.py` 186, `block_host_wiring.py` 197, `legacy_stage_sink.py` 46; `shared/phases.py` 82, `shared/__init__.py` 1, `blocks/__init__.py` 9 | core |
 | core — Agent API | 1660 | `shared/agent.py` 387, `gateway/worker.py` 576, `lanes.py` 447, `agent_lane.py` 250 | core |
 | core — model clients | 614 | `gateway/infomaniak_chat.py` 178, `infomaniak_embed.py` 124, `infomaniak_limiter.py` 312 | core |
 | core — Instance API | 211 | `shared/instance.py` 128, `shared/profiles.py` 83 | core |
@@ -110,6 +110,7 @@ block:segment                block — utterance batching / turn boundaries
 block:topics                 block — topic change
 block:decisions-tasks-questions  block — decisions / tasks / open questions
 block:condense               block — condense (per-topic text, verbatim quotes)
+block:capture-bullets        block — capture bullets (main-turn reply parser)
 block:minutes-document       block — minutes document
 block:mirroring-coach        block — mirroring / coach question
 block:knowledge-link         block — knowledge link (vault notes)
@@ -132,6 +133,8 @@ blocks/__init__.py                                                              
 blocks/condense/__init__.py                                                       block:condense
 blocks/condense/coverage.py                                                       block:condense
 blocks/condense/quotes.py                                                         block:condense
+blocks/capture_bullets/__init__.py                                                block:capture-bullets
+blocks/capture_bullets/parse.py                                                   block:capture-bullets
 blocks/minutes_document/__init__.py                                               block:minutes-document
 blocks/minutes_document/minutes.py                                                block:minutes-document
 blocks/speaking_share/__init__.py                                                 block:speaking-share
