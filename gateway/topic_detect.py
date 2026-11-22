@@ -13,7 +13,7 @@
   laya     a typed decision model on CPU (LayaDetector, which speaks to
            gateway/topic_laya_worker.py in a subprocess).
   jev      a typed decision model behind OpenRouter's decisions API
-           (JevDetector, over gateway/openrouter_jev.py). A US provider:
+           (JevDetector, over blocks/decisions_tasks_questions/openrouter_jev.py). A US provider:
            BENCH-ONLY, see that module's docstring.
 
 WHY THIS LIVES UNDER gateway/ AND NOT UNDER bench/. A measurement is only
@@ -477,7 +477,7 @@ class JevDetector(Detector):
     """Asks Jev (TypeSafe, `typesafe/jev-1.13`) one decision at a time.
 
     `client.decide(state, questions) -> Decision` is injected -- the
-    OpenRouter client of gateway/openrouter_jev.py, or bench/detect.py's
+    OpenRouter client of blocks/decisions_tasks_questions/openrouter_jev.py, or bench/detect.py's
     cache in front of it. This module does not import either. Synchronous
     on purpose, like laya: one decision at a time is what live operation
     would do, so the latency measured is the latency that would matter.

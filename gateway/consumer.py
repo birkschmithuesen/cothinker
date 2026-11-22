@@ -63,13 +63,12 @@ from infomaniak_chat import Client as InfomaniakClient  # noqa: E402
 from infomaniak_chat import api_key as infomaniak_key  # noqa: E402
 from correction import FINISH_GRACE_S, FINISH_TIMEOUT_S  # noqa: E402
 from shared.events import EventLog, is_token  # noqa: E402
-import decider as decider_mod  # noqa: E402
-from policy import marker, pending_label, with_marker  # noqa: E402
 from proposals import read_proposals  # noqa: E402
 from shared.minutes_format import (DEFAULT_MODE, MODES, TAGS, Entry,  # noqa: E402
                           Topic, clean_line, clean_wikilinks, entry_line,
-                          parse_topics, project_md_names, read_mode,
-                          render_view, splice, topic_line)
+                          marker, parse_topics, pending_label,
+                          project_md_names, read_mode, render_view, splice,
+                          topic_line, with_marker)
 from shared.minutes_format import is_v2 as is_v2_text  # noqa: E402
 from stage_state import PARKED, StageState, scrub  # noqa: E402
 from stage_state import (AgendaRuntime, agenda_payload,  # noqa: E402
@@ -968,7 +967,7 @@ def session_paths(folder: Path, day: str, title: str | None,
                 "correction": folder / f"transkript-korrigiert-{day}.md",
                 "correction_trace": folder / SESSION_FILES["correction_trace"],
                 "speakers": folder / SESSION_FILES["speakers"],
-                # The level-1 decider's answer vectors (gateway/decider.py),
+                # The level-1 decider's answer vectors (blocks/decisions_tasks_questions/decider.py),
                 # only written with COTHINKER_DECIDER set. Flat, it lies in
                 # the project folder like timing.jsonl; dated, because the
                 # project folder outlives the day.
@@ -1823,104 +1822,6 @@ def order_note_for(fmt: int, wake_word: bool) -> str:
     return ORDER_NOTE_V2 if fmt == 2 else ORDER_NOTE
 
 
-def policy_turn(policy_runner, fmt: int, b) -> tuple[str, str]:
-    """Level 2's share of one turn: (extra order note, spoken).
-
-    Takes the orders the policy decided since the last turn -- they ride
-    along with this one, finished, the agent only formulates -- and turns
-    them into what the turn needs: the note appended to the prompt's
-    `order_note`, and the text `ingest()` checks the proposals' quotes
-    against. A wake order the policy made out of a block without the wake
-    word gets the same order note a call-out gets; its evidence is the
-    block it was decided on, which may have been said before this turn's
-    own block. Without a runner: ("", b.text), exactly as before level 2.
-    """
-    if policy_runner is None:
-        return "", b.text
-    auftraege = policy_runner.take_turn()
-    extra_note = auftraege.note
-    if auftraege.wake and not b.wake_word:
-        extra_note += order_note_for(fmt, True)
-    spoken = b.text + (" " + auftraege.spoken if auftraege.spoken else "")
-    return extra_note, spoken
-
-
-def page_call_out(writer, policy_runner, b, *, session_dir, project_dir,
-                  log, clock=datetime.now) -> Path | None:
-    """The Zuruf "Robo, leg dafuer eine Seite an" (MM-G D7). Never raises.
-
-    Only for a block that carries the wake word, only into a v2 protocol,
-    only when `wiki.ZURUF_SEITE` matches -- a regex, no model. An explicit
-    order is a confirmation, not an autonomous act, in every mode: the
-    marker is `*(bestätigt HH:MM)*`. With level 2 attached the page goes
-    through it (`PolicyRunner.page_order`), so the agent gets the order to
-    fill it in this very turn; without it the consumer creates skeleton
-    and backlink only. Either way the ONE page path is
-    `StageWriter.file_topic_page`. The block still goes to the agent as
-    usual -- with `page_call_out_note()` in its prompt. Returns the page:
-    the one created now, or -- when the current block already has one
-    (`page_exists`, e.g. a "Ja" to level 2's question got there first) --
-    that one, so the note names it and the agent gets no conflicting
-    order. None when there is no page.
-    """
-    try:
-        if (not getattr(b, "wake_word", False) or writer.protocol is None
-                or not wants_page(getattr(b, "text", ""))):
-            return None
-        if policy_runner is not None:
-            seite = policy_runner.page_order(b.text)
-        else:
-            jetzt = clock()
-            seite = writer.file_topic_page(
-                writer.page_title(), session_dir=session_dir,
-                project_dir=project_dir,
-                mark=marker(False, f"{jetzt:%H:%M}"), created=jetzt)
-        return seite if seite is not None else writer.topic_page()
-    except Exception as e:                # noqa: BLE001 -- agent thread
-        log("topic page call-out skipped:", repr(e))
-        return None
-
-
-def page_call_out_note(page, level2: bool) -> str:
-    """The prompt note of a Zuruf turn whose page already exists (German,
-    ASCII like the rest of the prompt). "" without a page.
-
-    The block carries the wake word, so the turn also gets ORDER_NOTE_V2
-    ("Fuehre ihn AUS ... tag_entry notiz erledigt [[dateiname]]") -- read
-    alone, that makes the agent create a second page and file a second
-    entry. This note says the order is already done. With level 2 the
-    fill order (`ORDER_TEXTS["document"]`) rides along in the same turn,
-    so the filling is not asked for twice; without it, it is asked for
-    here.
-    """
-    if not page:
-        return ""
-    pfad = Path(page)
-    text = (f"\nZURUF SEITE: Die Themenseite `{pfad}` zu diesem Themenblock "
-            f"ist schon angelegt, der Verweis [[{pfad.stem}]] steht schon im "
-            "Protokoll. Das geht dem DIREKTEN AUFTRAG oben vor: lege fuer "
-            "diesen Zuruf KEINE weitere Datei und KEINEN Protokolleintrag "
-            "an (auch keinen `tag_entry` mit **erledigt**).")
-    if not level2:
-        text += (" Ergaenze die Seite unterhalb ihrer ersten Zeilen (die "
-                 "bleiben stehen) um 3-7 Stichpunkte zum Thema, in eigenen "
-                 "Worten.")
-    return text + "\n"
-
-
-def turn_orders(writer, policy_runner, fmt: int, b, *, session_dir,
-                project_dir, log, clock=datetime.now) -> tuple[str, str]:
-    """What one turn adds to `order_note`, and the spoken text: the Zuruf
-    page first (`page_call_out`, so level 2's fill order rides along with
-    THIS turn), then level 2's orders (`policy_turn`), then the note that
-    the Zuruf's page already exists (`page_call_out_note`)."""
-    seite = page_call_out(writer, policy_runner, b, session_dir=session_dir,
-                          project_dir=project_dir, log=log, clock=clock)
-    extra_note, gesprochen = policy_turn(policy_runner, fmt, b)
-    return (extra_note + page_call_out_note(seite, policy_runner is not None),
-            gesprochen)
-
-
 def turn_protocol_format(writer, log) -> tuple[int, bool]:
     """The protocol format of the NEXT turn: (fmt, switched).
 
@@ -2024,7 +1925,7 @@ def build_prompt(protocol_path, proposal_path, block, state,
     (`run_turn` passes ORDER_NOTE_V2 in v2).
 
     `policy_ask_id`: the stage id of level 2's own open question
-    (`PolicyRunner.open_ask_id()`), passed on to `open_state_block`. ""
+    (`DecisionsBlock.open_ask_id()`), passed on to `open_state_block`. ""
     (the default, and every caller without `--policy`) changes nothing.
     """
     open_state = open_state_block(state, include_unrecorded=(fmt != 2),
@@ -2595,7 +2496,7 @@ class StageWriter:
         # before its proposals are read; None means "no check".
         self.protocol: Protocol | None = None
         self.link_names: set[str] | None = None
-        # Level 2 (gateway/policy_runner.PolicyRunner) when `--policy` is
+        # Level 2 (the decisions-tasks-questions block) when `--policy` is
         # on: gives an order id's marker and hears when it arrived. None
         # keeps every proposal exactly as it was before level 2.
         self.policy = None
@@ -2691,6 +2592,12 @@ class StageWriter:
                 self.events.record_all(self.state.tick())
             self.write()
         return pending_id
+
+    def settle(self, pending_id: str, outcome: str) -> bool:
+        """End the pending `pending_id`. False when the state had already
+        settled it (a topic arrives as `topic` through StageState.apply) --
+        harmless. The caller flushes (`write()`) after a True."""
+        return self.state.settle(pending_id, outcome)
 
     # ------------------------------------------------ protocol v2 entries
     def file_entry(self, tag, text, stamp=None, mark: str = "",
@@ -3682,17 +3589,6 @@ def main() -> int:
         log("agenda on:", orte["agenda"].name,
             f"({len(agenda_ctrl.doc.items)} items)")
     trace.record("meeting_started")
-    # The level-1 decider (gateway/decider.py): OFF unless
-    # COTHINKER_DECIDER is set -- no surprise network call in a running
-    # meeting, and without it nothing here creates a thread, a file or a
-    # log line. On, it asks the question set about every finished block
-    # in its own thread and writes numbers only, next to the event trace.
-    # A backend that cannot be built (jev without a key) is one log line
-    # and the meeting runs on without it.
-    decider = decider_mod.from_env(orte["decisions"], events=trace, log=log)
-    if decider is not None:
-        decider.start()
-        log(f"decider on: {decider.backend_name} -> {orte['decisions'].name}")
     # A RESTART IS NOT A NEW MEETING. Publishing a fresh state here blanked
     # the main area, the decisions, the notices and the question in front
     # of the round -- while the worker re-attaches to the same agent
@@ -3744,34 +3640,21 @@ def main() -> int:
     # agent writes the topic blocks.
     if writer.protocol is not None:
         writer.wiki = WikiLayer(folder)
-    # Level 2 (docs/entwurf-meeting-modi.md §3): opt-in, and only where
-    # every part it relies on is there -- the decider's answers, a
-    # protocol the consumer files into, an agent to formulate the orders.
-    # Anything missing is one log line and the meeting runs as before.
-    policy_runner = None
-    if a.policy:
-        if decider is None:
-            log("policy off: needs COTHINKER_DECIDER")
-        elif writer.protocol is None:
-            log("policy off: needs a v2 protocol")
-        elif a.no_agent:
-            log("policy off: nothing would formulate its orders (--no-agent)")
-        else:
-            # Imported only here: without `--policy` the runner module is
-            # never loaded. (`policy.py` itself always is -- the writer
-            # needs its `with_marker` -- but it is pure: tables, no I/O.)
-            from policy_runner import PolicyRunner
-            # `prot.mode` is the mode the existing file was created with,
-            # not the flag's: the policy table must match the protocol.
-            policy_runner = PolicyRunner(writer, mode=prot.mode,
-                                         session_dir=run_dir,
-                                         project_dir=folder,
-                                         backend=decider.backend, log=log)
-            writer.policy = policy_runner
-            # Set after start(): the first block reaches the decider only
-            # once the SSE loop below runs, long after this line.
-            decider.on_result = policy_runner.on_result
-            log(f"policy on: mode {prot.mode}")
+    # The decisions-tasks-questions block owns the level-1 decider (OFF
+    # unless COTHINKER_DECIDER is set -- no surprise network call in a
+    # running meeting; a backend that cannot be built is one log line) and,
+    # with `--policy`, level 2 (docs/entwurf-meeting-modi.md §3): opt-in,
+    # and only where every part it relies on is there -- the decider's
+    # answers, a protocol the consumer files into, an agent to formulate
+    # the orders. Anything missing is one log line and the meeting runs
+    # as before. `prot.mode` is the mode the existing file was created
+    # with, not the flag's: the policy table must match the protocol.
+    decisions = session_blocks.get("decisions-tasks-questions")
+    decisions.attach(
+        writer, decisions_path=orte["decisions"], session_dir=run_dir,
+        project_dir=folder, events=trace, log=log, policy=a.policy,
+        no_agent=a.no_agent, mode=prot.mode, wants_page=wants_page,
+        order_note_for=order_note_for)
 
     def refresh_conflicts() -> bool:
         """Raise or withdraw the conflict warning from the FACTS on disk.
@@ -3890,19 +3773,10 @@ def main() -> int:
         call_started, coach_started = lanes.start()
         log(f"lanes on: call started={call_started}, "
             f"coach started={coach_started}")
-        if decider is not None:
-            # Chained, not replaced: --policy's hook (if set above) keeps
-            # running first, the coach's hysteresis feed runs after --
-            # both read the same result, neither mutates it.
-            previous_on_result = decider.on_result
-
-            def _lanes_on_result(result, snap, reason,
-                                 _previous=previous_on_result) -> None:
-                if _previous is not None:
-                    _previous(result, snap, reason)
-                lanes.on_decider_result(result, snap, reason)
-
-            decider.on_result = _lanes_on_result
+        if decisions.decider_on:
+            # Runs after the block's own handling (level 2 first), the
+            # coach's hysteresis feed -- it reads the same result.
+            decisions.add_result_hook(lanes.on_decider_result)
         else:
             log("lanes: coach gets no topic signal -- needs COTHINKER_DECIDER")
 
@@ -4041,11 +3915,9 @@ def main() -> int:
             # that holds even when building the prompt raises: the orders
             # then fail with THIS turn, not the next one.
             # MM-G D7: "Robo, leg dafuer eine Seite an" creates the topic
-            # page BEFORE policy_turn(), so level 2's fill order rides
+            # page BEFORE turn_orders, so level 2's fill order rides
             # along with this very turn.
-            extra_note, gesprochen = turn_orders(
-                writer, policy_runner, fmt, b, session_dir=run_dir,
-                project_dir=folder, log=log)
+            extra_note, gesprochen = decisions.turn_orders(fmt, b)
             prompt = build_prompt(
                 prot.path, proposals_path, b, state,
                 backlog_note=(BACKLOG_NOTE if b.reason in ("batch", "carry")
@@ -4055,8 +3927,7 @@ def main() -> int:
                 fmt=fmt, file_names=file_names,
                 # Level 2's own open question is Robo's to evaluate: the
                 # agent sees it marked as such, not as one to resolve.
-                policy_ask_id=(policy_runner.open_ask_id()
-                               if policy_runner is not None else ""))
+                policy_ask_id=decisions.open_ask_id())
             if a.dry_agent:
                 log("  [dry] prompt would be:",
                     prompt[:120].replace("\n", " "), "…")
@@ -4125,18 +3996,17 @@ def main() -> int:
             # In a `finally`, so a turn can never leave "⚙️ Robo werkelt"
             # standing for the rest of the meeting -- and so a run that
             # threw still leaves its outcome in the trace.
-            if policy_runner is not None:
-                # This turn's orders that brought nothing end here, so
-                # their pendings do not stand until the 60 s timeout.
-                # A wake order arrived when this turn put up an answer to
-                # a call-out -- the same test the call-out itself gets.
-                try:
-                    policy_runner.end_turn(
-                        gelungen,
-                        answered=answered_the_call(
-                            state.main.id, vorher_flaeche, state.main.quote))
-                except Exception as e:    # noqa: BLE001
-                    log("policy end_turn failed:", repr(e))
+            # This turn's orders that brought nothing end here, so
+            # their pendings do not stand until the 60 s timeout.
+            # A wake order arrived when this turn put up an answer to
+            # a call-out -- the same test the call-out itself gets.
+            try:
+                decisions.end_turn(
+                    ok=gelungen,
+                    answered=answered_the_call(
+                        state.main.id, vorher_flaeche, state.main.quote))
+            except Exception as e:        # noqa: BLE001
+                log("policy end_turn failed:", repr(e))
             if own_announcement:
                 # The announcement ends here too, so an exception anywhere
                 # above (worker.run, ingest, the call-out bookkeeping
@@ -4205,7 +4075,7 @@ def main() -> int:
         # "speakers" stays empty until that lands.
         session_blocks.dispatch("segment", {
             "id": segment_counter[0], "text": b.text, "speakers": [],
-            "wake_word": b.wake_word, "reason": b.reason,
+            "wake_word": b.wake_word, "reason": b.reason, "chars": b.chars,
             "at": jetzt_block.timestamp(),
         })
         if lanes is not None:
@@ -4228,10 +4098,6 @@ def main() -> int:
             except Exception as e:        # noqa: BLE001 — never take the reader down with it
                 log("block not handed to lanes:", repr(e))
             letzte_bloecke.append(b)
-            if decider is not None:
-                decider.submit(b.text, reason=b.reason, chars=b.chars,
-                               at=jetzt_block,
-                               **decider_mod.stage_context(state))
             if b.reason == "pause":
                 try:
                     timing.record_pause_marker(jetzt_block)
@@ -4279,16 +4145,6 @@ def main() -> int:
         except Exception as e:            # noqa: BLE001 — never take the reader down with it
             log("block could not be enqueued:", repr(e))
         letzte_bloecke.append(b)
-        # The level-1 decider gets the block AFTER the agent queue: it is a
-        # measurement, the queue is the stage. `submit()` does no I/O,
-        # never blocks and never raises (a full queue drops the block and
-        # counts it) -- this runs under BlockBuilder's lock, in the SSE
-        # reader or the ticker. The raw transcript already has every line
-        # of this block. Heading, last topic titles and the open question
-        # are read off the stage as it stands, without a lock.
-        if decider is not None:
-            decider.submit(b.text, reason=b.reason, chars=b.chars,
-                           at=jetzt_block, **decider_mod.stage_context(state))
         # `_emit("pause")` (gateway/segmenter.py) never runs synchronously
         # with the sentence that "caused" it -- it fires either at the
         # start of the NEXT sentence() call (closing THIS now-stale
@@ -4794,24 +4650,12 @@ def main() -> int:
             korrektur.finish()
         except KeyboardInterrupt:
             log("correction: finish aborted, the raw transcript is complete")
-    if decider is not None:
-        # Bounded (decider.FINISH_TIMEOUT_S): the backlog is a measurement,
-        # the closing note and the final commit below are not to wait on
-        # it. A second Ctrl-C here costs the decisions' tail only.
-        if policy_runner is not None:
-            # The agent is gone: level 2 must not act on the backlog -- a
-            # stage question, a pending or a skeleton now would freeze into
-            # the final stage file. Detached first, and closed too, in case
-            # a block is already inside the hook.
-            decider.on_result = None
-            try:
-                policy_runner.close()
-            except (Exception, KeyboardInterrupt) as e:  # noqa: BLE001
-                log("policy close failed:", repr(e))
-        try:
-            decider.finish()
-        except KeyboardInterrupt:
-            log("decider: finish aborted, the raw transcript is complete")
+    # Bounded (decider.FINISH_TIMEOUT_S): the backlog is a measurement,
+    # the closing note and the final commit below are not to wait on
+    # it. A second Ctrl-C here costs the decisions' tail only. Level 2 is
+    # detached and closed first inside: the agent is gone, and an action
+    # on the backlog would freeze into the final stage file.
+    decisions.finish()
     if gedankenende is not None:
         # Bounded like the correction: late rows are written without Laya
         # and marked `skipped`; a second Ctrl-C costs the lane's tail only.

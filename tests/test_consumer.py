@@ -2170,7 +2170,7 @@ def sec_13(sec_12):
         rec.error += traceback.format_exc()[-1200:]
     # Every one of them has to pass the trace's own filter -- a kind that is
     # not a token is dropped, and the measurement would be gone.
-    import shared.events as _events  # noqa: E402
+    from shared import events as _events  # noqa: E402
     try:
         _chk(173, "every kind is a token the trace will actually write",
               all(_events.is_token(k) for k in
@@ -5209,7 +5209,7 @@ def sec_38(sec_37):
         print("\nprotocol v2: the consumer is the only writer of protokoll.md")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
-    import shared.minutes_format as _pd  # noqa: E402
+    from shared import minutes_format as _pd  # noqa: E402
 
     try:
         _v2 = Path(_mkdtemp(prefix="cothinker-v2-"))
@@ -6979,120 +6979,7 @@ def sec_54(sec_53):
 
 
 @pytest.fixture(scope="module")
-def sec_55(sec_54):
-    """Scenario: level 2: policy_turn() -- what a turn takes from the policy"""
-    global _REC
-    _REC = rec = _Recorder()
-    global _, _TurnStub, _extra, _extra_v1, _extra_w, _extra_ww, _frueher, _gesagt, _gesagt_w, _note, _pr, _st, _w
-
-
-    # ======================= MM-B level 2: the per-turn steps of run_turn
-    try:
-        print("\nlevel 2: policy_turn() -- what a turn takes from the policy")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    import policy_runner as _pr  # noqa: E402
-
-
-    class _TurnStub:
-        """Stands in for PolicyRunner.take_turn(): hands out one TurnOrders."""
-
-        def __init__(self, orders) -> None:
-            self.orders = orders
-            self.taken = 0
-
-        def take_turn(self):
-            self.taken += 1
-            return self.orders
-
-
-    try:
-        _note = "AUFTRAG A1: Trage eine Aufgabe ein."
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _frueher = "Robo zeig uns die Liste der offenen Punkte"
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _st = _TurnStub(_pr.TurnOrders(note=_note))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _extra, _gesagt = k.policy_turn(_st, 2, block("Wir reden über den Termin."))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(475, "the orders' note becomes the turn's extra order note",
-              _st.taken == 1 and _extra == _note, repr(_extra))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(476, "the ordinary note plus it is what reaches order_note",
-              (k.order_note_for(2, False) + _extra).endswith(_note)
-              and _note in k.order_note_for(2, True) + _extra)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(477, "spoken is the block's own text without a wake order",
-              _gesagt == "Wir reden über den Termin.", repr(_gesagt))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    try:
-        _w = _TurnStub(_pr.TurnOrders(note=_note, spoken=_frueher, wake=True))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _extra_w, _gesagt_w = k.policy_turn(_w, 2, block("Ja genau so."))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(478, "a wake order on a block WITHOUT the wake word adds the v2 order note",
-              _extra_w == _note + k.ORDER_NOTE_V2, repr(_extra_w))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(479, "and spoken is extended with the wake block's text",
-              _gesagt_w == "Ja genau so. " + _frueher, repr(_gesagt_w))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _extra_v1, _ = k.policy_turn(
-            _TurnStub(_pr.TurnOrders(note=_note, spoken=_frueher, wake=True)), 1,
-            block("Ja genau so."))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(480, "in a v1 turn the v1 order note", _extra_v1 == _note + k.ORDER_NOTE)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _extra_ww, _ = k.policy_turn(
-            _TurnStub(_pr.TurnOrders(note=_note, spoken=_frueher, wake=True)), 2,
-            block("Robo, mach das.", wake_word=True))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(481, "a block WITH the wake word carries its order note once, not twice",
-              _extra_ww == _note, repr(_extra_ww))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(482, "without a runner: no note, spoken is the block text (as before)",
-              k.policy_turn(None, 2, block("Nur das.")) == ("", "Nur das."))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(483, "PolicyRunner is imported lazily, only under --policy",
-              "PolicyRunner" not in vars(k))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    return rec
-
-
-@pytest.fixture(scope="module")
-def sec_56(sec_55):
+def sec_56(sec_54):
     """Scenario: level 2: its own question is not the agent's to resolve"""
     global _REC
     _REC = rec = _Recorder()
@@ -7198,7 +7085,7 @@ def sec_56(sec_55):
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(492, "run_turn hands the runner's open ask to build_prompt",
-              "policy_ask_id=(policy_runner.open_ask_id()" in _quelle)
+              "policy_ask_id=decisions.open_ask_id()" in _quelle)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     return rec
@@ -8047,7 +7934,7 @@ def sec_73(sec_72):
         rec.error += traceback.format_exc()[-1200:]
     import json as _pjson  # noqa: E402
     import tempfile as _ptf  # noqa: E402
-    import shared.minutes_format as _ppd  # noqa: E402
+    from shared import minutes_format as _ppd  # noqa: E402
     from shared.events import EventLog as _EventLog  # noqa: E402
     try:
         _ptmp = Path(_mkdtemp())
@@ -9143,21 +9030,6 @@ def test_53_level_2_a_proposal_answering_an_order_gets_its_mar(sec_53, site, occ
 ])
 def test_54_level_2_off_the_writer_files_exactly_what_it_filed(sec_54, site, occ):
     _assert_site(sec_54, site, occ)
-
-
-@pytest.mark.parametrize("site, occ", [
-    pytest.param(475, None, id="the orders' note becomes the turn's extra order note"),
-    pytest.param(476, None, id='the ordinary note plus it is what reaches order_note'),
-    pytest.param(477, None, id="spoken is the block's own text without a wake order"),
-    pytest.param(478, None, id='a wake order on a block WITHOUT the wake word adds the v2 order note'),
-    pytest.param(479, None, id="and spoken is extended with the wake block's text"),
-    pytest.param(480, None, id='in a v1 turn the v1 order note'),
-    pytest.param(481, None, id='a block WITH the wake word carries its order note once, not twice'),
-    pytest.param(482, None, id='without a runner: no note, spoken is the block text (as before)'),
-    pytest.param(483, None, id='PolicyRunner is imported lazily, only under --policy'),
-])
-def test_55_level_2_policy_turn_what_a_turn_takes_from_the_pol(sec_55, site, occ):
-    _assert_site(sec_55, site, occ)
 
 
 @pytest.mark.parametrize("site, occ", [

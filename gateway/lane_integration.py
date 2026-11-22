@@ -531,7 +531,7 @@ class Lanes:
         return out or [(speaker, text)]
 
     def on_decider_result(self, result, snap, reason: str) -> None:
-        """Chained onto `gateway/decider.py`'s `DeciderWorker.on_result`.
+        """Chained onto `blocks/decisions_tasks_questions/decider.py`'s `DeciderWorker.on_result`.
 
         Reads `neues_thema`/`rueckkehr_thema` off `result.by_id()` and
         feeds the hysteresis. A confirmed, genuinely new topic opens a

@@ -33,7 +33,6 @@ order, and a deadlock against the ticker. Holding `StageWriter._lock`
 """
 from __future__ import annotations
 
-import sys
 import threading
 import time
 from dataclasses import dataclass
@@ -41,12 +40,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-import decide as d  # noqa: E402
-import policy as pol  # noqa: E402
-from shared.events import is_token  # noqa: E402
-from shared.wiki_names import page_path, page_slug  # noqa: E402
-from questions import CONFIRM_ID, CONFIRM_QUESTIONS, MODE_ID, MODE_QUESTIONS  # noqa: E402
+from . import decide as d
+from . import policy as pol
+from shared.events import is_token
+from shared.minutes_format import marker, pending_label
+from shared.wiki_names import page_path, page_slug
+from .questions import CONFIRM_ID, CONFIRM_QUESTIONS, MODE_ID, MODE_QUESTIONS
 
 # The signal token of a page ordered by Zuruf (MM-G D7), for the trace.
 ZURUF_SIGNAL = "zuruf_seite"
@@ -115,6 +114,10 @@ class PolicyRunner:
         self._t0 = now()
         self._votes: list = []
         self._mode_done = False
+        # callable(tag, text, topic_id): told about every protocol entry
+        # this runner files itself (the topic page's backlink). The block
+        # turns it into its `entry` output; None: nobody listens.
+        self.on_entry: Optional[Callable] = None
 
     # ------------------------------------------------ decider thread
     def on_result(self, result, snap, reason: str = "") -> None:
@@ -179,7 +182,7 @@ class PolicyRunner:
         for action in pol.route(result, self.mode, self.policy):
             if action.kind == "wake" and reason == "wake":
                 continue          # the wake word already made it an order
-            self._execute(action, pol.marker(True), snap.block)
+            self._execute(action, marker(True), snap.block)
 
     def _refresh(self) -> None:
         """Read the stage's question slot and brake into PolicyState."""
@@ -235,7 +238,7 @@ class PolicyRunner:
                             reason=bremse.replace(" ", "_"))
                 return
         stamp = self._clock().strftime("%H:%M")
-        self._execute(action, pol.marker(False, stamp), ask.block)
+        self._execute(action, marker(False, stamp), ask.block)
 
     def _execute(self, action: pol.Action, mark: str,
                  block: str) -> Optional[Path]:
@@ -284,11 +287,12 @@ class PolicyRunner:
             if pfad is None:
                 return
             ziel, stem = str(pfad), pfad.stem
+            self._entry("notiz", f"Themenseite [[{stem}]]")
         # MM-L: the label names the WHAT -- a prefix plus <= 3 content
         # words (for a page: its title). It reaches buehne.json only; the
         # trace's pending_start carries id and kind, never the label.
         pkind, fallback = pol.PENDING[action.kind]
-        label = pol.pending_label(pkind, block, tag=action.tag, title=titel,
+        label = pending_label(pkind, block, tag=action.tag, title=titel,
                                   fallback=fallback)
         pending_id = self.writer.announce(pkind, label)
         with self._lock:
@@ -305,7 +309,7 @@ class PolicyRunner:
         if spaet:
             # close() ran while this action was on its way: no agent will
             # ever take the order, so its pending must not stand.
-            if pending_id and self.state.settle(pending_id, "shutdown"):
+            if pending_id and self.writer.settle(pending_id, "shutdown"):
                 self._flush()
             return pfad
         self._trace("policy_action", id=oid, kind=action.kind,
@@ -333,7 +337,7 @@ class PolicyRunner:
                     grund, frage = "question open", None
                 else:
                     pkind, fallback = pol.PENDING["ask"]
-                    pending_id = self.writer.announce(pkind, pol.pending_label(
+                    pending_id = self.writer.announce(pkind, pending_label(
                         pkind, pol.ask_text(action), fallback=fallback))
                     grund = self.state.apply({"action": "question",
                                               "text": pol.ask_text(action)})
@@ -341,7 +345,7 @@ class PolicyRunner:
         self._flush()
         if grund or frage is None:
             if pending_id:
-                self.state.settle(pending_id, "refused")
+                self.writer.settle(pending_id, "refused")
                 self._flush()
             self._trace("policy_refused", kind="ask",
                         reason=(grund or "no_question").replace(" ", "_"))
@@ -388,7 +392,7 @@ class PolicyRunner:
                 "document", ZURUF_SIGNAL, 1.0, False,
                 effects=frozenset(pol.ACTION_EFFECTS["document"]))
             stamp = self._clock().strftime("%H:%M")
-            return self._execute(action, pol.marker(False, stamp), block)
+            return self._execute(action, marker(False, stamp), block)
         except Exception as e:                # noqa: BLE001
             self._trace("policy_error", reason=_token(e))
             return None
@@ -471,7 +475,7 @@ class PolicyRunner:
             o.delivered = True
         # False when the state already settled it (a topic arrives as
         # `topic` through StageState.apply) -- harmless.
-        if o.pending_id and self.state.settle(o.pending_id, "arrived"):
+        if o.pending_id and self.writer.settle(o.pending_id, "arrived"):
             self._flush()
 
     def end_turn(self, ok: bool, answered: bool = False) -> None:
@@ -501,7 +505,7 @@ class PolicyRunner:
                     ausgang = "arrived"
                 else:
                     ausgang = "unanswered" if ok else "failed"
-                settled |= self.state.settle(o.pending_id, ausgang)
+                settled |= self.writer.settle(o.pending_id, ausgang)
         if settled:
             self._flush()
 
@@ -524,7 +528,7 @@ class PolicyRunner:
         settled = False
         for o in rest:
             if o.pending_id:
-                settled |= self.state.settle(o.pending_id, "shutdown")
+                settled |= self.writer.settle(o.pending_id, "shutdown")
         if settled:
             self._flush()
         if ask is not None:
@@ -559,6 +563,14 @@ class PolicyRunner:
         try:
             self.writer.trace(event, **fields)
             self._record_ticks()
+        except Exception:                     # noqa: BLE001
+            pass
+
+    def _entry(self, tag: str, text: str) -> None:
+        """Report one entry this runner filed. Never raises."""
+        try:
+            if self.on_entry is not None:
+                self.on_entry(tag, text, getattr(self.state.main, "id", "") or "")
         except Exception:                     # noqa: BLE001
             pass
 

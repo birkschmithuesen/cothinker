@@ -119,7 +119,7 @@ MAX_PENDING = 3
 # movement as a topic change (see `_brake()`), so it keeps a topic
 # announcement. `research` and `document` have no action today: they end
 # through `settle()` or the timeout. `entry` has no action either: level 2
-# settles it by id (gateway/policy_runner.py).
+# settles it by id (blocks/decisions_tasks_questions/policy_runner.py).
 #
 # `main` is NOT here, on purpose. A `main` announcement is a call-out, and
 # the run that answers it takes 40-180 s -- longer than the timeout. By
@@ -575,7 +575,7 @@ class StageState:
 
         Returns the new id, or "" when the announcement was refused. The
         label is a short German phrase: a prefix plus, by design (MM-L),
-        up to three content words of what was said (`policy.pending_label`).
+        up to three content words of what was said (`shared.minutes_format.pending_label`).
         It goes into buehne.json only, and nothing but the page ever reads
         it. The trace gets the id and the kind only, never the label.
 
@@ -783,7 +783,7 @@ class StageState:
     def brake_check(self) -> str:
         """Would an automatic surface change be braked right now?
 
-        Level 2 (gateway/policy.py) asks BEFORE it orders a topic block,
+        Level 2 (blocks/decisions_tasks_questions/policy.py) asks BEFORE it orders a topic block,
         so it does not announce a change the brake would refuse anyway.
         The same rule, not a copy: `_brake(record=False)`.
         """

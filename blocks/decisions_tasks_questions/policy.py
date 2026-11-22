@@ -32,16 +32,12 @@ action through it, so a future table row cannot bypass it.
 from __future__ import annotations
 
 import re
-import sys
 from collections import Counter
 from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Optional, Sequence
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from shared.wake_word import WAKE_NOT  # noqa: E402
-from shared.minutes_format import DEFAULT_MODE, MODES  # noqa: E402
-from shared.text import MAX_PENDING_LABEL  # noqa: E402
+from shared.minutes_format import DEFAULT_MODE, MODES
 
 ACTIONS = ("topic_block", "tag_entry", "stage_decision", "ask", "research",
            "document", "wake")
@@ -353,181 +349,6 @@ PENDING = {
     "document": ("document", "Dokument wird angelegt"),
     "wake": ("main", "Zuruf erkannt"),
 }
-
-
-# --- MM-L: the pending label names the WHAT, not just the kind ----------
-# Stage pending kind -> German prefix (docs/superpowers/plans/
-# 2026-09-26-mm-l-pending-label.md). "entry" is the prefix for a tag_entry
-# pending with no known tag; TAG_PENDING_PREFIX overrides it per protocol
-# tag when one is given.
-PENDING_PREFIX = {
-    "topic": "Thema:",
-    "entry": "Notiert:",
-    "decision": "Beschluss:",
-    "question": "Rückfrage:",
-    "research": "Recherche:",
-    "document": "Dokument:",
-    "main": "Zuruf:",
-}
-TAG_PENDING_PREFIX = {
-    "beschluss": "Beschluss:",
-    "aufgabe": "Aufgabe:",
-    "frage": "Frage:",
-    "idee": "Idee:",
-    "recherche": "Recherche:",
-}
-
-# A small, fixed German stopword list for pending_label()'s
-# content_words(): function words that never carry the WHAT of a block.
-# Deliberately no lemmatizer -- inflected forms seen in practice are
-# listed explicitly instead of derived.
-PENDING_STOPWORDS = frozenset({
-    # articles / determiners
-    "der", "die", "das", "den", "dem", "des",
-    "ein", "eine", "einer", "eines", "einem", "einen",
-    # pronouns
-    "ich", "du", "er", "sie", "es", "wir", "ihr",
-    "mich", "dich", "ihn", "uns", "euch", "ihnen",
-    "mein", "dein", "sein", "unser", "man",
-    # conjunctions
-    "und", "oder", "aber", "doch", "denn", "sondern",
-    "weil", "dass", "wenn", "als", "wie", "ob",
-    # prepositions
-    "in", "an", "auf", "mit", "bei", "von", "zu", "für",
-    "über", "unter", "nach", "vor", "aus", "durch", "bis",
-    # preposition + article contractions
-    "am", "im", "zum", "zur", "vom", "beim", "ins",
-    # negation / adverbs / question and filler words
-    "nicht", "noch", "auch", "mal", "so", "dann", "da", "hier", "schon",
-    "nur", "bitte", "was", "wer", "sich",
-    # auxiliaries
-    "haben", "hat", "hatte", "ist", "sind", "war", "waren", "wird",
-    # modal verbs
-    "soll", "sollen", "sollte", "sollten", "muss", "müssen", "musste",
-    "kann", "können", "konnte", "will", "wollen", "wollte", "möchte",
-    # fillers
-    "also", "ähm", "äh", "halt", "eigentlich", "quasi", "genau",
-    "okay", "ja", "nein",
-})
-# Punctuation stripped off each token's ends before it is judged; a
-# character inside the token (e.g. the hyphen of a compound word) stays.
-_PENDING_PUNCT = ".,;:!?…\"'„“”‚‘’()[]{}«»"
-
-
-def content_words(text, n: int = 3) -> list[str]:
-    """The first `n` content words of `text`.
-
-    Splits on whitespace, strips surrounding punctuation from each token,
-    drops empties and tokens with no letter or digit at all (a bare "--",
-    "—", "–" or "..." is not a word, even though it survives the
-    punctuation strip because a dash isn't in `_PENDING_PUNCT` -- an
-    internal hyphen, as in "Kuchenbasar-Termin", must stay), drops
-    `PENDING_STOPWORDS` and drops the wake word -- but not
-    "Robotik"/"Robert"/"Roboter...", the same exclusion
-    `shared.wake_word.WAKE_NOT` applies, because those are content, not an address
-    to Robo.
-    """
-    words: list[str] = []
-    for raw in str(text).split():
-        token = raw.strip(_PENDING_PUNCT)
-        if not token or not any(c.isalnum() for c in token):
-            continue
-        low = token.lower()
-        if low in PENDING_STOPWORDS:
-            continue
-        if low.startswith("robo") and not WAKE_NOT.match(low):
-            continue
-        words.append(token)
-        if len(words) >= n:
-            break
-    return words
-
-
-_WAKE_TOKEN = re.compile(r"\brobo[a-zäöüß]*", re.IGNORECASE)
-
-
-def wake_source(text) -> str:
-    """The part of `text` from the first wake word onward.
-
-    A wake block still holds every earlier sentence of the open block, so
-    the order is what follows the wake word, not the talk before it.
-    Same matching as `gateway/segmenter.py`: word boundary, prefix, minus `WAKE_NOT`
-    ("Robotik"/"Robert" are not the wake word). The whole text when no
-    wake word is found.
-    """
-    s = str(text)
-    for m in _WAKE_TOKEN.finditer(s):
-        if not WAKE_NOT.match(m.group(0)):
-            return s[m.start():]
-    return s
-
-
-def _cut_pending_label(label: str, limit: int) -> str:
-    """Cut `label` to `limit` chars on a word boundary when there is one
-    close enough (same shape as consumer.py's slug cutting) -- a hard cut
-    only when the first word alone already exceeds the limit."""
-    if len(label) <= limit:
-        return label
-    cut = label[:limit]
-    if " " in cut[limit // 2:]:
-        cut = cut.rsplit(" ", 1)[0]
-    return cut.rstrip()
-
-
-def pending_label(kind: str, text, *, tag: str = "", title: str = "",
-                   fallback: str = "") -> str:
-    """The German pending label: a short prefix plus at most three content
-    words, so the stage names the WHAT and not just the kind (MM-L).
-
-    `kind` is the stage pending kind (`PENDING`'s first element), `text`
-    the block or ask text, `title` the topic page title (wins over `text`
-    when it yields a content word -- the `document` case), `tag` the
-    protocol tag (for `entry`). Falls back to `fallback`, or the bare
-    prefix when there is none, if neither source has a content word --
-    the label is never empty.
-    """
-    if kind == "entry" and tag in TAG_PENDING_PREFIX:
-        prefix = TAG_PENDING_PREFIX[tag]
-    else:
-        prefix = PENDING_PREFIX.get(kind, "Notiert:")
-    title_words = content_words(title, 4)
-    if title_words:
-        source, words = title, title_words
-    else:
-        # A call-out block carries earlier talk; name the order (MM-L).
-        source = wake_source(text) if kind == "main" else text
-        words = content_words(source, 4)
-        # a wake word with nothing after it: fall back to the whole text
-        if not words and source is not text:
-            source = text
-            words = content_words(source, 4)
-    if not words:
-        return fallback or prefix.rstrip(":")
-    # content_words() already stripped a trailing "?" off the last word
-    # (it is in _PENDING_PUNCT); put it back only when that word really is
-    # the source's last content word (not when the label was cut short).
-    complete = len(words) <= 3
-    words = words[:3]
-    if complete and str(source).rstrip().endswith("?"):
-        words[-1] += "?"
-    return _cut_pending_label(f"{prefix} {' '.join(words)}",
-                               MAX_PENDING_LABEL)
-
-
-AUTONOMOUS_MARK = "*(autonom)*"
-
-
-def marker(autonomous: bool, confirmed_at: str = "") -> str:
-    return AUTONOMOUS_MARK if autonomous else f"*(bestätigt {confirmed_at})*"
-
-
-def with_marker(text, mark: str, limit: int = 500) -> str:
-    """`text` plus the marker, the marker never cut off by `limit`."""
-    text = " ".join(str(text).split())
-    if not mark:
-        return text[:limit]
-    room = max(0, limit - len(mark) - 1)
-    return (text[:room].rstrip() + " " + mark).strip()
 
 
 def anchor(text, words: int = 8) -> str:

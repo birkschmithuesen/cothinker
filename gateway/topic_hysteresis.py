@@ -9,11 +9,11 @@
 `docs/kurator-kernmotivation.md`'s "not-moving needs a reason now, not
 moving" and the 2026-10-20 lane concept's §"Themen-Hysterese".
 
-Jev (`gateway/decide.py`) answers `neues_thema` and `rueckkehr_thema` as
+Jev (`blocks/decisions_tasks_questions/decide.py`) answers `neues_thema` and `rueckkehr_thema` as
 per-block probabilities, fresh every block -- noisy on their own. This
 module turns that stream into a CONFIRMED topic-change event, which is
 what fires the coach lane (`gateway/lanes.py`) and what the stage shows
-as "neues Thema". It deliberately does NOT live in `gateway/decider.py`:
+as "neues Thema". It deliberately does NOT live in `blocks/decisions_tasks_questions/decider.py`:
 the hysteresis rule is a lane-architecture decision, the decider's job
 stays "ask the questions, hand back the numbers".
 

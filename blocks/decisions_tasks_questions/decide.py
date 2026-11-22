@@ -65,7 +65,7 @@ import time
 from dataclasses import dataclass, field
 from typing import Optional, Sequence
 
-from questions import QUESTIONS, QUESTIONS_VERSION, Question, questions_hash
+from .questions import QUESTIONS, QUESTIONS_VERSION, Question, questions_hash
 
 DEFAULT_CONTEXT_BLOCKS = 5
 TOPIC_TITLES = 3
@@ -398,7 +398,7 @@ class JevBackend(Backend):
                  base_url: str = "", timeout_s: float = 30.0) -> None:
         # Lazy on purpose: the live path does not load the US client
         # unless somebody chose it by setting COTHINKER_DECIDER=jev.
-        import openrouter_jev as boj
+        from . import openrouter_jev as boj
         self._boj = boj
         kw = {"timeout_s": timeout_s}
         if model:

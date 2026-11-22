@@ -48,7 +48,7 @@ tables below are built from.
 |---|---|---|---|---|
 | segment (utterance batching) | Capture | `gateway/segmenter.py` 356, `shared/wake_word.py` 67 — 423 | core | 1× |
 | topic change | Capture | `gateway/topic_detect.py` 571, `topic_hysteresis.py` 95, `topic_laya_worker.py` 138, `topic_title.py` 202 — 1006 | Reflect | 1× |
-| decisions / tasks / open questions | Capture | `gateway/decide.py` 569, `decider.py` 424, `openrouter_jev.py` 269, `policy.py` 668, `policy_runner.py` 567, `proposals.py` 68, `questions.py` 191 — 2756 | Reflect | 1× |
+| decisions / tasks / open questions | Capture | `blocks/decisions_tasks_questions/{decide,decider,openrouter_jev,policy,policy_runner,questions}.py` — 2688 (`gateway/proposals.py` 68 stays in the session host) | Reflect | 1× |
 | minutes document | Condense + write | `shared/minutes_format.py` 441 | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
 | mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
@@ -131,14 +131,15 @@ blocks/speaking_share/room_talk_time.py                                         
 blocks/speaking_share/talk_share.py                                               block:speaking-share
 blocks/timer/__init__.py                                                         block:timer
 blocks/timer/clock.py                                                            block:timer
+blocks/decisions_tasks_questions/__init__.py                                      block:decisions-tasks-questions
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
 gateway/conflict_triage.py                                                        core:session
 gateway/consumer.py                                                               core:session
 gateway/correction.py                                                             stt:correction
 gateway/correction_prefilter.py                                                   stt:correction
-gateway/decide.py                                                                 block:decisions-tasks-questions
-gateway/decider.py                                                                block:decisions-tasks-questions
+blocks/decisions_tasks_questions/decide.py                                        block:decisions-tasks-questions
+blocks/decisions_tasks_questions/decider.py                                       block:decisions-tasks-questions
 shared/events.py                                                                  core:session
 gateway/infomaniak_chat.py                                                        core:llm
 gateway/infomaniak_embed.py                                                       core:llm
@@ -147,12 +148,12 @@ gateway/lane_context.py                                                         
 gateway/lane_integration.py                                                       block:mirroring-coach
 gateway/lanes.py                                                                  core:agent
 gateway/legacy_stage_sink.py                                                      core:session
-gateway/openrouter_jev.py                                                         block:decisions-tasks-questions
-gateway/policy.py                                                                 block:decisions-tasks-questions
-gateway/policy_runner.py                                                          block:decisions-tasks-questions
-gateway/proposals.py                                                              block:decisions-tasks-questions
+blocks/decisions_tasks_questions/openrouter_jev.py                                block:decisions-tasks-questions
+blocks/decisions_tasks_questions/policy.py                                        block:decisions-tasks-questions
+blocks/decisions_tasks_questions/policy_runner.py                                 block:decisions-tasks-questions
+gateway/proposals.py                                                              core:session
 shared/minutes_format.py                                                          block:minutes-document
-gateway/questions.py                                                              block:decisions-tasks-questions
+blocks/decisions_tasks_questions/questions.py                                     block:decisions-tasks-questions
 gateway/segmenter.py                                                              block:segment
 gateway/smart_turn_worker.py                                                      stt:thought-end
 gateway/speaker_enroll.py                                                         stt:speaker-labels
