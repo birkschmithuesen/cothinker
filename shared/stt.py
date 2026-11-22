@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import json
 import urllib.request
+import weakref
 from dataclasses import dataclass, field, replace as _dc_replace
 from typing import Callable, Iterable, Iterator, Mapping, Protocol, Sequence
 
@@ -116,7 +117,7 @@ class SttAudioSession(SttSource, Protocol):
         `events()` again."""
 
 
-_stage_errors_logged: set = set()
+_stage_errors_logged: "weakref.WeakKeyDictionary" = weakref.WeakKeyDictionary()
 
 
 def run_stages(stages: Sequence[TranscriptStage], ev: TranscriptEvent,
@@ -129,11 +130,15 @@ def run_stages(stages: Sequence[TranscriptStage], ev: TranscriptEvent,
         out: list[TranscriptEvent] = []
         for e in events:
             try:
-                out.extend(stage.feed(e))
+                out.extend(list(stage.feed(e)))
             except Exception as exc:       # noqa: BLE001
                 key = (getattr(stage, "name", repr(stage)), type(exc).__name__)
-                if key not in _stage_errors_logged:
-                    _stage_errors_logged.add(key)
+                try:                       # the seen-set lives as long as the `log` callable
+                    seen = _stage_errors_logged.setdefault(log, set())
+                except TypeError:          # not weak-referenceable: log every time
+                    seen = set()
+                if key not in seen:
+                    seen.add(key)
                     log(f"stt: stage {key[0]!r} failed: {key[1]}")
                 out.append(e)
         events = out

@@ -97,9 +97,11 @@ class _StreamSession:
     def __init__(self, factory: Callable, on_event: Callable, on_status: Callable[[str], None], *,
                  speakers=None, buffer_s: float = BUFFER_S, retry_s=RETRY_S,
                  wall: Callable[[], float] = wall_ms, send_timeout_s: float = SEND_TIMEOUT_S,
-                 log: Callable[[str], None] = _log.warning) -> None:
+                 log: Callable[[str], None] = _log.warning,
+                 on_stream_end: Optional[Callable[[int], None]] = None) -> None:
         self._factory = factory
         self._on_event = on_event
+        self._on_stream_end = on_stream_end
         self._on_status = on_status
         self._speakers = speakers
         self._retry = tuple(retry_s) or (1.0,)
@@ -269,6 +271,11 @@ class _StreamSession:
             self._log(f"stt: stream {s.no} reader failed: {type(e).__name__}")
         finally:
             s.dead = True
+            if self._on_stream_end is not None:
+                try:
+                    self._on_stream_end(s.no)
+                except Exception as e:       # noqa: BLE001
+                    self._log(f"stt: stream-end handler failed: {type(e).__name__}")
             if s is self._live and not self._closing:
                 self._live = None
                 self._set_state("degraded")
@@ -327,6 +334,7 @@ class InprocessSession:
         self._factory = engine_factory
         self._wall = wall
         self._log = log
+        self._stage_log = lambda msg: self._log(msg)   # own identity: stage-error dedupe is per session
         self._kw = dict(buffer_s=buffer_s, retry_s=retry_s, wall=wall, send_timeout_s=send_timeout_s)
         self._out: queue.Queue = queue.Queue()
         self._capture: Optional[list] = None   # set (on the loop) while flush() collects finals
@@ -351,8 +359,18 @@ class InprocessSession:
 
     def start(self) -> "InprocessSession":
         self._thread.start()
-        asyncio.run_coroutine_threadsafe(self._astart(), self._loop).result()
+        try:
+            asyncio.run_coroutine_threadsafe(self._astart(), self._loop).result()
+        except BaseException:
+            self._stop_loop()
+            raise
         return self
+
+    def _stop_loop(self) -> None:
+        self._loop.call_soon_threadsafe(self._loop.stop)
+        self._thread.join(timeout=5.0)
+        if not self._thread.is_alive():
+            self._loop.close()
 
     def _run_loop(self) -> None:
         asyncio.set_event_loop(self._loop)
@@ -361,7 +379,8 @@ class InprocessSession:
     async def _astart(self) -> None:
         self._inq = asyncio.Queue()
         self._ss = _StreamSession(self._factory, self._on_event, self.states.append,
-                                  speakers=self._cfg.speakers, log=self._log, **self._kw)
+                                  speakers=self._cfg.speakers, log=self._log,
+                                  on_stream_end=self._on_stream_end, **self._kw)
         self._sender = asyncio.get_running_loop().create_task(self._send_loop())
         self._ss.open()
 
@@ -424,16 +443,27 @@ class InprocessSession:
                 asyncio.run_coroutine_threadsafe(self._aclose(), self._loop).result()
             except Exception as e:             # noqa: BLE001
                 self._log(f"stt: close failed: {type(e).__name__}")
-            self._loop.call_soon_threadsafe(self._loop.stop)
-            self._thread.join(timeout=5.0)
+            self._stop_loop()
         self._out.put(_END)
 
     async def _aclose(self) -> None:
-        if self._sender is not None:
-            self._sender.cancel()
-            await asyncio.wait([self._sender])
-        await self._ss.close()
-        self._flush_collectors()               # nothing buffered is lost on close
+        try:
+            if self._sender is not None:
+                # audio already handed over goes through before the stream closes
+                self._inq.put_nowait(_STOP)
+                _, pending = await asyncio.wait([self._sender], timeout=CLOSE_TIMEOUT_S)
+                if pending:
+                    self._sender.cancel()
+                    await asyncio.wait([self._sender])
+            await self._ss.close()
+        finally:
+            self._flush_collectors()           # nothing buffered is lost on close
+
+    def _on_stream_end(self, no: int) -> None:
+        """A stream's reader ended (engine error or end): its open utterance is final now."""
+        st = self._streams.pop(no, None)
+        if st is not None:
+            st.collector.flush()
 
     # ------------------------------------------------- SttEvent -> TranscriptEvent
     def _on_event(self, no: int, ev, clock: AudioClock) -> None:
@@ -461,7 +491,7 @@ class InprocessSession:
             t_start=start, t_end=end,
             audio_epoch=wall / 1000.0 - start if wall is not None else None,
             backend=BACKEND, extra=dict(extra))
-        for out in run_stages(self._cfg.stages, tev, self._log):
+        for out in run_stages(self._cfg.stages, tev, self._stage_log):
             if self._capture is not None and out.type == "final":
                 self._capture.append(out)
             else:

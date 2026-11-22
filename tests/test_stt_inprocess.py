@@ -147,6 +147,8 @@ def live_engine(sessions, **kw):
 
 # ============================================================ API surface
 def test_open_stt_inprocess_returns_an_audio_session():
+    with pytest.raises(ValueError, match="api_key"):
+        open_stt(make_cfg())                 # no key and no engine_factory
     eng = FakeEngine()
     sess = open_stt(make_cfg(), engine_factory=lambda speakers: eng)
     try:
@@ -297,6 +299,9 @@ def test_stages_run_in_order_on_every_event(sessions):
     assert [e.text for e in rd.events] == ["x-a-b", "y-a-b", "y-a-b"]
     assert [e.type for e in rd.events] == ["partial", "partial", "final"]
     assert calls[:2] == [("a", "partial"), ("b", "partial")]
+    eng.push(sttev("final", "z"))
+    assert until(lambda: len(rd.events) == 4)
+    assert [(e.type, e.text) for e in sess.flush()] == [("final", "z-a-b")]   # flush runs the stages too
 
 
 def test_a_raising_stage_passes_the_event_unchanged(sessions):
@@ -318,7 +323,11 @@ def test_close_flushes_then_ends_events(sessions):
     eng.push(sttev("final", "letzter satz"))
     assert until(lambda: rd.of("partial"))
     assert not rd.done
-    sess.close()
+    chunks = [bytes([i]) * 640 for i in range(1, 21)]
+    for c in chunks:
+        sess.send_pcm(c)
+    sess.close()                                     # at once: the queued audio must not be dropped
+    assert eng.sent == chunks
     assert until(lambda: rd.done)
     assert [(e.type, e.text) for e in rd.events][-1] == ("final", "letzter satz")
     assert sess.state == "closed"
@@ -349,7 +358,8 @@ def _dying_then_good(sessions):
         return s
 
     sess = sessions(factory)
-    assert until(lambda: streams)
+    assert until(lambda: streams and streams[0]._loop)
+    streams[0].push(sttev("final", "offen"))        # an utterance still open when this stream dies
     sess.send_pcm(bytes([1]) * 1280)
     assert until(lambda: sess._ss._buffer_bytes == 1280)    # buffered: no stream is live yet
     gate.set()
@@ -360,6 +370,9 @@ def _dying_then_good(sessions):
 def test_a_stream_dying_mid_flush_is_retired_and_a_second_one_goes_live(sessions):
     sess, streams = _dying_then_good(sessions)
     assert len(streams) == 2 and streams[0].closed >= 1 and sess.state == "ok"
+    rd = Reader(sess)                                # the open utterance arrives without close()
+    assert until(lambda: rd.of("final"))
+    assert rd.of("final")[0].text == "offen" and rd.of("final")[0].turn_id == "1-1"
 
 
 def test_the_buffered_audio_reaches_the_second_stream(sessions):
