@@ -186,10 +186,6 @@ gateway/thought_end.py                                                          
 gateway/thought_end_laya_worker.py                                                stt:thought-end
 gateway/thought_end_live.py                                                       stt:thought-end
 gateway/timing.py                                                                 core:session
-gateway/topic_detect.py                                                           block:topics
-gateway/topic_hysteresis.py                                                       block:topics
-gateway/topic_laya_worker.py                                                      block:topics
-gateway/topic_title.py                                                            block:topics
 blocks/knowledge_link/__init__.py                                                 block:knowledge-link
 blocks/knowledge_link/wiki.py                                                     block:knowledge-link
 gateway/worker.py                                                                 core:agent
