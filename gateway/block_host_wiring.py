@@ -19,6 +19,7 @@ line, rather than failing the whole session.
 """
 from __future__ import annotations
 
+import functools
 import re
 import sys
 import threading
@@ -36,6 +37,7 @@ from blocks.topics import TopicsBlock
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
 from blocks.minutes_document import MinutesDocumentBlock
 from gateway.sync_safe import atomic_write_text
+from gateway.worker import FAILURE_MARKERS
 from shared.blocks import BLOCK_API_VERSION, Block, BlockContext, BlockHost
 from shared.modules import CoreEvent, StateStore
 from shared.surface import IntentBoard, ViewIntent
@@ -45,7 +47,10 @@ REFLECT_TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "reflect"
 
 # One line per block, added by the pull request that builds it.
 REGISTRY: dict[str, Callable[[], Block]] = {
-    "capture-bullets": CaptureBulletsBlock,
+    # The block must not import gateway, so the worker's failure markers
+    # are injected here.
+    "capture-bullets": functools.partial(
+        CaptureBulletsBlock, failure_markers=FAILURE_MARKERS),
     "decisions-tasks-questions": DecisionsBlock,
     "knowledge-link": KnowledgeLinkBlock,
     "status-line": status_line_block.StatusLineBlock,

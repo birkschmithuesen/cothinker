@@ -13,7 +13,9 @@ with these keys, each a list:
 
 A missing section is an empty list; an unknown key is ignored and logged
 (warning). Anything else is a `ParseFailure`. Text carrying one of the
-worker's `FAILURE_MARKERS` is a failure even when it contains valid JSON:
+host-supplied `failure_markers` (the
+session host passes the worker's `FAILURE_MARKERS`; blocks never import
+`gateway`) is a failure even when it contains valid JSON:
 an API error message is not minutes.
 
 Item shape (the four minutes sections): a string, or an object
@@ -30,9 +32,7 @@ import json
 import logging
 import re
 from dataclasses import dataclass, field
-from typing import Union
-
-from gateway.worker import FAILURE_MARKERS
+from typing import Sequence, Union
 
 log = logging.getLogger(__name__)
 
@@ -85,9 +85,12 @@ def _json_object(text: str) -> object:
     return None
 
 
-def parse_reply(text: str) -> Union[CapturedTurn, ParseFailure]:
+def parse_reply(text: str, failure_markers: Sequence[str] = ()
+                ) -> Union[CapturedTurn, ParseFailure]:
+    """`failure_markers`: substrings that mark an API-error reply; given by
+    the host, empty means no marker check."""
     text = text if isinstance(text, str) else ""
-    if any(marker in text for marker in FAILURE_MARKERS):
+    if any(marker in text for marker in failure_markers):
         return ParseFailure("failure marker in reply", text, failed=True)
     obj = _json_object(text)
     if not isinstance(obj, dict):

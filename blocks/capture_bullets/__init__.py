@@ -18,6 +18,10 @@ only emits `block_output` events, all with `"from": "capture-bullets"`:
 - `{"kind": "parse_failed", "turn", "reason", "failed", "raw"}` when the
   reply does not parse: the turn counts as failed and `raw` goes to the
   run trace. No bullet and no proposal is emitted then.
+
+The host passes `failure_markers` (the worker's `FAILURE_MARKERS`) to the
+constructor; a reply containing one is a failed parse. The block itself
+never imports `gateway`.
 """
 from __future__ import annotations
 
@@ -42,6 +46,9 @@ class CaptureBulletsBlock:
     id = BLOCK_ID
     api_version = BLOCK_API_VERSION
 
+    def __init__(self, failure_markers: Sequence[str] = ()) -> None:
+        self._failure_markers = tuple(failure_markers)
+
     def start(self, ctx: BlockContext, config: Mapping[str, object]) -> None:
         pass
 
@@ -52,7 +59,8 @@ class CaptureBulletsBlock:
         if ev.kind != "agent_reply" or not isinstance(ev.payload, Mapping):
             return []
         turn = ev.payload.get("turn")
-        got = parse_reply(ev.payload.get("text", ""))
+        got = parse_reply(ev.payload.get("text", ""),
+                          self._failure_markers)
         if isinstance(got, ParseFailure):
             return [_out(kind="parse_failed", turn=turn, reason=got.reason,
                          failed=got.failed, raw=got.raw)]

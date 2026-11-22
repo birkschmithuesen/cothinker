@@ -159,3 +159,14 @@ def test_collect_returns_only_the_named_blocks_answers(tmp_path):
     assert blocks.collect("block_output", {"minutes_query": {}}, "other") == []
     # nothing leaks into a plain dispatch afterwards
     assert blocks.collect("tick", {"at": 0.0, "components": {}}, "minutes-document") == []
+
+
+def test_capture_bullets_gets_the_worker_failure_markers(tmp_path):
+    from gateway.worker import FAILURE_MARKERS
+    blocks = bhw.build_session_blocks(
+        session_dir=tmp_path, sink=lambda i: None, log=lambda *a: None)
+    got = blocks.collect(
+        "agent_reply",
+        {"text": FAILURE_MARKERS[0] + ' ```json\n{"verlauf": ["x"]}\n```', "turn": 1},
+        "capture-bullets")
+    assert [(o["kind"], o["failed"]) for o in got] == [("parse_failed", True)]

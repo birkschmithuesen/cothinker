@@ -74,7 +74,7 @@ def test_non_json_is_parse_failure():
 
 def test_failure_marker_text_is_failure():
     text = 'API call failed: HTTP 429 ```json\n{"verlauf": ["x"]}\n```'
-    got = parse_reply(text)
+    got = parse_reply(text, failure_markers=("API call failed", "HTTP 4"))
     assert isinstance(got, ParseFailure)
     assert got.failed is True
     assert got.raw == text
