@@ -8,8 +8,8 @@ this file; the tables below are generated from it and add line counts.
 
 **Used by:** `core` = part of the single code base this repository holds
 today. `Reflect` = one of the 12 blocks confirmed by Birk for the Reflect
-template (only 7 of those 12 have code in this repository today; the other
-5 — condense, timer, speaker queue, speaking share, write text — are not
+template (only 8 of those 12 have code in this repository today; the other
+4 — condense, timer, speaker queue, write text — are not
 yet built here). `templates` = reserved for per-instance template files;
 none exist in this repository yet. **Built** = how many separate source
 files implement the target in this repository (always `1×` here — this
@@ -55,12 +55,13 @@ tables below are built from.
 | knowledge link (vault) | Agent behaviour | `gateway/wiki.py` 424, `shared/wiki_names.py` 49, `graph/__init__.py` 5, `graph_build.py` 89, `neighbours.py` 90, `ring_select.py` 110, `seed_note.py` 84, `vault_notes.py` 239 — 1090 | Reflect | 1× |
 | status line | Show + share | `gateway/status_line.py` 164 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
+| speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
 
-**Reflect check:** 7 of the 12 blocks Birk confirmed for Reflect already
+**Reflect check:** 8 of the 12 blocks Birk confirmed for Reflect already
 have code in this repository — topic change, decisions / tasks / open
 questions, minutes document, mirroring / coach question, knowledge link,
-status line, session graph. The other 5 confirmed blocks (capture bullets,
-condense, timer, speaker queue, speaking share) have no code in this
+status line, session graph, speaking share. The other 4 confirmed blocks
+(capture bullets, condense, timer, speaker queue) have no code in this
 repository yet.
 
 ## STT module, surfaces, core (not blocks)
@@ -112,6 +113,7 @@ block:knowledge-link         block — knowledge link (vault notes)
 block:status-line            block — status line
 block:graph                  block — graph (session / results / term graph)
 block:write-text             block — write text (prologue, scene, script)
+block:speaking-share         block — speaking share (talk share + room talk time)
 retire                       dropped by the target (decision 25 engines)
 ```
 
@@ -121,6 +123,9 @@ Scope: `gateway/ stage/ shared/ stt/ graph/ modules/ blocks/ templates/
 surfaces/`, every `*.py` outside a `tests/` directory, at `HEAD`.
 
 ```inventory cothinker
+blocks/speaking_share/__init__.py                                                 block:speaking-share
+blocks/speaking_share/room_talk_time.py                                           block:speaking-share
+blocks/speaking_share/talk_share.py                                               block:speaking-share
 gateway/agent_lane.py                                                             core:agent
 gateway/conflict_triage.py                                                        core:session
 gateway/consumer.py                                                               core:session
