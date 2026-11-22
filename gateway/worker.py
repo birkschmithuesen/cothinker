@@ -38,9 +38,15 @@ import json
 import os
 import queue
 import subprocess
+import sys
 import threading
 import time
+from pathlib import Path
 from typing import Callable
+
+_REPO_ROOT = str(Path(__file__).resolve().parent.parent)
+if _REPO_ROOT not in sys.path:
+    sys.path.append(_REPO_ROOT)
 
 
 def profile_disabled_toolsets(hermes_home: str | None) -> list[str]:
@@ -64,10 +70,13 @@ def profile_disabled_toolsets(hermes_home: str | None) -> list[str]:
         raw = [raw]
     return [str(x).strip() for x in raw if str(x).strip()]
 
-# Kept from AGENTS.md as a regression net. The structured `failed` flag is
-# the primary signal now, but this check is pinned by a test so nobody
-# removes it by accident.
-FAILURE_MARKERS = ("API call failed", "HTTP 4")
+# Kept from AGENTS.md as a regression net, pinned by a test, never remove.
+# The structured `failed` flag is the primary signal now, but this check
+# catches a reply whose text betrays an upstream failure the signal
+# missed. One shared definition, not a second copy (ADR 0018 migration
+# rule) -- blocks may not import gateway/ (ADR 0008), so the constant
+# lives in shared/agent.py and this is only an import of it.
+from shared.agent import FAILURE_MARKERS  # noqa: E402
 
 # Live check, 20.10.2026: measured directly against the
 # live start path (`$HERMES_PY gateway/worker.py --hermes-home
@@ -374,7 +383,7 @@ def _main() -> int:                       # pragma: no cover - needs Hermes
     ap.add_argument("--no-history", action="store_true",
                     help="never read the per-session SessionDB conversation "
                          "back: a lane worker's prompt "
-                         "(gateway/lane_context.py's build_prompt()) already "
+                         "(blocks/mirroring_coach/context.py's build_prompt()) already "
                          "carries the full bounded window + Stand summary "
                          "every turn, so replaying the ever-growing stored "
                          "conversation on top of it would defeat the whole "

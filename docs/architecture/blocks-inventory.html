@@ -5,8 +5,8 @@
 .lg span{display:inline-block;margin-right:14px;font-size:14px}.lg i{display:inline-block;width:14px;height:14px;border-radius:3px;margin-right:4px;vertical-align:-2px}
 .m{border-color:#2e9b55}.m .t{background:#2e9b55}.wk{border-color:#3b7dd8}.wk .t{background:#3b7dd8}.i{border-color:#d98a2b}.i .t{background:#d98a2b}.k{border-color:#1a8f8f}.k .t{background:#1a8f8f}.x{border-color:#8a5cc7}.x .t{background:#8a5cc7}</style></head><body><div class="w">
 <h1>Building blocks — inventory of what the code does today (v2, checked against the code)</h1>
-<div class="s">Measured on cothinker <code>fe3351d4</code>, interview-theater tag <code>example-instance-2026-final</code>, kollektivgedaechtnis HEAD. Purple = built in 2 or 3 code bases. Yellow fill = in the Reflect template (12 blocks, confirmed by Birk). Full table with files and line counts: blocks-inventory.md.</div>
-<div class="lg"><span><i style="background:#2e9b55"></i>M meeting</span><span><i style="background:#3b7dd8"></i>W workshop (Assistant)</span><span><i style="background:#d98a2b"></i>I InScribe (Example-Instance)</span><span><i style="background:#1a8f8f"></i>K Kollektivgedächtnis</span><span><i style="background:#8a5cc7"></i>built 2×/3×</span><span><i style="background:#fff7d6;border:1px solid #aaa"></i>in Reflect</span></div>
+<div class="s">Measured on cothinker <code>fe3351d4</code>, interview-theater tag <code>example-production-2026-final</code>, kollektivgedaechtnis HEAD. Purple = built in 2 or 3 code bases. Yellow fill = in the Reflect template (12 blocks). Full table with files and line counts: blocks-inventory.md.</div>
+<div class="lg"><span><i style="background:#2e9b55"></i>M meeting</span><span><i style="background:#3b7dd8"></i>W workshop (one-day instance)</span><span><i style="background:#d98a2b"></i>I InScribe (production instance)</span><span><i style="background:#1a8f8f"></i>K Kollektivgedächtnis</span><span><i style="background:#8a5cc7"></i>built 2×/3×</span><span><i style="background:#fff7d6;border:1px solid #aaa"></i>in Reflect</span></div>
 
 <div class="r"><div class="l">Speech (STT module, not blocks)</div>
 <div class="c m"><span class="t">M</span><b>thought end</b>stt/…/thought_end.py, gateway/thought_end*.py, smart_turn_worker.py</div>
@@ -16,22 +16,22 @@
 
 <div class="r"><div class="l">Capture</div>
 <div class="c rf x"><span class="t">M+W 2×</span><b>capture bullets</b>meeting: main agent turn (consumer.py prompt "## Verlauf" + worker.py, no own file) · workshop/bullets*.py, echo.py</div>
-<div class="c rf m"><span class="t">M</span><b>topic change</b>gateway/topic_detect.py, topic_hysteresis.py, topic_title.py, topic_laya_worker.py</div>
+<div class="c rf m"><span class="t">M</span><b>topic change</b>blocks/topics/detect.py, hysteresis.py, title.py, laya_worker.py</div>
 <div class="c rf x"><span class="t">M+I 2×</span><b>decisions / tasks / open questions</b>gateway/decide.py, decider.py, questions.py, policy*.py · journal.py, vorschlag*.py</div>
 <div class="c x"><span class="t">W+I+K 3×</span><b>capture terms</b>workshop/terms.py · begriffe*.py, begriffsboard*.py · kg/extraction.py</div>
 <div class="c x"><span class="t">W+K 2×</span><b>merge terms</b>workshop/term_merge.py · kg/merging.py, embeddings.py</div></div>
 
 <div class="r"><div class="l">Condense + write</div>
 <div class="c rf x"><span class="t">W+I+K 3×</span><b>condense / summary</b>workshop/discussion_eval*.py, feedback_points.py · verdichter.py, phasen_summary.py · kg2/condense.py</div>
-<div class="c rf m"><span class="t">M</span><b>minutes document</b>gateway/protocol_doc.py + Protocol class in consumer.py</div>
+<div class="c rf m"><span class="t">M</span><b>minutes document</b>shared/minutes_format.py + Protocol class in consumer.py</div>
 <div class="c wk"><span class="t">W</span><b>contrast pairs</b>workshop/sort*.py, dossier.py, wall_themes.py</div>
 <div class="c x"><span class="t">W+I 2×</span><b>write text</b>workshop/prologue_*.py, scene.py · szene*.py, stagescript.py …</div>
 <div class="c wk"><span class="t">W</span><b>poster</b>workshop/poster.py, poster_agent.py</div>
 <div class="c x"><span class="t">W+K 2×</span><b>image generation</b>workshop/poster_backend.py · kg2/imagegen.py</div></div>
 
 <div class="r"><div class="l">Agent behaviour</div>
-<div class="c rf m"><span class="t">M</span><b>mirroring / coach question</b>gateway/lane_integration.py, lane_context.py (lanes.py, agent_lane.py, worker.py = Agent API)</div>
-<div class="c rf m"><span class="t">M</span><b>knowledge link (vault)</b>gateway/wiki.py, graph/*.py</div>
+<div class="c rf m"><span class="t">M</span><b>mirroring / coach question</b>blocks/mirroring_coach/ (gateway/call_lane.py, lanes.py, agent_lane.py, worker.py = Agent API)</div>
+<div class="c rf m"><span class="t">M</span><b>knowledge link (vault)</b>blocks/knowledge_link/wiki.py, shared/wiki_names.py</div>
 <div class="c x"><span class="t">W+I 2×</span><b>interview questions (own / AI)</b>workshop/own_question*.py · fragen_ki.py, leitfaden.py, knoepfe/fragen.py</div>
 <div class="c i"><span class="t">I</span><b>conversation agent</b>erkenner.py, ablauf.py, kontext.py</div>
 <div class="c i"><span class="t">I</span><b>research · translation</b>recherche.py · uebersetzung.py, skript_uebersetzung.py</div></div>
@@ -57,4 +57,4 @@
 <div class="c i"><span class="t">I</span><b>characters · forms + styles</b>sprecher*.py, knoepfe/figuren.py · formberater.py, stile.py</div>
 <div class="c i"><span class="t">I</span><b>quote anchoring · brainstorm card · export</b>kernzitate.py, schaerfung.py · brainstorm.py · web_pdf.py, web_skript.py</div></div>
 
-<div class="s" style="margin-top:10px">Not blocks: phase / cue control → core phase engine · stage, operator desk, phones, wall, floor, guest view → surfaces · thought end, correction, speaker labels, engines → STT module. Corrections against v1 (gateway/blocks.py is utterance batching, workshop/echo.py is capture bullets not mirroring, condense is 3×, terms 3×) are listed in blocks-inventory.md.</div></div></body></html>
+<div class="s" style="margin-top:10px">Not blocks: phase / cue control → core phase engine · stage, operator desk, phones, wall, floor, guest view → surfaces · thought end, correction, speaker labels, engines → STT module. Corrections against v1 (gateway/segmenter.py is utterance batching, workshop/echo.py is capture bullets not mirroring, condense is 3×, terms 3×) are listed in blocks-inventory.md.</div></div></body></html>

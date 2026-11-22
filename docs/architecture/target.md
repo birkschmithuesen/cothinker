@@ -46,6 +46,13 @@ additively.
   template, which blocks configured how, which surfaces, which STT engine and
   pipeline stages). Instances live in private repositories (ADR 0015).
 
+**Network seams**: every process boundary (STT server, stage, workshop web
+app, External Display) is rebuilt on **FastAPI** when it is touched. Today
+`stage/stage.py` uses `http.server`, the STT server uses Flask, and the
+workshop hub uses websockets directly; each moves to FastAPI the next time it
+changes. Blocks, templates and the phase engine stay in-process behind the
+block host and never gain a network hop of their own (ADR 0017).
+
 A session is an episode of an instance, not its lifespan: state that spans
 sessions (an InScribe piece across three workshop days, a Kollektivgedächtnis
 graph across two days) belongs to the instance's project, not to the session.
@@ -311,6 +318,19 @@ class Block(Protocol):
   the session folder (single writer per file).
 - Inventory of blocks and their sources: [blocks-inventory.md](blocks-inventory.md).
 
+**Block tools.** A started block may return a list of `ToolSpec`s from an
+optional `tools()` method; `fn` is bound to the started instance. The block
+host collects them once, after `start()`, rejecting bad or duplicate tool
+names right there rather than at call time. From then on the host lists
+them, checks a call's arguments against the tool's JSON schema, calls the
+bound function, and keeps a short log of calls (with the result, for
+read-only tools). A successful call on a non-read-only tool also dispatches
+a `block_output` event, so other blocks see the write the same way they see
+any other block's output. A tool that raises never propagates: the host
+logs it and returns an `{"ok": false, "error": "tool_failed: <Type>"}`
+envelope instead. The MCP bridge the agent talks to exposes exactly this
+list — nothing a block didn't declare.
+
 ## 6. Templates (ADR 0009)
 
 A method is a template: blocks + phases + rules, no code of its own.
@@ -375,7 +395,7 @@ Telegram is not a target surface (ADR 0013).
 - The STT wire is additive only; a running recording machine is never
   restarted by the software.
 - One writer per session file; the stage file has exactly one writer.
-- No conversation text in the event trace (`gateway/events.py` filter).
+- No conversation text in the event trace (`shared/events.py` filter).
 - The raw transcript section of a minutes document is written only by the
   session host.
 - No automatic fallback to a US service for speech recognition; text models
@@ -402,4 +422,5 @@ Telegram is not a target surface (ADR 0013).
 | [0014](../adr/0014-licence-agpl-cla-dco-modules-own-licence.md) | Licence: AGPL core, CLA and DCO; modules may carry their own licence | §1 |
 | [0015](../adr/0015-public-repo-fresh-export-private-instances.md) | Public repository from a fresh export, private instance repositories | §1 |
 | [0016](../adr/0016-public-repo-issues-and-prs.md) | Work in the public repository through issues and pull requests | — |
+| [0017](../adr/0017-network-seams-fastapi-blocks-in-process.md) | Network seams on FastAPI, blocks stay in-process | §1 |
 | [0018](../adr/0018-product-names-interaction-migration-rules.md) | Product names, interaction and migration rules | §1, §2.2, §2.3, §7, §8 |

@@ -48,6 +48,9 @@ class InstanceConfig:
     def template_name(self) -> str | None:
         return self.tables.get("template", {}).get("name")
 
+    def template_format(self) -> str | None:
+        return self.tables.get("template", {}).get("format")
+
     def block_config(self, id: str) -> Mapping:
         return self.tables.get("blocks", {}).get(id, {})
 

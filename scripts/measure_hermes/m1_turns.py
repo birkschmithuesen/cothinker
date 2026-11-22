@@ -18,11 +18,12 @@ ROOT = Path(__file__).resolve().parents[2]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from gateway.worker import FAILURE_MARKERS, WorkerClient  # noqa: E402
+from gateway.worker import WorkerClient  # noqa: E402
 from scripts.measure_hermes import prompts as P  # noqa: E402
 from scripts.measure_hermes.api_client import Api  # noqa: E402
 from scripts.measure_hermes.common import (  # noqa: E402
     guard_memory, now, percentile, worker_interpreter, write_jsonl)
+from shared.agent import FAILURE_MARKERS  # noqa: E402
 
 CLASS_PROMPTS = {"SHORT": P.SHORT, "MEDIUM": P.MEDIUM, "TOOL": P.TOOL}
 

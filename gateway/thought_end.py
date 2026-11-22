@@ -31,7 +31,7 @@ NO TEXT EVER COMES BACK. `clean_reply()` enforces that on the PARENT's
 side rather than trusting the child: numeric fields have to be numbers,
 the error field has to be 1-32 characters of ASCII letters, digits, `_`
 or `-`, and every other key is dropped. Same rule and same reason as
-`gateway/events.py` -- a model library's exception message quotes its
+`shared/events.py` -- a model library's exception message quotes its
 input, and the input here is speech of third parties.
 
 The read side uses `selectors` on the raw file descriptor instead of

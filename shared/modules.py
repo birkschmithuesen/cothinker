@@ -40,6 +40,7 @@ class ToolSpec:
     description: str
     parameters: dict           # JSON schema
     fn: Callable[..., dict]
+    read_only: bool = False
 
 
 @dataclass(frozen=True)

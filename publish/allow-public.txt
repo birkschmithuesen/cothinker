@@ -1,0 +1,18 @@
+# Allow-list for publish/denylist-public.txt's email-real class.
+#
+# Same syntax as denylist-public.txt: a plain line is a literal, lower-cased
+# value; a `re:` line is a Python regex (case-insensitive). Either way the
+# match is against the email-real regex's own matched substring (the
+# address itself), via re.fullmatch -- not against the whole scanned line.
+# A match here does not trip the email-real hit on the public list, because
+# it names a class of public-safe addresses rather than a leaked operator
+# value. Every other real address still trips the check.
+
+# github-noreply: GitHub's own per-account no-reply address
+# (<user-id>+<login>@users.noreply.github.com). GitHub issues these, and
+# the id/login pairing is already public, so it is not a leaked operator
+# value -- this repo's own agent commit identity (FACTORY.yaml
+# commit_identity) is one of these. Any OTHER real address, including an
+# earlier non-GitHub identity this repo may have used, still trips the
+# email-real class.
+re:\d+\+[a-z0-9-]+@users\.noreply\.github\.com

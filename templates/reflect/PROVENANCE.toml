@@ -1,0 +1,15 @@
+# Provenance of imported prompt, profile and catalogue files under templates/reflect/.
+# Each entry: path (repo-relative), sha256 (hex), reviewed (bool), note (generic description of
+# anything removed into instance content). tests/test_public_text_hygiene.py enforces this file.
+
+[[file]]
+path = "templates/reflect/prompts/condense.de.md"
+sha256 = "65daf0e756b96722c0310e4827ae184f532608b3353dff59ad2bdcb9b7ebb159"
+reviewed = true
+note = "own prompt, no source file to port; generic instructions, no personal data"
+
+[[file]]
+path = "templates/reflect/prompts/condense.en.md"
+sha256 = "53680acc1f82d94470c731e7e68715f6cf1868ab28c3db13a1e65b8179a77834"
+reviewed = true
+note = "own translation of condense.de.md, no source file to port; generic instructions, no personal data"

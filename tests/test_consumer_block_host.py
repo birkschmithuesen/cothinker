@@ -1,5 +1,5 @@
 # CoThinker — tests for gateway/consumer.py's block host wiring (issue
-# #38, Wave B.1): feed_utterance() and the legacy stage sink it writes to.
+# #38, Wave B.1): feed_utterance() and its failure handling.
 # Copyright (C) 2026 Birk Schmithuesen
 #
 # This program is free software: you can redistribute it and/or modify it
@@ -9,12 +9,10 @@
 from __future__ import annotations
 
 from gateway import block_host_wiring as bhw
-from gateway import legacy_stage_sink as lss
 from shared.blocks import BLOCK_API_VERSION
-from shared.surface import ViewIntent
 
 
-class FakeProtocol:
+class FakeMinutesFile:
     def __init__(self, calls):
         self.calls = calls
 
@@ -56,9 +54,9 @@ class RaisingBlock:
 
 def test_feed_utterance_appends_raw_before_dispatch(tmp_path):
     calls = []
-    protocol = FakeProtocol(calls)
+    minutes = FakeMinutesFile(calls)
     blocks = FakeBlocks(calls)
-    bhw.feed_utterance(protocol, blocks, "hallo", "max", {"at": 1.0})
+    bhw.feed_utterance(minutes, blocks, "hallo", "max", {"at": 1.0})
     assert calls[0] == ("append_raw", "hallo", "max")
     assert calls[1][:2] == ("dispatch", "utterance")
     assert calls[1][2]["text"] == "hallo" and calls[1][2]["speaker"] == "max"
@@ -70,29 +68,17 @@ def test_feed_utterance_survives_a_raising_block(tmp_path):
         session_dir=tmp_path, sink=lambda intent: None, log=logs.append,
         registry={"capture-bullets": RaisingBlock}, clock=lambda: 0.0,
     )
-    protocol = FakeProtocol([])
-    bhw.feed_utterance(protocol, session_blocks, "hallo", "max", {"at": 1.0})
-    assert protocol.calls == [("append_raw", "hallo", "max")]
+    minutes = FakeMinutesFile([])
+    bhw.feed_utterance(minutes, session_blocks, "hallo", "max", {"at": 1.0})
+    assert minutes.calls == [("append_raw", "hallo", "max")]
     assert any("boom" not in line and "capture-bullets" in line and "broken" in line
                for line in logs)
 
 
 def test_feed_utterance_keeps_raw_when_dispatch_breaks(tmp_path):
     calls = []
-    protocol = FakeProtocol(calls)
+    minutes = FakeMinutesFile(calls)
     blocks = FakeBlocks(calls, raise_on_dispatch=True)
-    bhw.feed_utterance(protocol, blocks, "hallo", "max", {"at": 1.0})
+    bhw.feed_utterance(minutes, blocks, "hallo", "max", {"at": 1.0})
     assert calls[0] == ("append_raw", "hallo", "max")
     assert any("dispatch failed" in line for line in blocks.log_lines)
-
-
-def test_legacy_sink_unknown_prefix_logged_once():
-    logs = []
-    writer = object()
-    sink = lss.make_sink(writer, logs.append)
-    sink(ViewIntent(id="capture-bullets:1", block="capture-bullets", kind="status",
-                    audience="room", payload={}))
-    sink(ViewIntent(id="capture-bullets:2", block="capture-bullets", kind="status",
-                    audience="room", payload={}))
-    unknown_logs = [line for line in logs if "capture-bullets" in line]
-    assert len(unknown_logs) == 1

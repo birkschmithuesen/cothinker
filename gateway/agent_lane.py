@@ -11,7 +11,7 @@ against a Hermes API server on another machine.
 
 `SeamRunner.run()` returns exactly the dict `gateway.worker.WorkerClient.run`
 returns (`ok`, `final`, `usage`, `error`), including the timeout wording
-`gateway.lanes.TIMEOUT_MARKER` matches, so `gateway/lane_integration.py`'s
+`gateway.lanes.TIMEOUT_MARKER` matches, so the lane's
 result handlers need no second code path.
 
 Sessions. A lane worker runs with `--no-history`: every
@@ -25,8 +25,8 @@ many turns; it is also dropped whenever the lane's window rolls
 path restarts its process.
 
 Briefing. `open_session` always gets an empty briefing -- the API server
-has no per-session profile selector (`POST /api/sessions` takes no body,
-`workshop/agent_api.py`), so whichever profile the server answering
+has no per-session profile selector (the session-create call takes no
+body, `shared/agent.py`), so whichever profile the server answering
 `COTHINKER_AGENT_URL` happens to run is NOT necessarily this lane's own
 (a shared server backs every api-lane, so a coach lane
 cannot assume the server's ambient profile carries the coach SOUL at

@@ -7,7 +7,7 @@
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
 """Timing of the raw STT stream, one line per utterance.
 
-Deliberately separate from `events.py` / `EventLog`: that module's
+Deliberately separate from `shared/events.py` / `EventLog`: that module's
 allow-list and hashing exist to keep conversation TEXT out of the
 structural trace. This file never sees any text either -- it only ever
 writes a character COUNT, never the characters themselves -- but its
@@ -56,7 +56,7 @@ sent a usable audio-clock span for that utterance:
 
     ACCEPTED LIMITATION -- `length` is under-counted, often to zero:
     `BlockBuilder` can cut a block for `length` from two places
-    (`gateway/blocks.py`), and only ONE of them is ever attributed here.
+    (`gateway/segmenter.py`), and only ONE of them is ever attributed here.
     `sentence()` CAN cut it synchronously, inline with the utterance
     that triggered it -- and when it does, that case IS captured (see
     `tests/test_timing.py`'s synchronous-length-cut test for a
@@ -142,7 +142,7 @@ class TimingLog:
     -- `record_utterance`/`record_pause_marker` may raise (`OSError`,
     `UnicodeError`, ...). The call site in `gateway/consumer.py` is
     responsible for catching and logging, the same way it already
-    handles `Protocol.append_raw` and `bb.sentence`. That keeps the
+    handles `MinutesFile.append_raw` and `bb.sentence`. That keeps the
     OBSERVABLE contract in one place: exactly one `log(...)` call on
     failure, and the SSE loop keeps running regardless.
     """

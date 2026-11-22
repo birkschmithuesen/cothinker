@@ -90,7 +90,7 @@ if str(Path(__file__).resolve().parent) not in sys.path:
     sys.path.append(str(Path(__file__).resolve().parent))
 from session_graph import (build_session_graph,             # noqa: E402
                            protocol_head, topics_from_stage)
-from gateway.protocol_doc import is_v2, parse_topics         # noqa: E402
+from shared.minutes_format import is_v2, parse_topics         # noqa: E402
 from gateway import stage_image                              # noqa: E402
 
 ENTITIES = Path(os.environ.get(
@@ -348,7 +348,7 @@ def md(text, dateien: set, max_zeichen: int | None = None) -> str:
 
 
 # The three second-level headings a v2 protocol is cut at. Same tolerance
-# as gateway/protocol_doc.py: trailing blanks and a CRLF line end.
+# as shared/minutes_format.py: trailing blanks and a CRLF line end.
 _V2_SECTION_RE = re.compile(r"^## (Überblick|Themen|Rohtranskript)[ \t]*\r?$",
                             re.MULTILINE)
 _HTML_COMMENT_RE = re.compile(r"<!--.*?-->", re.S)
@@ -1185,6 +1185,95 @@ def agenda_part(raw: object) -> dict | None:
     }
 
 
+# The speaker queue and the speaking share (ADR 0010, ADR 0018 intent
+# kinds `queue`/`share`): two more optional, defensive data sections, the
+# same shape as `agenda_part()` above -- `dict | None`, hidden when the
+# key is absent or too foreign to show. Unlike `agenda`/`pending`/`image`
+# they carry NO clock (no `item_started_at`-style number, no per-poll
+# "secondsago" text), so both ARE part of `fingerprint()` below: a reader
+# has to see the swap/scroll logic run when who is speaking or the shares
+# actually change, the same as for `decisions` or `notices`. Names are
+# HTML-escaped here, not left to the page script's `textContent` the way
+# `agenda_part()`'s are -- the page marks up each person as part of a
+# bar/list it builds itself, so the escaping has to happen before that.
+MAX_QUEUE_PEOPLE = 20
+MAX_SHARE_PEOPLE = 20
+
+
+def _name_list(raw: object, cap: int) -> list[str]:
+    if isinstance(raw, str):
+        raw = [raw]
+    if not isinstance(raw, list):
+        return []
+    out = []
+    for p in raw[:cap]:
+        text = _agenda_text(p)
+        if text:
+            out.append(html.escape(text))
+    return out
+
+
+def queue_part(raw: object) -> dict | None:
+    """The speaker queue as plain data -- who speaks now, who waits, in
+    order -- or None: no `queue` key this session, or nobody in it
+    survives validation (a queue with no one speaking and no one waiting
+    has nothing to show).
+    """
+    if not isinstance(raw, dict):
+        return None
+    speaking = _name_list(raw.get("speaking"), MAX_QUEUE_PEOPLE)
+    waiting = _name_list(raw.get("waiting"), MAX_QUEUE_PEOPLE)
+    if not speaking and not waiting:
+        return None
+    mode = html.escape(_agenda_text(raw.get("mode"))) if raw.get("mode") else ""
+    round_n = _int(raw.get("round"), 0) if raw.get("round") is not None else 0
+    return {
+        "mode": mode or None,
+        "speaking": speaking,
+        "waiting": waiting,
+        "round": round_n if round_n > 0 else None,
+    }
+
+
+def _share_number(wert: object) -> float | None:
+    if isinstance(wert, bool) or not isinstance(wert, (int, float)):
+        return None
+    return float(wert) if wert > 0 else None
+
+
+def share_part(raw: object) -> dict | None:
+    """The speaking share as plain data -- each person's slice of the
+    meeting's words, normalised to sum to exactly 1 regardless of what
+    rounding the writer's own numbers carried -- or None: no `share` key,
+    or no person's share survives validation (nothing to draw a bar for).
+    """
+    if not isinstance(raw, dict):
+        return None
+    shares_raw = raw.get("shares")
+    if not isinstance(shares_raw, list):
+        return None
+    entries = []
+    for s in shares_raw[:MAX_SHARE_PEOPLE]:
+        if not isinstance(s, dict):
+            continue
+        person = _agenda_text(s.get("person"))
+        share = _share_number(s.get("share"))
+        if not person or share is None:
+            continue
+        entries.append((html.escape(person), share))
+    total = sum(share for _, share in entries)
+    if not entries or total <= 0:
+        return None
+    total_words = raw.get("total_words")
+    return {
+        "shares": [{"person": person, "share": share / total}
+                   for person, share in entries],
+        "total_words": (_int(total_words, 0)
+                        if isinstance(total_words, (int, float))
+                        and not isinstance(total_words, bool) else None),
+    }
+
+
 def graph_part_stub(seed: str) -> str:
     """An older graph position, without its drawing (C2, Variante 1).
 
@@ -1350,6 +1439,10 @@ def stage_parts() -> dict:
         # Deliberately NOT in `fingerprint()`, like `pending` above --
         # see `agenda_part()`'s own docstring.
         "agenda": agenda_part(b.get("agenda")),
+        # Unlike `agenda` above, IN `fingerprint()` -- see `queue_part()`'s
+        # own docstring: neither carries a clock.
+        "queue": queue_part(b.get("queue")),
+        "share": share_part(b.get("share")),
     }
 
 
@@ -1385,11 +1478,17 @@ def fingerprint(teile: dict) -> str:
     coming and going every few seconds, they must not run the swap logic
     (pulse, scroll restore) each time. The page applies them on every poll,
     before it looks at the fingerprint, and reconciles them by id itself.
+
+    `queue` and `share` are IN, unlike `agenda`/`pending`/`image`: neither
+    carries a clock (see `queue_part()`/`share_part()`), so there is no
+    reason to keep them out, and good reason to keep them in -- who is
+    speaking or how the shares split only changes when the content does,
+    and that is exactly the swap/scroll logic this fingerprint gates.
     """
     roh = "".join(str(teile[k]) for k in (
         "mirror", "call_answer", "headline", "main", "collapsed",
         "decisions", "notices", "question", "parked", "links",
-        "history", "protokoll")).encode()
+        "history", "protokoll", "queue", "share")).encode()
     return hashlib.sha256(roh).hexdigest()[:16]
 
 
@@ -1617,7 +1716,8 @@ summary{cursor:pointer;padding:.4rem 0;color:var(--akz);font-size:.94rem}
 .frisch{animation:auf .5s ease-out}
 @keyframes auf{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
 @media(prefers-reduced-motion:reduce){.frisch{animation:none}.punkt{transition:none}
- #pending .pending-line.resting,#pending .pending-line.leaving{animation:none}}
+ #pending .pending-line.resting,#pending .pending-line.leaving{animation:none}
+ #share .share-bar-fill{transition:none}}
 @media(max-width:640px){main{padding:1.2rem}body{font-size:16px}}
 
 /* ---- The stage, in the layout approved on 2026-09-08: sidebar left as
@@ -1698,6 +1798,28 @@ summary{cursor:pointer;padding:.4rem 0;color:var(--akz);font-size:.94rem}
 #agenda .agenda-next,#agenda .agenda-who{color:var(--dim)}
 #agenda .agenda-meeting{color:var(--dim);font-variant-numeric:tabular-nums}
 #agenda .agenda-meeting.agenda-over{color:#f85149}
+/* The speaker queue and the speaking share (ADR 0010, ADR 0018 intent
+   kinds `queue`/`share`): as quiet as #agenda above, same font size and
+   `var(--dim)` for the quiet text. `var(--akz)` marks the one notable
+   state each -- here, the person currently speaking. */
+#queue{margin-top:.3rem;font-size:.8rem;line-height:1.5}
+#queue:empty{display:none}
+#queue .queue-lab{color:var(--dim);margin-right:.35rem}
+#queue .queue-speaking{color:var(--akz)}
+#queue .queue-empty{color:var(--dim)}
+#share{margin-top:.3rem;font-size:.8rem;line-height:1.5}
+#share:empty{display:none}
+#share .share-row{display:flex;align-items:center;gap:.5rem;margin:.2rem 0}
+#share .share-name{color:var(--dim);flex:0 0 auto;min-width:5em;
+ overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The bar: `var(--akz)` on `var(--lin)` as its track, as every progress
+   bar on the stage must. */
+#share .share-bar{flex:1;height:6px;background:var(--lin);border-radius:3px;
+ overflow:hidden}
+#share .share-bar-fill{display:block;height:100%;background:var(--akz);
+ transition:width .3s}
+#share .share-pct{color:var(--dim);font-variant-numeric:tabular-nums;
+ min-width:3em;text-align:right}
 #head #headline{color:var(--fg);font-size:.9rem;font-weight:600;
  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:45%}
 #head #headline:empty{display:none}
@@ -2609,6 +2731,58 @@ sgBlockAnchorJump();
   }
   setInterval(agendaPaint, 1000);
 
+  // ---- The speaker queue and the speaking share (ADR 0010, ADR 0018
+  // intent kinds `queue`/`share`). Unlike `agenda` above, both ride the
+  // fingerprint (see `fingerprint()` and `stage_parts()` in stage.py) and
+  // their names arrive already HTML-escaped (`queue_part()`/
+  // `share_part()`), so they are built here via a fixed structure plus
+  // the escaped text interpolated into it, the same posture `decisions`/
+  // `notices` already have server-side -- and like those, `queueApply()`/
+  // `shareApply()` otherwise only run from inside the mark-gated block of
+  // `tick()` below, never on every poll. BUT the page bakes `mark` from
+  // the server's CURRENT fingerprint at render time (see `%MARK%` above),
+  // which already reflects `queue`/`share` if they are present in
+  // `buehne.json` the moment the page loads -- while the `#queue`/
+  // `#share` divs are always server-rendered empty (deliberately, see the
+  // page HTML below). Left alone, the very first poll would find
+  // `j.mark===mark` true by definition and never run `queueApply()`/
+  // `shareApply()` at all, leaving the sections empty forever. So the
+  // first poll ALWAYS applies them once, unconditionally, before the
+  // mark-gate is consulted -- exactly once, via `queueShareFirstPoll`;
+  // every later poll still goes through the normal mark-gated path below.
+  var queueEl=document.getElementById('queue');
+  var shareEl=document.getElementById('share');
+  var queueShareFirstPoll=true;
+  function queueApply(data){
+    if(!queueEl) return;
+    if(!data || typeof data!=='object'){ queueEl.innerHTML=''; return; }
+    var speaking=(data.speaking||[]);
+    var waiting=(data.waiting||[]);
+    var leer='<span class="queue-empty">–</span>';
+    queueEl.innerHTML=
+      '<div class="queue-row"><span class="queue-lab">Spricht</span> '
+      +(speaking.length
+        ? '<span class="queue-speaking">'+speaking.join(', ')+'</span>' : leer)
+      +'</div>'
+      +'<div class="queue-row"><span class="queue-lab">Wartet</span> '
+      +(waiting.length ? waiting.join(', ') : leer)+'</div>';
+  }
+  function shareApply(data){
+    if(!shareEl) return;
+    if(!data || typeof data!=='object' || !data.shares || !data.shares.length){
+      shareEl.innerHTML=''; return;
+    }
+    shareEl.innerHTML='<div class="lab">Redeanteil</div>'+data.shares.map(
+      function(s){
+        var anteil=Math.max(0, Math.min(1, s.share||0));
+        var pct=Math.round(anteil*1000)/10;
+        return '<div class="share-row"><span class="share-name">'+s.person
+          +'</span><span class="share-bar"><span class="share-bar-fill" '
+          +'style="width:'+(anteil*100)+'%"></span></span>'
+          +'<span class="share-pct">'+pct+'%</span></div>';
+      }).join('');
+  }
+
   async function tick(){
     if(halt) return;
     try{
@@ -2644,6 +2818,21 @@ sgBlockAnchorJump();
       // on the surface happened to move.
       letzte=j;
       verlaufUebernehmen(j);
+      // Same reasoning as `agendaApply()` above, but `queue`/`share` DO
+      // ride the fingerprint (by design, to gate the swap/scroll logic
+      // further down) -- so unlike `agenda` they must NOT be applied on
+      // every poll. The one exception is the very first poll: the page
+      // bakes `mark` from the server's current fingerprint at render
+      // time, so if `queue`/`share` already existed in `buehne.json` when
+      // the page loaded, `j.mark===mark` is true from the start and the
+      // mark-gated call below would never fire. Apply once here,
+      // unconditionally, before the gate; every later poll still goes
+      // through the normal mark-gated call.
+      if(queueShareFirstPoll){
+        queueShareFirstPoll=false;
+        queueApply(j.queue);
+        shareApply(j.share);
+      }
       if(j.mark===mark) return;
       if(busy()) return;                                  // try again later
       mark=j.mark;
@@ -2657,6 +2846,8 @@ sgBlockAnchorJump();
       swapQuiet(document.getElementById('decisions'), j.decisions||'');
       swapQuiet(document.getElementById('notices'),
                 (j.notices||'')+(j.question||'')+(j.parked||''));
+      queueApply(j.queue);
+      shareApply(j.share);
       // The protocol column has ITS OWN scroll container (#protokoll-col,
       // overflow-y:auto) -- replacing only #protokoll-content's innerHTML
       // never resets that container's scrollTop, so a reader who scrolled
@@ -3038,6 +3229,7 @@ class H(BaseHTTPRequestHandler):
                         "notices": "", "question": "", "parked": "",
                         "links": "", "history": [], "protokoll": "",
                         "pending": [], "image": None, "agenda": None,
+                        "queue": None, "share": None,
                         "age_visible_after_s": 20, "follow_up_after_s": 120}
             else:
                 t, m = stage_parts_cached()
@@ -3208,6 +3400,12 @@ class H(BaseHTTPRequestHandler):
                  # next text and runs the live countdown off numbers it
                  # is handed, never off a server-rendered string.
                  f'<div id="agenda"></div>'
+                 # Empty on purpose too: unlike #agenda, built from `queue`/
+                 # `share` only when `mark` changes (both ride the
+                 # fingerprint -- see `fingerprint()`), by `queueApply()`/
+                 # `shareApply()` in SCRIPT.
+                 f'<div id="queue"></div>'
+                 f'<div id="share"></div>'
                  f'<div id="warn">{t["warning"]}</div>'
                  f'<div id="mirror">{t["mirror"]}</div>'
                  f'<div id="call-answer">{t["call_answer"]}</div>'

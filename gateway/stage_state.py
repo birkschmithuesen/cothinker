@@ -31,11 +31,16 @@ reverse order does not exist and the two cannot deadlock.
 from __future__ import annotations
 
 import re
+import sys
 import threading
 import time
 from dataclasses import dataclass
 from datetime import datetime
+from pathlib import Path
 from typing import Callable
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from shared.text import MAX_PENDING_LABEL, derived_title, one_line  # noqa: E402
 
 # STILL 2, although the history is new. `content()` only GAINED a key:
 # `main` is unchanged and still carries the displayed surface, so an old
@@ -89,9 +94,6 @@ TOPIC_WINDOW_S = 60.0        # ... and inside one window at most
 TOPIC_MAX_PER_WINDOW = 1     #     this many automatic changes happen
 MAX_HISTORY = 20             # how many surfaces stay reachable
 
-# A title is one line and a history label, not a paragraph.
-MAX_TITLE_CHARS = 80
-
 NOTICE_KINDS = {"value_conflict", "decision_breach", "speaker_conflict"}
 
 # --- the announcement: "gleich kommt was" ------------------------------------
@@ -113,13 +115,11 @@ IMAGE_TTL_S = 300.0
 # The page shows at most three; the state keeps no more than it shows, so
 # nothing is announced that nobody can see. The OLDEST gives way.
 MAX_PENDING = 3
-# One line on the page, not a paragraph.
-MAX_PENDING_LABEL = 60
 # Which accepted action keeps which announcement. A graph is the same
 # movement as a topic change (see `_brake()`), so it keeps a topic
 # announcement. `research` and `document` have no action today: they end
 # through `settle()` or the timeout. `entry` has no action either: level 2
-# settles it by id (gateway/policy_runner.py).
+# settles it by id (blocks/decisions_tasks_questions/policy_runner.py).
 #
 # `main` is NOT here, on purpose. A `main` announcement is a call-out, and
 # the run that answers it takes 40-180 s -- longer than the timeout. By
@@ -146,7 +146,6 @@ TOO_MANY = "too many"
 PARKED = "parked"
 
 _WHITESPACE = re.compile(r"\s+")
-_HEADING = re.compile(r"^\s*#{1,6}\s+(.*\S)\s*$")
 # The characters an agent wraps a quotation in. Stripping them is not
 # tolerance for invention: they delimit the quote, they are not part of
 # what was said.
@@ -191,38 +190,6 @@ def _text(value: object) -> str | None:
         return None
     cleaned = scrub(value).strip()
     return cleaned or None
-
-
-def one_line(text: str) -> str:
-    """A value that has to be ONE line, collapsed and capped.
-
-    Collapsed, not cut at the first newline: a title that arrives with a
-    line break still says what it says, and dropping everything after the
-    break would silently shorten the one label the history has.
-    """
-    return _WHITESPACE.sub(" ", text).strip()[:MAX_TITLE_CHARS]
-
-
-def derived_title(markdown: str) -> str:
-    """A history label DERIVED from the surface -- never invented.
-
-    A call-out has no title: the round ordered a surface, not a topic. The
-    history needs a label for every entry anyway, and the only honest
-    source is what is on the surface -- its first heading, otherwise its
-    first non-empty line. Writing a title the agent never wrote and nobody
-    said would put invention on the stage, which is the one thing this
-    whole module refuses to do (see `quote_is_spoken`). An empty label is
-    better than a made-up one; the page falls back to the identity.
-    """
-    for line in markdown.split("\n"):
-        heading = _HEADING.match(line)
-        if heading is not None:
-            return one_line(heading.group(1))
-        if line.strip():
-            # A list item is the common first line. The bullet is markup,
-            # not text -- the rest of the line is quoted as it stands.
-            return one_line(line.strip().lstrip("-*>").strip()) or one_line(line)
-    return ""
 
 
 def _normalised(text: str) -> str:
@@ -377,7 +344,7 @@ class StageState:
         self._lock = threading.RLock()
         self.mirror = ""
         # A substantive call-out answer, kept visible independent of
-        # `mirror` (60s, see lane_integration.MIRROR_EXPIRY_S) and of
+        # `mirror` (60s, see call_lane.MIRROR_EXPIRY_S) and of
         # `main`/`topic` (replaced the moment the room moves on, by
         # design -- see `_topic()`'s docstring). Live incident,
         # 27.10.2026: a funding overview answered three wake blocks and
@@ -430,6 +397,15 @@ class StageState:
         # `agenda.md` and a small state file of its own, so it survives a
         # restart on its own terms (see `AgendaController` there).
         self.agenda: dict | None = None
+        # Optional stage regions rendered by `gateway/stage_surface.py`
+        # from the `queue`, `share` and `graph` view intents. None means
+        # the key is left out of `content()` altogether, so a session
+        # without those blocks writes the same file as before (the
+        # version stays, see SCHEMA_VERSION). Absolute data only: no
+        # ticking value may sit in here (the fingerprint).
+        self.queue: dict | None = None
+        self.share: dict | None = None
+        self.session_graph: dict | None = None
 
     # ------------------------------------------------------------ helpers
     @property
@@ -452,7 +428,7 @@ class StageState:
         """Appends `addition` to an EXISTING history entry's markdown, by id.
 
         For a lane result that arrives after its topic is no longer
-        current (gateway/lane_integration.py, konzept-spuren-architektur.
+        current (gateway/call_lane.py, konzept-spuren-architektur.
         md's "kein Stau" applied to the coach lane): the result belongs
         to that OLDER entry's own record, never to whatever the surface
         shows now -- `main` and today's entry are untouched regardless
@@ -476,7 +452,7 @@ class StageState:
             return ""
 
     def retitle(self, entry_id: str, old: str, new: str) -> bool:
-        """Replaces a PROVISIONAL title in place (`--topic-titles`).
+        """Replaces a PROVISIONAL title in place (`titles` of the topics block).
 
         Only when the entry still carries `old` -- a title somebody else
         changed meanwhile is never overwritten. When that entry is the one
@@ -608,7 +584,7 @@ class StageState:
 
         Returns the new id, or "" when the announcement was refused. The
         label is a short German phrase: a prefix plus, by design (MM-L),
-        up to three content words of what was said (`policy.pending_label`).
+        up to three content words of what was said (`shared.minutes_format.pending_label`).
         It goes into buehne.json only, and nothing but the page ever reads
         it. The trace gets the id and the kind only, never the label.
 
@@ -728,7 +704,7 @@ class StageState:
     def _call_answer(self, action: dict, spoken: str) -> str:
         # Same "explicit empty string clears it" exception as `_mirror`,
         # for the same reason: the lane's own expiry
-        # (lane_integration.CALL_ANSWER_VISIBLE_S) writes exactly that.
+        # (call_lane.CALL_ANSWER_VISIBLE_S) writes exactly that.
         if action.get("text") == "":
             self.call_answer = ""
             return ""
@@ -816,7 +792,7 @@ class StageState:
     def brake_check(self) -> str:
         """Would an automatic surface change be braked right now?
 
-        Level 2 (gateway/policy.py) asks BEFORE it orders a topic block,
+        Level 2 (blocks/decisions_tasks_questions/policy.py) asks BEFORE it orders a topic block,
         so it does not announce a change the brake would refuse anyway.
         The same rule, not a copy: `_brake(record=False)`.
         """
@@ -857,7 +833,7 @@ class StageState:
 
     def confirmed_topic(self, title: str, markdown: str) -> str:
         """A topic change CONFIRMED by the lane hysteresis
-        (gateway/topic_hysteresis.py: p >= threshold AND a minimum topic
+        (blocks/topics/hysteresis.py: p >= threshold AND a minimum topic
         age) -- always pushed, the N5 brakes are not asked again.
 
         Not reachable through `apply()` on purpose: an agent proposal is
@@ -1141,6 +1117,16 @@ class StageState:
 
     def _content(self) -> dict:
         main = self.main
+        content = self._base_content(main)
+        # Only ADDED, and only when a surface rendered them: key absent
+        # means "section hidden" for the page.
+        for key, value in (("queue", self.queue), ("share", self.share),
+                           ("session_graph", self.session_graph)):
+            if value is not None:
+                content[key] = value
+        return content
+
+    def _base_content(self, main: Main) -> dict:
         return {
             "version": SCHEMA_VERSION,
             "updated": self._label(),

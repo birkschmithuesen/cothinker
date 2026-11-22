@@ -12,7 +12,7 @@ after every speaking pause. We only consume it, we never change it.
 
 Flow:
   1. every `final` goes into the raw transcript immediately (nothing is lost)
-  2. sentences are bundled into meaningful blocks (gateway/blocks.py)
+  2. sentences are bundled into meaningful blocks (gateway/segmenter.py)
   3. a turn of the long-lived agent worker is triggered per finished block:
      it maintains the protocol and PROPOSES stage entries
   4. the consumer applies the proposals and writes the stage itself
@@ -54,30 +54,30 @@ from types import SimpleNamespace
 from typing import Callable, Iterable, Iterator
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from blocks import Block, BlockBuilder  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from segmenter import Block, BlockBuilder  # noqa: E402
 from correction import (CorrectionWorker, Corrector, MODEL_CHAIN,  # noqa: E402
                         build_glossary)
 import correction_prefilter  # noqa: E402
 from infomaniak_chat import Client as InfomaniakClient  # noqa: E402
 from infomaniak_chat import api_key as infomaniak_key  # noqa: E402
 from correction import FINISH_GRACE_S, FINISH_TIMEOUT_S  # noqa: E402
-from events import EventLog, is_token  # noqa: E402
-import decider as decider_mod  # noqa: E402
-from policy import marker, pending_label, with_marker  # noqa: E402
+from shared.events import EventLog, is_token  # noqa: E402
 from proposals import read_proposals  # noqa: E402
-from protocol_doc import (DEFAULT_MODE, MODES, TAGS, Entry,  # noqa: E402
+from shared.minutes_format import (DEFAULT_MODE, MODES, TAGS, Entry,  # noqa: E402
                           Topic, clean_line, clean_wikilinks, entry_line,
-                          parse_topics, project_md_names, read_mode,
-                          render_view, splice, topic_line)
-from protocol_doc import is_v2 as is_v2_text  # noqa: E402
+                          marker, parse_topics, pending_label,
+                          project_md_names, read_mode, render_view, splice,
+                          topic_line, with_marker)
+from shared.minutes_format import is_v2 as is_v2_text  # noqa: E402
+from shared.minutes_format import _ROH_LINE_RE  # noqa: E402
 from stage_state import PARKED, StageState, scrub  # noqa: E402
 from stage_state import (AgendaRuntime, agenda_payload,  # noqa: E402
                          current_item_from_ticks, detect_agenda_command,
                          meeting_deadline, parse_agenda)
-from status_line import pick as pick_status  # noqa: E402
-from status_line import status as render_status  # noqa: E402
-from status_line import trouble as trouble_text  # noqa: E402
-from status_line import warning as warning_text  # noqa: E402
+from stage_texts import status as render_status  # noqa: E402
+from stage_texts import trouble as trouble_text  # noqa: E402
+from stage_texts import warning as warning_text  # noqa: E402
 from speaker_enroll import DEFAULT_THRESHOLD as SPEAKER_THRESHOLD_DEFAULT  # noqa: E402
 
 # Wall-clock cap per agent turn (seconds). Live 2026-10-20: one ORDER ran
@@ -93,10 +93,8 @@ from conflict_triage import triage as triage_conflicts  # noqa: E402
 from thought_end_live import (DEFAULT_THRESHOLD as THOUGHT_END_THRESHOLD,  # noqa: E402
                               FINISH_TIMEOUT_S as THOUGHT_END_FINISH_TIMEOUT_S,
                               ThoughtEndLane, default_laya_argv)
-from wiki import (TITLE_MAX, WikiLayer, bare_title,  # noqa: E402
-                  create_topic_page, topic_title, wants_page)
 from worker import WorkerClient  # noqa: E402
-import lane_integration as lane_integration_mod  # noqa: E402
+import call_lane as call_lane_mod  # noqa: E402
 import stage_image as stage_image_mod  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -104,8 +102,14 @@ from graph.graph_build import GraphSource            # noqa: E402
 from graph.seed_note import find_or_create_seed      # noqa: E402
 from graph.vault_notes import DEFAULT_EXCLUDE        # noqa: E402
 from gateway.actions_reader import ActionsReader, dispatcher_for  # noqa: E402
-from gateway.block_host_wiring import build_session_blocks, feed_utterance  # noqa: E402
-from gateway.legacy_stage_sink import make_sink      # noqa: E402
+from blocks.knowledge_link import KnowledgeLinkBlock  # noqa: E402
+from gateway.block_host_wiring import (SessionBlocks, build_session_blocks,  # noqa: E402
+                                       coach_block_config, feed_utterance,
+                                       make_agent_for)
+from gateway.raw_transcript import MinutesFile  # noqa: E402
+from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
+from blocks.minutes_document import minutes as minutes_block  # noqa: E402
+from gateway.stage_surface import StageSurface       # noqa: E402
 
 ENTITIES = Path(os.environ.get(
     "COTHINKER_ENTITIES", Path.home() / "vault/entities"))
@@ -147,8 +151,10 @@ im Zweifel nachfragen, nicht uebernehmen.
 # Protocol format v2 (docs/entwurf-meeting-modi.md §1-2): topic blocks with
 # tagged entries under `## Themen`, and a derived view (`## Überblick`)
 # that only the consumer writes, re-rendered on every entry. New protocols
-# are created in this shape; an existing file keeps whatever it is -- a v1
-# file of the same day continues as v1, no migration. The view section is
+# are created in this shape; a file of the same day that is not in this
+# shape (the old format, where the agent kept `## Verlauf` and friends) is
+# continued in it below a dated marker line, see `continue_in_format_2`.
+# The old text is never rewritten. The view section is
 # exactly `render_view([], "sitzung")`; other modes get theirs spliced in
 # by `protocol_header()`.
 HEADER_V2 = """---
@@ -225,7 +231,7 @@ def project_agenda_text(title: str, participants: str, agenda: list[str],
     `enrolled_names` replaces the bare `--participants` list with the
     speaker-enrollment subsystem's resolved names once the intro round
     ends -- the one deliberate, accepted change this prefix may make
-    mid-meeting (gateway.lane_integration.Lanes.update_stable_prefix()).
+    mid-meeting (gateway.call_lane.CallLane.update_stable_prefix()).
     """
     names = (", ".join(enrolled_names) if enrolled_names else participants)
     lines = [f"Projekt: {title}"]
@@ -273,145 +279,6 @@ def protocol_header(*, title: str, entity: str, day: str, pslug: str,
     return splice(text, view=render_view([], mode), append="")
 
 
-AGENT_PROMPT = """Du bist Robo, der Mitdenker in einem laufenden Termin. Die
-Runde liest deine Ausgabe live mit, waehrend sie weiterspricht.
-
-PROTOKOLL:  {path}
-VORSCHLAEGE: {proposals}
-PROJEKTORDNER: {folder}
-{situation}{open_state}
-Neu gesprochen seit deiner letzten Runde:
----
-{block}
----
-
-HINTERGRUND: Im Projektordner liegen die Unterlagen zu diesem Termin —
-Vorbereitung, Leitfaden, frueheres Protokoll, Notizen. Brauchst du fuer eine
-Frage aus der Runde den Sachstand (ein Name, eine Zahl, was frueher schon
-beschlossen wurde), lies dort gezielt die passende Datei. Sonst nicht: die
-Runde wartet auf dich, und ein Zug dauert ohnehin 40-180 Sekunden. Erst lesen,
-wenn der Abschnitt es verlangt, und dann nur das eine Dokument — nicht den
-Ordner durchforsten. Der Termin hat Vorrang vor der Vollstaendigkeit.
-
-Du liest dort NUR. Geschrieben wird ausschliesslich in die beiden oben
-genannten Dateien: alles andere im Ordner gehoert dem Konsumenten und dem
-Sync-Dienst, und ein zweiter Schreiber erzeugt Konfliktkopien.
-
-WAS DU LIEST: im Protokoll nur die Abschnitte OBERHALB von `## Rohtranskript`.
-Das Rohtranskript brauchst du nicht — es waechst den ganzen Termin, und die
-Runde wartet auf dich.
-
-WAS DU SCHREIBST — diese zwei Dinge, sonst nichts:
-
-1. PROTOKOLL pflegen:
-   - `## Verlauf`: HAENGE 1-3 Stichpunkte mit Uhrzeit an. Vorhandene Zeilen
-     bleiben stehen, wie sie stehen.
-   - `## Entscheidungen`, `## Aufgaben` (wer/was/bis wann), `## Offene Fragen`:
-     nur eintragen, was wirklich gefallen ist. Nichts erfinden. Zahlen,
-     Betraege, Fristen, Namen und Zusagen woertlich; Unsicheres aus der
-     Spracherkennung mit "(unbestaetigt)".
-   - Erledigtes markierst du an Ort und Stelle (**erledigt**, mit Verweis auf
-     die geaenderte Datei). Du loeschst nichts.
-   - `## Rohtranskript` NICHT anfassen — dort schreibt allein der Konsument.
-
-2. BUEHNE: du haengst Zeilen an `{proposals}` an — eine Zeile, ein JSON-Objekt,
-   UTF-8. Du schreibst die Buehne NICHT selbst; das tut der Konsument. Er
-   vergibt auch die Kennungen. Moegliche Zeilen:
-
-   {{"action":"mirror","text":"<EINE Zeile, dritte Person: was Robo verstanden
-        hat und woran er gerade arbeitet>"}}
-   {{"action":"headline","text":"<worueber gerade gesprochen wird, 3-6 Woerter>"}}
-   {{"action":"decision","time":"HH:MM","text":"<kurz: was beschlossen oder
-        zugesagt wurde>"}}
-   {{"action":"notice","kind":"value_conflict","text":"<**Bezeichnung** Wert A
-        gegen Wert B — welcher gilt?>"}}
-   {{"action":"notice","kind":"decision_breach","text":"<**Beschluss** ... steht
-        unter Entscheidungen, fehlt hier>"}}
-   {{"action":"question","text":"<laut in drei Worten beantwortbar>"}}
-   {{"action":"resolve","id":"<Kennung>","text":"<wie es geklaert wurde>"}}
-   {{"action":"main","quote":"<der Auftrag WOERTLICH, so wie er gefallen ist>",
-        "markdown":"<was gezeigt werden soll>"}}
-   {{"action":"topic","title":"<das neue Thema, EINE Zeile>",
-        "markdown":"<was dazu gezeigt werden soll>"}}
-   {{"action":"graph","title":"<das Thema, EINE Zeile>",
-        "seed":"<optional: Titel der Notiz, die der Saatknoten ist>"}}
-   {{"action":"links","items":[{{"file":"<dateiname-ohne-endung, nur Dateien,
-        die es wirklich gibt>","label":"<kurz>"}}]}}
-   {{"action":"none"}} — die Zeile fuer "dieser Abschnitt bringt nichts Neues";
-        dann schreibst du auch sonst nichts.
-
-   Was wohin gehoert:
-   - `decision` NUR fuer Entscheidungen und Zusagen. Nicht fuer Themen, nicht
-     fuer Beobachtungen, nicht fuer Ideen, die gerade erst entstehen.
-   - `notice` NUR fuer die zwei Faelle oben. Es gibt keinen dritten Grund.
-     Zwei Meldungen stehen hoechstens gleichzeitig; alles weitere gehoert
-     unter `## Offene Fragen`.
-   - `main` NUR, wenn die Runde dich darum gebeten hat — dann ist `quote`
-     Pflicht: der Auftrag woertlich aus dem Abschnitt. Ohne `quote` wird die
-     Zeile verworfen und die Flaeche bleibt, wie sie ist. Ohne Auftrag nimmst
-     du nie `main` — dafuer gibt es `topic`. Sie zeigt das Ergebnis, um das gebeten
-     wurde — hoechstens 15 Zeilen, kein Archiv und kein Volltext; was
-     darueber steht, wird eingeklappt.
-   - `topic`, wenn die Runde erkennbar zu einem ANDEREN Thema uebergegangen
-     ist. Dafuer brauchst du keinen Auftrag und kein Zitat: eine Flaeche, die
-     beim alten Thema haengt, behauptet etwas Falsches und stoert. Kurz halten,
-     `title` ist eine Zeile und steht spaeter als Marke im Verlauf. Wechselt
-     nur das Thema: `topic`. Wurde dir etwas zugerufen: `main`. Zu dichte
-     Wechsel lehnt der Konsument ab — das ist kein Fehler, sondern der Takt;
-     schick denselben Wechsel nicht noch einmal.
-   - `graph`, wenn ein NEUES Thema eroeffnet wird und das Netz der Notizen
-     dazu helfen kann. Du nennst nur das Thema — der Konsument sucht die
-     passende Notiz oder legt sie an und baut das Bild. Du schickst keine
-     Knoten und keine Pfade mit. Findet er den Namen mehrfach, lehnt er ab;
-     dann nimm einen genaueren Titel. Zu dichte Wechsel lehnt er ebenfalls
-     ab — das ist der Takt, kein Fehler.
-   - Bittet die Runde, etwas FRUEHERES nochmal zu sehen ("nochmal das davor",
-     "zeig wieder die Kosten"), ist das ein Auftrag wie jeder andere: `main`
-     mit dem Zuruf woertlich in `quote` und dem frueheren Stand in `markdown`.
-     Die Buehne blaettert nicht fuer dich — im Verlauf blaettert die Runde
-     selbst, an der Buehne.
-   - `resolve`, sobald die Runde eine Meldung oder Frage beantwortet hat.
-     Steht oben etwas Offenes, pruefe zuerst, ob dieser Abschnitt es klaert.
-
-DREI REGELN AUS EINEM ECHTEN TERMIN — sie gelten fuer JEDE Datei:
-
-ANBAUEN STATT UMBAUEN. Die schlimmste Stoerung des ausgewerteten Termins war
-keine falsche Aussage, sondern eine Umsortierung, waehrend die Runde mitlas
-("Es wurde umsortiert. Also wir muessen jetzt ein bisschen mitdenken."). Du
-fuegst Zeilen hinzu. Sortieren, streichen oder Vorhandenes umformulieren nur,
-wenn genau das zugerufen wurde — und dann mit einer Zeile darueber, was sich
-bewegt hat.
-
-NICHTS NEUES = NICHTS SCHREIBEN. Bringt der Abschnitt keine Erkenntnis
-(Tonprobe, Technikgerede, Small Talk), laesst du beide Dateien unveraendert.
-Ein Lauf ohne Aenderung ist ein guter Lauf.
-
-FRAGEN NUR, WENN RATEN SCHADET: zu bestaetigende Entscheidung, unklarer
-Eigenname. Eine widersprechende Zahl ist keine Frage, sondern eine `notice`
-der Art `value_conflict`. Laut in drei Worten beantwortbar ("5. oder
-6. Oktober?"). Hoechstens EINE; jede weitere unter `## Offene Fragen`.
-
-AUCH OHNE WECKWORT KANN DER ABSCHNITT EIN AUFTRAG SEIN. Die Spracherkennung
-verstuemmelt das Weckwort ("Oboe", "Opa", "Robert") — im ausgewerteten Termin
-in drei von fuenf Faellen. Steht im Abschnitt eine Anrede an dich ODER ein
-Imperativ in der zweiten Person (mach, zeig, schreib, erstelle, berechne,
-sortier, ergaenze, recherchier, schick, streich, update), dann fuehre ihn aus,
-statt ihn nur zu protokollieren. Kannst oder darfst du ihn nicht ausfuehren
-(Chat und Telegram sind ausgeschlossen), sagst du das in `mirror` und unter
-`## Aufgaben`. Ein Auftrag, den du still als "offen" ablegst, ist verloren.
-
-GEGENPRUEFEN, bevor du fertig bist:
-   - Widerspricht eine Zahl, ein Datum oder eine Frist aus diesem Abschnitt
-     einer frueheren im Protokoll? Dann als `notice` der Art `value_conflict`,
-     mit beiden Werten.
-   - Habe ich nur angebaut und nichts umgestellt?
-
-Schreibe NICHT in den Chat und schicke KEINE Telegram-Nachricht — die Dateien
-sind die Ausgabe. Lege keine Dokumente an, um die nicht gebeten wurde: im
-ausgewerteten Termin entstanden 28 Themenblaetter, drei trugen den Termin.
-Antworte am Ende mit einer Zeile: "OK — <was du getan hast>".
-"""
-
 # C2 measure 1 (docs/superpowers/plans/2026-09-26-topic-prompt-c2.md, D4):
 # the criterion behind the `topic` bullet above -- WHEN a topic change is
 # a topic change. Default-OFF, spliced in by build_prompt(...,
@@ -433,40 +300,6 @@ TOPIC_CRITERION = """     WORAN du einen Wechsel erkennst — mindestens eins da
      Abrechnung dabei?" (eine Vertiefung).
 """
 
-ORDER_NOTE = """
-🔴 DIREKTER AUFTRAG: Der Abschnitt enthaelt eine Ansprache mit dem Weckwort.
-Fuehre ihn AUS, bevor du protokollierst — auch wenn dafuer eine andere Datei im
-Projektordner geaendert werden muss. Danach der Dreisatz, sichtbar im Ergebnis:
-  1. AUFTRAG — zitiere ihn woertlich. Ist jede darin genannte Groesse
-     abgebildet? Einzeln abhaken.
-  2. EINHEIT — in welcher Einheit war das Ergebnis gefordert (Aufwand,
-     Personenmonate, Euro, Stueck)? Steht es in genau dieser? Sagt der Auftrag
-     "Aufwand", ist Euro falsch, auch wenn Euro nuetzlicher wirkt.
-  3. BESCHLUSSLAGE — welche Eintraege unter `## Entscheidungen` beruehren das
-     Ergebnis, und wo sind sie eingeflossen?
-Halte Ergebnis und Pfad auf der Buehne (`main` — mit dem Auftrag woertlich in
-`quote`) und unter `## Aufgaben` fest. Ein Ergebnis ohne diesen Dreisatz gilt
-als nicht geliefert.
-
-🔴🔴 `quote` IST EIN KOPIERVORGANG, KEINE FORMULIERUNGSAUFGABE.
-Der Wert von `quote` wird maschinell im Transkript gesucht (Zeichen fuer
-Zeichen, nur Gross/Kleinschreibung und Zeilenumbrueche sind egal). Findet die
-Pruefung ihn nicht WOERTLICH, wird dein ganzer Vorschlag verworfen — die
-Buehne bleibt leer, und niemand sagt dir warum.
-
-Deshalb, ohne Ausnahme:
-  • Nimm eine Zeichenkette, die GENAU SO im Abschnitt oben steht. Kopiere sie.
-  • Fuelllaute, Versprecher, Wiederholungen, abgebrochene Saetze BLEIBEN DRIN.
-    "ähm", "äh", "also" gehoeren dazu, wenn sie dastehen.
-  • Kuerze NICHT, glaette NICHT, korrigiere NICHT, fasse NICHT zusammen.
-  • Ein Teilsatz reicht voellig — lieber sechs woertliche Woerter als ein
-    schoener Satz, den niemand so gesagt hat.
-  • Im Zweifel: die kuerzeste eindeutige Passage kopieren.
-
-FALSCH: "Wir wollten als Naechstes den Textentwurf ansehen"  (geglaettet)
-RICHTIG: "uns den Textentwurf"                                (wortwoertlich)
-"""
-
 BACKLOG_NOTE = """
 ⏩ RUECKSTAND: Dieser Abschnitt fasst mehrere Sprechabschnitte zusammen — du
 bist hinterher, die Runde ist weiter. Arbeite grob und schnell: EIN Stichpunkt
@@ -475,51 +308,82 @@ Gesprochenen aus, nicht am Anfang. Lieber knapp und aktuell als vollstaendig
 und veraltet.
 """
 
-# Protocol v2 (topic blocks with tagged entries, gateway/protocol_doc.py).
+# A minutes file of the current day that is not in the current format (the
+# old one: the agent kept `## Verlauf`, `## Entscheidungen`, ... itself) is
+# continued, not migrated: its text stays byte for byte, and what follows is
+# the current format below this marker line. `{stamp}` is "YYYY-MM-DD HH:MM".
+FORMAT_2_MARKER = "<!-- format 2 from {stamp} -->"
+
+
+def continue_in_format_2(text: str, stamp: str, mode: str = DEFAULT_MODE) -> str:
+    """`text` with the current format continued below a dated marker line.
+
+    A text that already is in the current format comes back unchanged. For
+    any other text everything in front of its `## Rohtranskript` (or the
+    whole text, when it has none) stays as it is; the marker line, an empty
+    `## Überblick` view of `mode` and an empty `## Themen` follow it, then
+    the raw section, byte for byte. Only additions: nothing already in the
+    file is rewritten.
+    """
+    if is_v2_text(text):
+        return text
+    raw_at = _ROH_LINE_RE.search(text)
+    head, raw = ((text[:raw_at.start()], text[raw_at.start():]) if raw_at
+                 else (text, "## Rohtranskript\n"))
+    if head and not head.endswith("\n\n"):
+        head += "\n" if head.endswith("\n") else "\n\n"
+    new = (head + FORMAT_2_MARKER.format(stamp=stamp)
+           + "\n\n## Überblick\n\n## Themen\n\n" + raw)
+    return splice(new, view=render_view([], mode), append="")
+
+
+def continue_protocol(path: Path, now: datetime, mode: str = DEFAULT_MODE) -> bool:
+    """Continue the minutes file at `path` in the current format when it is
+    not in it (`continue_in_format_2`). True when the file was changed.
+    Raises `OSError` when it cannot be read or written -- the caller decides."""
+    with open(path, encoding="utf-8", newline="", errors="surrogateescape") as f:
+        text = f.read()
+    new = continue_in_format_2(text, f"{now:%Y-%m-%d %H:%M}", mode)
+    if new == text:
+        return False
+    atomic_write_text(path, new)
+    return True
+
+
+# The main turn (issue #49, ADR 0005): the agent RETURNS its content as one
+# fenced JSON reply, it edits no file. The session host owns every file:
+# the `capture-bullets` block parses the reply (`agent_reply` event), the
+# host files the minutes entries into `protokoll.md` (through the
+# minutes-document block) and appends the stage proposals to the proposal
+# file, from which it alone decides what reaches `buehne.json`.
 #
-# In v2 the consumer is the only writer of protokoll.md, so the agent's
-# whole output is proposal lines -- the protocol is read-only for it.
-#
-# DESIGN DECISION -- how the agent hands over a tag:
-#
-# `tag_entry` is a NEW, generic action instead of a `tag` field on the
-# existing actions. The existing actions are surface actions: each one is
-# checked, capped and braked by `StageState.apply()` and changes what the
-# room sees. Most protocol entries (a task, an idea, a note) have no
-# surface at all, so a `tag` field would need a carrier action that shows
-# something -- or a surface action that is accepted "only for its field",
-# which is exactly the kind of half-rejected proposal the trace cannot
-# describe cleanly. One generic action keeps the two paths apart: stage
-# actions go through `StageState`, `tag_entry` goes straight to
-# `Protocol.add_entry()` (handled in `StageWriter.ingest()` before
-# `apply()`), and a v1 run refuses it with one reason (`v1_protocol`).
+# DESIGN DECISION -- the reply's shape. Minutes sections are lists of
+# one-line items (a string, or an object with `text` and an optional
+# `topic_id`); `buehne` items are the proposal lines of the stage actions
+# (`StageState.apply()`), unchanged, so the stage's checks, caps and brakes
+# stay where they were. A `tag_entry` action stays possible INSIDE `buehne`
+# for one reason only: an order of the level-2 policy asks for it and
+# carries its order id.
 #
 # `decision` doubles as `beschluss`: an accepted decision is shown on the
-# stage (the excerpt) AND filed by the consumer as a `beschluss` entry --
-# one proposal, two places, no duplicate. The prompt therefore forbids a
-# second `tag_entry beschluss` for the same decision; a separate one
-# would put every decision into the overview twice. A decision the stage
-# REFUSES (cap, duplicate) is not filed either: the protocol and the
-# stage cannot disagree about what was decided.
+# stage AND filed by the consumer as a `beschluss` entry. The minutes
+# document refuses a `beschluss` whose text it already holds, but only on
+# the same words. So the prompt gives every decision ONE channel, the
+# `entscheidungen` item, and lets the `decision` action carry the very same
+# text where the stage should show it too: the duplicate check then holds
+# by construction.
 #
-# `topic` stays the one trigger for a new topic block (the same accepted
-# action that changes the stage), and its `title` becomes the block's
-# heading -- the prompt says so, so the agent writes titles that work
-# as headings.
+# `topic` stays the one trigger for a new topic block, and its `title`
+# becomes the block's heading. The host applies the stage proposals BEFORE
+# it files the minutes items, so items of the same reply land in the new
+# block.
 #
-# Everything else in v1's AGENT_PROMPT that still applies is kept word for
-# word (stage actions, the three rules from a real meeting, orders
-# without the wake word, the counter-check, no chat, no unrequested
-# documents, the closing "OK" line). Every reference to a v1 section
-# (`## Entscheidungen`, `## Aufgaben`, `## Offene Fragen`, `## Verlauf`)
-# is replaced by the tag that now carries it. ASCII transliteration like
-# the v1 prompt; only the literal headings are spelled as they stand in
-# the file (`## Überblick`), so the agent can find them.
-AGENT_PROMPT_V2 = """Du bist Robo, der Mitdenker in einem laufenden Termin. Die
+# ASCII transliteration like every prompt here; only the literal headings
+# are spelled as they stand in the file (`## Überblick`).
+AGENT_PROMPT = """Du bist Robo, der Mitdenker in einem laufenden Termin. Die
 Runde liest deine Ausgabe live mit, waehrend sie weiterspricht.
 
 PROTOKOLL:  {path}
-VORSCHLAEGE: {proposals}
 PROJEKTORDNER: {folder}
 {situation}{open_state}
 Neu gesprochen seit deiner letzten Runde:
@@ -536,47 +400,40 @@ wenn der Abschnitt es verlangt, und dann nur das eine Dokument — nicht den
 Ordner durchforsten. Der Termin hat Vorrang vor der Vollstaendigkeit.
 
 Du liest dort NUR — ausser ein Auftrag der Runde verlangt ausdruecklich, eine
-Datei dort anzulegen oder zu aendern (nie das Protokoll). Sonst wird
-ausschliesslich in die oben genannte Datei VORSCHLAEGE geschrieben: alles
-andere im Ordner gehoert dem Konsumenten und dem
-Sync-Dienst, und ein zweiter Schreiber erzeugt Konfliktkopien.
+Datei dort anzulegen oder zu aendern (nie das Protokoll). Alles andere im
+Ordner gehoert dem Konsumenten und dem Sync-Dienst, und ein zweiter Schreiber
+erzeugt Konfliktkopien.
 
-DAS PROTOKOLL FUEHRT DER KONSUMENT. Das Protokoll liest du NUR — du schreibst
-keine einzige Zeile hinein. Der Konsument traegt ein, was du vorschlaegst:
-oben die Sicht `## Überblick` (Beschluesse, Aufgaben, Offene Fragen — die
-rechnet er bei jedem Eintrag neu aus), darunter `## Themen` mit einem Block je
-Thema (`### HH:MM Titel`) und den Eintraegen darin (`- HH:MM [tag] Text`).
+DEINE ANTWORT IST DER INHALT. Du schreibst weder das Protokoll noch die Buehne
+noch eine Vorschlagsdatei. Du antwortest mit GENAU EINEM JSON-Objekt in einem
+Codeblock (```json ... ```), sonst mit nichts. Der Konsument liest es, traegt
+die Eintraege ins Protokoll ein, vergibt die Kennungen und entscheidet, was auf
+die Buehne kommt. Oben im Protokoll steht die Sicht `## Überblick` (Beschluesse,
+Aufgaben, Offene Fragen), darunter `## Themen` mit einem Block je Thema
+(`### HH:MM Titel`) und den Eintraegen darin (`- HH:MM [tag] Text`) — du liest
+es NUR, und nur was OBERHALB von `## Rohtranskript` steht. Das Rohtranskript
+brauchst du nicht: es waechst den ganzen Termin.
 
-WAS DU LIEST: im Protokoll nur, was OBERHALB von `## Rohtranskript` steht —
-dort siehst du auch, was seit deiner letzten Runde eingetragen wurde. Das
-Rohtranskript brauchst du nicht — es waechst den ganzen Termin, und die
-Runde wartet auf dich.
+{{"verlauf": [...], "entscheidungen": [...], "aufgaben": [...],
+ "offene_fragen": [...], "buehne": [...]}}
 
-WAS DU SCHREIBST: nur Zeilen, die du an `{proposals}` anhaengst — eine Zeile,
-ein JSON-Objekt, UTF-8. Weder Buehne noch Protokoll schreibst du selbst;
-beides tut der Konsument. Er vergibt auch die Kennungen.
-
-1. PROTOKOLL: fasse das Neue als 1-3 Eintraege mit Tag. Ein Eintrag ist EINE
-   Zeile und landet im aktuellen Themenblock:
-
-   {{"action":"tag_entry","tag":"<beschluss|aufgabe|frage|idee|recherche|notiz>",
-        "text":"<eine Zeile>"}}
-
-   Die Tags:
-   - `beschluss`: was entschieden oder zugesagt wurde. Kommt NUR ueber
-     `decision` ins Protokoll (siehe unten), nie als `tag_entry`.
-   - `aufgabe`: wer macht was bis wann.
-   - `frage`: was offen ist und von der Runde noch geklaert werden muss.
-   - `idee`: ein Vorschlag, der im Raum steht, aber nicht entschieden ist.
-   - `recherche`: was nachgeschlagen oder geprueft werden soll — oder was du
-     nachgeschlagen hast, mit der Quelle.
-   - `notiz`: ein Stand, eine Zahl, eine Erkenntnis, die festgehalten gehoert.
+1. PROTOKOLL: `verlauf`, `entscheidungen`, `aufgaben` und `offene_fragen` sind
+   Listen. Ein Eintrag ist EINE Zeile: ein Text oder ein Objekt
+   {{"text": "<eine Zeile>", "topic_id": "<optional>"}}. Fasse das Neue in
+   hoechstens 1-3 Eintraegen je Liste. Eine Liste ohne Neues bleibt leer oder
+   fehlt.
+   - `verlauf`: ein Stand, eine Zahl, eine Erkenntnis, die festgehalten
+     gehoert (landet als `notiz`).
+   - `entscheidungen`: was entschieden oder zugesagt wurde (`beschluss`).
+   - `aufgaben`: wer macht was bis wann (`aufgabe`).
+   - `offene_fragen`: was offen ist und von der Runde noch geklaert werden
+     muss (`frage`).
 
    Nur eintragen, was wirklich gefallen ist. Nichts erfinden. Zahlen,
    Betraege, Fristen, Namen und Zusagen woertlich; Unsicheres aus der
    Spracherkennung mit "(unbestaetigt)". Eintraege werden nur angehaengt:
-   Erledigtes schreibst du nicht um, sondern meldest es als neuen Eintrag
-   mit Tag `notiz`, der mit **erledigt** beginnt und die geaenderte Datei als
+   Erledigtes schreibst du nicht um, sondern meldest es als neuen Eintrag in
+   `verlauf`, der mit **erledigt** beginnt und die geaenderte Datei als
    [[dateiname]] nennt. Du loeschst nichts.
 
    VERLINKEN: Nennt ein Eintrag einen Baustein, eine Zahl oder eine Aufgabe,
@@ -588,7 +445,8 @@ beides tut der Konsument. Er vergibt auch die Kennungen.
    DATEIEN IM PROJEKTORDNER:
 {files}
 
-2. BUEHNE: Moegliche Zeilen:
+2. BUEHNE: `buehne` ist eine Liste von Objekten, hoechstens eines je Zeile
+   dieser Art:
 
    {{"action":"mirror","text":"<EINE Zeile, dritte Person: was Robo verstanden
         hat und woran er gerade arbeitet>"}}
@@ -609,18 +467,19 @@ beides tut der Konsument. Er vergibt auch die Kennungen.
         "seed":"<optional: Titel der Notiz, die der Saatknoten ist>"}}
    {{"action":"links","items":[{{"file":"<dateiname-ohne-endung, nur Dateien,
         die es wirklich gibt>","label":"<kurz>"}}]}}
-   {{"action":"none"}} — die Zeile fuer "dieser Abschnitt bringt nichts Neues";
-        dann schreibst du auch sonst nichts.
+   {{"action":"none"}} — "dieser Abschnitt bringt nichts Neues"; dann sind
+        auch alle anderen Listen leer.
 
    Was wohin gehoert:
    - `decision` NUR fuer Entscheidungen und Zusagen. Nicht fuer Themen, nicht
-     fuer Beobachtungen, nicht fuer Ideen, die gerade erst entstehen. Eine
-     `decision` steht auf der Buehne UND als `beschluss` im Protokoll — den
-     Eintrag macht der Konsument daraus. Schick denselben Beschluss
-     nie zusaetzlich als `tag_entry`.
+     fuer Beobachtungen, nicht fuer Ideen, die gerade erst entstehen. Jeden
+     Beschluss meldest du genau EINMAL, als Eintrag unter `entscheidungen`.
+     Soll er auch auf die Buehne, traegt die `decision`-Zeile WORTGLEICH
+     denselben Text; der Konsument legt ihn dann nur einmal ab. Eine andere
+     Formulierung waere ein zweiter Eintrag im Protokoll.
    - `notice` NUR fuer die zwei Faelle oben. Es gibt keinen dritten Grund.
-     Zwei Meldungen stehen hoechstens gleichzeitig; alles weitere als
-     `tag_entry` mit Tag `frage`.
+     Zwei Meldungen stehen hoechstens gleichzeitig; alles weitere unter
+     `offene_fragen`.
    - `main` NUR, wenn die Runde dich darum gebeten hat — dann ist `quote`
      Pflicht: der Auftrag woertlich aus dem Abschnitt. Ohne `quote` wird die
      Zeile verworfen und die Flaeche bleibt, wie sie ist. Ohne Auftrag nimmst
@@ -632,12 +491,12 @@ beides tut der Konsument. Er vergibt auch die Kennungen.
      beim alten Thema haengt, behauptet etwas Falsches und stoert. Kurz halten,
      `title` ist eine Zeile: ein angenommenes `topic` eroeffnet im Protokoll
      den neuen Themenblock, und `title` ist seine Ueberschrift. Einen
-     Themenblock gibt es nur so. Gehoeren Eintraege dieses Abschnitts schon
-     zum neuen Thema, schick die `topic`-Zeile vor ihnen. Wechselt nur das
-     Thema: `topic`. Wurde dir etwas zugerufen: `main`. Zu dichte Wechsel
-     lehnt der Konsument ab — das ist kein Fehler, sondern der Takt; die
-     Eintraege landen dann im bisherigen Block. Schick denselben Wechsel
-     nicht noch einmal.
+     Themenblock gibt es nur so. Die Eintraege derselben Antwort landen schon
+     im neuen Block. Wechselt nur das Thema: `topic`. Wurde dir etwas
+     zugerufen: `main`. Zu dichte Wechsel lehnt der Konsument ab — das ist
+     kein Fehler, sondern der Takt; die Eintraege landen dann im bisherigen
+     Block. Dazu:
+     schick denselben Wechsel nicht noch einmal.
    - `graph`, wenn ein NEUES Thema eroeffnet wird und das Netz der Notizen
      dazu helfen kann. Du nennst nur das Thema — der Konsument sucht die
      passende Notiz oder legt sie an und baut das Bild. Du schickst keine
@@ -654,26 +513,28 @@ beides tut der Konsument. Er vergibt auch die Kennungen.
      selbst, an der Buehne.
    - `resolve`, sobald die Runde eine Meldung oder Frage beantwortet hat.
      Steht oben etwas Offenes, pruefe zuerst, ob dieser Abschnitt es klaert.
+   - Verlangt ein Auftrag oben ausdruecklich eine `tag_entry`-Aktion, steht
+     sie samt Kennung des Auftrags in `buehne`.
 
 DREI REGELN AUS EINEM ECHTEN TERMIN — sie gelten fuer JEDE Datei:
 
 ANBAUEN STATT UMBAUEN. Die schlimmste Stoerung des ausgewerteten Termins war
 keine falsche Aussage, sondern eine Umsortierung, waehrend die Runde mitlas
 ("Es wurde umsortiert. Also wir muessen jetzt ein bisschen mitdenken."). Du
-fuegst Zeilen hinzu — im Protokoll tut das ohnehin der Konsument fuer dich.
+fuegst hinzu — im Protokoll tut das ohnehin der Konsument fuer dich.
 In einer Datei, die du auf Zuruf aenderst, gilt dasselbe: Sortieren,
 streichen oder Vorhandenes umformulieren nur, wenn genau das zugerufen wurde
 — und dann mit einer Zeile darueber, was sich bewegt hat.
 
-NICHTS NEUES = NICHTS SCHREIBEN. Bringt der Abschnitt keine Erkenntnis
-(Tonprobe, Technikgerede, Small Talk), haengst du nur die eine Zeile
-{{"action":"none"}} an und sonst nichts. Ein Lauf ohne Eintrag ist ein guter
-Lauf.
+NICHTS NEUES = NICHTS EINTRAGEN. Bringt der Abschnitt keine Erkenntnis
+(Tonprobe, Technikgerede, Small Talk), antwortest du mit
+{{"buehne": [{{"action":"none"}}]}} und sonst nichts. Ein Lauf ohne Eintrag
+ist ein guter Lauf.
 
 FRAGEN NUR, WENN RATEN SCHADET: zu bestaetigende Entscheidung, unklarer
 Eigenname. Eine widersprechende Zahl ist keine Frage, sondern eine `notice`
 der Art `value_conflict`. Laut in drei Worten beantwortbar ("5. oder
-6. Oktober?"). Hoechstens EINE; jede weitere als `tag_entry` mit Tag `frage`.
+6. Oktober?"). Hoechstens EINE; jede weitere unter `offene_fragen`.
 
 AUCH OHNE WECKWORT KANN DER ABSCHNITT EIN AUFTRAG SEIN. Die Spracherkennung
 verstuemmelt das Weckwort ("Oboe", "Opa", "Robert") — im ausgewerteten Termin
@@ -681,30 +542,28 @@ in drei von fuenf Faellen. Steht im Abschnitt eine Anrede an dich ODER ein
 Imperativ in der zweiten Person (mach, zeig, schreib, erstelle, berechne,
 sortier, ergaenze, recherchier, schick, streich, update), dann fuehre ihn aus,
 statt ihn nur zu protokollieren. Kannst oder darfst du ihn nicht ausfuehren
-(Chat und Telegram sind ausgeschlossen), sagst du das in `mirror` und als
-`tag_entry` mit Tag `aufgabe`. Ein Auftrag, den du still als "offen" ablegst,
-ist verloren.
+(Chat und Telegram sind ausgeschlossen), sagst du das in `mirror` und unter
+`aufgaben`. Ein Auftrag, den du still als "offen" ablegst, ist verloren.
 
 GEGENPRUEFEN, bevor du fertig bist:
    - Widerspricht eine Zahl, ein Datum oder eine Frist aus diesem Abschnitt
      einer frueheren im Protokoll? Dann als `notice` der Art `value_conflict`,
      mit beiden Werten.
-   - Habe ich nur angebaut und nichts umgestellt — und jeden Beschluss nur
-     einmal geschickt, als `decision`?
+   - Habe ich nur angebaut und nichts umgestellt?
+   - Ist meine Antwort EIN gueltiges JSON-Objekt, ohne Text davor oder
+     danach? Eine Antwort, die der Konsument nicht lesen kann, zaehlt als
+     nicht geliefert.
 
-Schreibe NICHT in den Chat und schicke KEINE Telegram-Nachricht — die Dateien
-sind die Ausgabe. Lege keine Dokumente an, um die nicht gebeten wurde: im
+Schreibe NICHT in den Chat und schicke KEINE Telegram-Nachricht — deine Antwort
+ist die Ausgabe. Lege keine Dokumente an, um die nicht gebeten wurde: im
 ausgewerteten Termin entstanden 28 Themenblaetter, drei trugen den Termin.
-Antworte am Ende mit einer Zeile: "OK — <was du getan hast>".
 """
 
-# The v2 counterpart of ORDER_NOTE: the same triad and the same quote
-# rule word for word, with the result routed to a `tag_entry` instead of
-# `## Aufgaben` and the decisions read from the overview instead of
-# `## Entscheidungen`. `run_turn` picks it for wake-word blocks in v2.
-ORDER_NOTE_V2 = """
+# The order note of a wake-word turn: the triad and the quote rule, with the
+# result routed into the reply's lists (`run_turn` adds it to the situation).
+ORDER_NOTE = """
 🔴 DIREKTER AUFTRAG: Der Abschnitt enthaelt eine Ansprache mit dem Weckwort.
-Fuehre ihn AUS, bevor du Eintraege vorschlaegst — auch wenn dafuer eine andere
+Fuehre ihn AUS, bevor du Eintraege lieferst — auch wenn dafuer eine andere
 Datei im Projektordner geaendert werden muss (nie das Protokoll: das fuehrt
 der Konsument). Danach der Dreisatz, sichtbar im Ergebnis:
   1. AUFTRAG — zitiere ihn woertlich. Ist jede darin genannte Groesse
@@ -715,10 +574,10 @@ der Konsument). Danach der Dreisatz, sichtbar im Ergebnis:
   3. BESCHLUSSLAGE — welche Beschluesse (im Protokoll oben im Ueberblick unter
      Beschluesse) beruehren das Ergebnis, und wo sind sie eingeflossen?
 Halte Ergebnis und Pfad auf der Buehne (`main` — mit dem Auftrag woertlich in
-`quote`) und als `tag_entry` fest: Tag `notiz`, beginnend mit **erledigt**,
-mit der geaenderten Datei als [[dateiname]] — oder Tag `aufgabe`, wenn noch
-etwas offen bleibt. Ein Ergebnis ohne diesen Dreisatz gilt als nicht
-geliefert.
+`quote`) und in der Antwort fest: ein Eintrag unter `verlauf`, beginnend mit
+**erledigt**, mit der geaenderten Datei als [[dateiname]] — oder unter
+`aufgaben`, wenn noch etwas offen bleibt. Ein Ergebnis ohne diesen Dreisatz
+gilt als nicht geliefert.
 
 🔴🔴 `quote` IST EIN KOPIERVORGANG, KEINE FORMULIERUNGSAUFGABE.
 Der Wert von `quote` wird maschinell im Transkript gesucht (Zeichen fuer
@@ -968,7 +827,7 @@ def session_paths(folder: Path, day: str, title: str | None,
                 "correction": folder / f"transkript-korrigiert-{day}.md",
                 "correction_trace": folder / SESSION_FILES["correction_trace"],
                 "speakers": folder / SESSION_FILES["speakers"],
-                # The level-1 decider's answer vectors (gateway/decider.py),
+                # The level-1 decider's answer vectors (blocks/decisions_tasks_questions/decider.py),
                 # only written with COTHINKER_DECIDER set. Flat, it lies in
                 # the project folder like timing.jsonl; dated, because the
                 # project folder outlives the day.
@@ -1207,7 +1066,7 @@ def sse_events(url: str, timeout: float | None = 300.0) -> Iterator[dict]:
         yield from parse_sse(r)
 
 
-# =============================================================== Protocol
+# ======================================================= session files
 def _flock(f) -> bool:
     """File lock across process boundaries, where the platform has one."""
     try:
@@ -1218,58 +1077,14 @@ def _flock(f) -> bool:
         return False
 
 
-@dataclass
-class EntryResult:
-    """What `Protocol.add_entry()` did. `reason` is "" when it landed.
+class SessionGit:
+    """Commits (and syncs) the session's files with git.
 
-    Reasons are fixed English words (the trace turns the space into an
-    underscore): "unknown tag", "no text", "not v2", "not written", and
-    "duplicate" for an entry identical to the last one of the current
-    block or a decision whose text is already filed as a decision anywhere
-    in the document. The link counts come from the wikilink check and are numbers
-    only, so they can go into the trace as they are.
-    """
-    reason: str = ""
-    links_seen: int = 0
-    links_dead: int = 0
-
-
-_HHMM_RE = re.compile(r"\A([01]\d|2[0-3]):[0-5]\d\Z")
-
-
-def _decision_key(text: str) -> str:
-    """A decision's text for comparison: lower case, whitespace collapsed."""
-    return " ".join(text.split()).casefold()
-
-
-def _stamp_or_now(stamp) -> str:
-    """`stamp` if it is a proper HH:MM, otherwise the current minute."""
-    if isinstance(stamp, str) and _HHMM_RE.match(stamp.strip()):
-        return stamp.strip()
-    return f"{datetime.now():%H:%M}"
-
-
-class Protocol:
-    """The protocol in the vault.
-
-    Only the consumer writes into `## Rohtranskript`. In v1 the agent
-    maintains the sections above it. Because the agent is a separate
-    process and replaces the whole file, it can lose appended raw lines
-    between its own read and write. `restore_missing()` detects that and
-    writes them back — the lock alone cannot prevent this, because the
-    agent never takes it.
-
-    In v2 (`is_v2`) the consumer is the ONLY writer of the whole file: the
-    agent proposes tagged entries, `open_topic()` / `add_entry()` put them
-    in. Those two read, splice and replace the file under `self.lock`, the
-    same lock every raw append takes -- so no raw line can land between
-    the read and the replace and be lost by it.
+    A session-host concern, nothing to do with rendering the minutes: it
+    commits the protocol file and whatever else the session wrote.
     """
 
     def __init__(self, path: Path, repo: Path,
-                 report: Callable[[bool], None] | None = None,
-                 conflict_dirs: Iterable[Path] | None = None,
-                 mode: str = DEFAULT_MODE,
                  commit_scope: Iterable[str] = ()):
         self.path = Path(path)
         self.repo = Path(repo)
@@ -1277,330 +1092,10 @@ class Protocol:
         # files the call lane wrote in a COTHINKER_PROJECT_DIR repo).
         # Empty = only the protocol, as before.
         self.commit_scope = [str(s) for s in commit_scope]
-        # The mode picks the sections of the derived view (render_view).
-        self.mode = mode if mode in MODES else DEFAULT_MODE
-        # Decided by the file as it is at start: a v1 file of the same day
-        # continues as v1. Re-checked on every v2 write.
-        try:
-            text = self.path.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-        self.is_v2 = is_v2_text(text)
-        # An existing v2 file keeps the mode it was created with: the flag
-        # only chooses the mode of a NEW file. A restart with another
-        # `--mode` must not re-render this meeting's overview under other
-        # section headings.
-        if self.is_v2:
-            recorded = read_mode(text)
-            if recorded is not None and recorded != self.mode:
-                log(f"mode flag {self.mode} ignored: the protocol was "
-                    f"created as {recorded}")
-                self.mode = recorded
-        # Where to look for sync conflict copies. The protocol's own folder
-        # always; the project folder as well once the protocol sits one
-        # level down in `sessions/<YYYY-MM-DD>-<slug>/`, because rclone
-        # bisync writes its `.conflictN` copies wherever the second writer
-        # touched a file -- and the round's documents, the ones a parallel
-        # session is most likely to edit, are still in the project folder.
-        # Looking only next to the protocol would have made the warning
-        # blind to exactly the case AGENTS.md documents.
-        self.conflict_dirs = [Path(d) for d in
-                              (conflict_dirs
-                               if conflict_dirs is not None
-                               else [self.path.parent])]
-        self.lock = threading.RLock()
-        self._rohzeilen: list[str] = []
         self._git_faden: threading.Thread | None = None
         self._git_sperre = threading.Lock()
         self._fernstelle: bool | None = None
-        # Called after every write attempt with True or False. A failed
-        # write to the protocol is the most expensive failure this program
-        # has -- the raw transcript is unrecoverable -- and it used to be
-        # one line on stdout that nobody in the room ever sees.
-        self.report = report or (lambda ok: None)
 
-    # -------------------------------------------------------------- write
-    @staticmethod
-    def line(text, speaker=None, stempel: str | None = None) -> str:
-        """One raw-transcript line. Exactly one line, always.
-
-        The recognized text is foreign text: line breaks in it would tear
-        the list apart and could put a heading into the protocol that the
-        agent would then mistake for its own. It is scrubbed for the same
-        reason it is scrubbed on the way to the stage -- a lone surrogate
-        in it makes `f.write()` raise inside the SSE reader, which is
-        exactly where nothing may raise.
-        """
-        text = re.sub(r"\s+", " ", scrub(str(text))).strip()
-        stempel = stempel or f"{datetime.now():%H:%M}"
-        wer = ""
-        if speaker:
-            wer = "*" + re.sub(r"\s+", " ", str(speaker)).strip() + ":* "
-        return f"- **{stempel}** {wer}{text}\n"
-
-    def append_raw(self, text, speaker=None) -> None:
-        zeile = self.line(text, speaker)
-        with self.lock:
-            self._rohzeilen.append(zeile)
-            self._write(zeile)
-
-    def append_note(self, inhalt: str) -> bool:
-        """Append a note of the consumer's own to the protocol file.
-
-        The public way in for everything that is not an utterance -- the
-        closing line at the end of the meeting. Returns whether it landed.
-        """
-        return self._write(inhalt)
-
-    def _write(self, inhalt: str) -> bool:
-        """Append to the protocol. Returns whether it actually landed.
-
-        The return value is not decoration: `restore_missing()` used to
-        report N restored lines whether or not the write succeeded, so a
-        full disk announced "🧵 N Rohzeilen nachgetragen — jemand anders
-        hat ins Protokoll geschrieben" to the round: a foreign writer that
-        does not exist, and a restoration that did not happen, while the
-        raw transcript was in fact running into nothing.
-
-        `UnicodeEncodeError` is caught alongside `OSError`: it is a
-        `ValueError`, not an `OSError`, and speech recognition delivers
-        foreign text. `line()` scrubs, so this is the second net.
-        """
-        ok = False
-        with self.lock:
-            try:
-                with open(self.path, "a", encoding="utf-8") as f:
-                    _flock(f)
-                    f.write(inhalt)
-                    f.flush()
-                    os.fsync(f.fileno())
-                ok = True
-            except (OSError, UnicodeError) as e:
-                log("protocol not writable:", e)
-        # The report reaches into the stage writer, i.e. it takes
-        # `StageWriter._lock` while `Protocol.lock` may still be held by a
-        # caller. That direction is the only one there is: nothing that
-        # holds the writer's lock ever touches the protocol.
-        try:
-            self.report(ok)
-        except Exception as e:            # noqa: BLE001 — never fail a write
-            log("protocol report failed:", repr(e))
-        return ok
-
-    # ------------------------------------------------------------ v2 writes
-    def open_topic(self, title, stamp=None) -> bool:
-        """Append `### HH:MM Titel` -- a new topic block. v2 only.
-
-        Called once per ACCEPTED `topic` action, the same trigger as the
-        stage's topic change; there is no second one. Never raises.
-        """
-        clean = clean_line(title if isinstance(title, str) else "", 120)
-        if not clean:
-            return False
-        when = _stamp_or_now(stamp)
-
-        def build(topics: list) -> str:
-            topics.append(Topic(time=when, title=clean, entries=[]))
-            return topic_line(when, clean)
-
-        return self._rewrite(build) == ""
-
-    def add_entry(self, tag, text, *, stamp=None,
-                  names: Iterable[str] | None = None) -> EntryResult:
-        """Append `- HH:MM [tag] Text` to the current topic block. v2 only.
-
-        An entry before any topic block opens `### HH:MM Beginn`. With
-        `names` (the project's file stems) every `[[wikilink]]` is checked
-        and a dead one is reduced to plain text BEFORE it is written --
-        the protocol must not promise a file that is not there. An entry
-        identical (tag and text) to the last one of the current block is
-        not appended again, and neither is a `beschluss` whose text
-        (case-insensitive, whitespace-normalised) equals ANY decision
-        already in the document: the same decision can reach this method
-        twice -- once via `decision`, once as a `tag_entry` -- and the
-        overview must not list it twice. Never raises; see `EntryResult`.
-        """
-        if not isinstance(tag, str) or tag not in TAGS:
-            return EntryResult("unknown tag")
-        if not isinstance(text, str):
-            return EntryResult("no text")
-        seen = dead = 0
-        # The pre-processing sits inside the same never-raise promise as
-        # the write: `names` comes from the caller and a stray value in it
-        # (not iterable, not a string) must cost this entry, not the turn.
-        try:
-            if names is not None:
-                text, seen, dead = clean_wikilinks(
-                    text, {n for n in names if isinstance(n, str)})
-            clean = clean_line(text, 500)
-            when = _stamp_or_now(stamp)
-        except Exception as e:            # noqa: BLE001 -- see the docstring
-            log("entry not prepared:", repr(e))
-            return EntryResult("not written", seen, dead)
-        if not clean:
-            return EntryResult("no text", seen, dead)
-
-        def build(topics: list) -> str | None:
-            append = ""
-            if not topics:
-                topics.append(Topic(time=when, title="Beginn", entries=[]))
-                append = topic_line(when, "Beginn")
-            current = topics[-1]
-            last = current.entries[-1] if current.entries else None
-            if last is not None and last.tag == tag and last.text == clean:
-                return None
-            if tag == "beschluss":
-                key = _decision_key(clean)
-                if any(entry.tag == "beschluss"
-                       and _decision_key(entry.text) == key
-                       for topic in topics for entry in topic.entries):
-                    return None
-            current.entries.append(Entry(time=when, tag=tag, text=clean))
-            return append + entry_line(when, tag, clean)
-
-        return EntryResult(self._rewrite(build), seen, dead)
-
-    def current_topic(self) -> tuple[str, str]:
-        """(key, title) of the LAST topic block; ("", "") when there is
-        none (or the file cannot be read, or is not v2). The key names the
-        block for this run: its position, time and title line -- two blocks
-        with the same heading still differ by position. Read under the
-        lock, like every v2 write. Never raises."""
-        try:
-            with self.lock:
-                with open(self.path, encoding="utf-8", newline="",
-                          errors="surrogateescape") as f:
-                    text = f.read()
-            if not is_v2_text(text):
-                return "", ""
-            topics = parse_topics(text)
-            if not topics:
-                return "", ""
-            t = topics[-1]
-            return f"{len(topics)}|{t.time}|{t.title}", t.title
-        except Exception as e:            # noqa: BLE001 -- see the docstring
-            log("protocol not read:", repr(e))
-            return "", ""
-
-    def current_topic_title(self) -> str:
-        """The title line of the LAST topic block, "" when there is none.
-        Never raises."""
-        return self.current_topic()[1]
-
-    def _rewrite(self, build: Callable[[list], str | None]) -> str:
-        """Read, splice, replace -- the one way a v2 write happens.
-
-        Everything under `self.lock`: `append_raw()` takes the same lock,
-        so a raw line cannot be appended between the read and the replace
-        and then be lost by it. The raw section is carried through
-        byte-identically by `splice()`; reading and writing with
-        `newline=""` and `surrogateescape` keeps it byte-identical on disk
-        as well, whatever line endings or stray bytes it holds.
-
-        `build(topics)` gets the parsed topic blocks, adds what it appends
-        to them (so the view includes it) and returns the lines to append,
-        or None for "nothing to do" (a duplicate). Returns "" on success or
-        the reason. Never raises: this runs on the agent thread, and a
-        failure is logged and reported like any other protocol write.
-        """
-        ok: bool | None = None
-        reason = ""
-        with self.lock:
-            try:
-                with open(self.path, encoding="utf-8", newline="",
-                          errors="surrogateescape") as f:
-                    text = f.read()
-                if not is_v2_text(text):
-                    self.is_v2 = False
-                    return "not v2"
-                topics = parse_topics(text)
-                append = build(topics)
-                if append is None:
-                    return "duplicate"
-                new = splice(text, view=render_view(topics, self.mode),
-                             append=append)
-                self._replace(new)
-                ok = True
-            except Exception as e:        # noqa: BLE001 -- see the docstring
-                log("protocol not written:", repr(e))
-                ok, reason = False, "not written"
-        try:
-            self.report(ok)
-        except Exception as e:            # noqa: BLE001 — never fail a write
-            log("protocol report failed:", repr(e))
-        return reason
-
-    def _replace(self, text: str) -> None:
-        """Write `text` to a temp file next to the protocol, fsync, replace.
-
-        Next to it, not in /tmp: `os.replace()` is atomic only within one
-        file system. A failed attempt leaves no temp file behind.
-        """
-        tmp = self.path.with_name(f".{self.path.name}.tmp")
-        try:
-            with open(tmp, "w", encoding="utf-8", newline="",
-                      errors="surrogateescape") as f:
-                f.write(text)
-                f.flush()
-                os.fsync(f.fileno())
-            try:
-                shutil.copymode(self.path, tmp)
-            except OSError:
-                pass
-            os.replace(tmp, self.path)
-        except BaseException:
-            try:
-                tmp.unlink()
-            except OSError:
-                pass
-            raise
-        # The rename itself lives in the directory entry: without an fsync
-        # of the folder a crash right after can bring back the OLD file.
-        # Best effort -- not every file system lets a directory be opened
-        # or synced, and the new content is already safely on disk.
-        try:
-            fd = os.open(self.path.parent, os.O_RDONLY)
-            try:
-                os.fsync(fd)
-            finally:
-                os.close(fd)
-        except OSError:
-            pass
-
-    # ------------------------------------------------------ restore_missing
-    def restore_missing(self) -> int:
-        """Checks whether all written raw lines are still in the file, and
-        writes back any that are missing. Returns the number RESTORED --
-        zero when the write back failed, because the warning this feeds
-        claims both that a foreign writer touched the file and that the
-        lines are back."""
-        with self.lock:
-            if not self._rohzeilen:
-                return 0
-            try:
-                inhalt = self.path.read_text(encoding="utf-8", errors="replace")
-            except OSError as e:
-                log("protocol not readable:", e)
-                return 0
-            vorhanden = set(inhalt.splitlines())
-            fehlend = [z for z in self._rohzeilen if z.rstrip("\n") not in vorhanden]
-            if not fehlend:
-                return 0
-            log(f"warning: {len(fehlend)} raw lines were missing from the "
-                f"protocol — restoring (external write?)")
-            kopf = (f"\n*Nachgetragen {datetime.now():%H:%M} — {len(fehlend)} "
-                    f"Zeilen waren aus dem Rohtranskript verschwunden.*\n")
-            if not self._write(kopf + "".join(fehlend)):
-                log("  restoring failed — the lines are still missing")
-                return 0
-            return len(fehlend)
-
-    def conflict_files(self) -> list[Path]:
-        """Conflict files (Nextcloud, Syncthing, git) in the watched folders."""
-        # Patterns shared with the post-meeting triage (conflict_triage.py).
-        return find_conflicts(self.conflict_dirs)
-
-    # ---------------------------------------------------------------- git
     def _git(self, *args: str, timeout: float = 180) -> subprocess.CompletedProcess:
         return subprocess.run(
             ["git", *args], cwd=self.repo, capture_output=True, text=True,
@@ -1675,6 +1170,162 @@ class Protocol:
             faden.join(timeout)
 
 
+class MinutesPort:
+    """The session host's adapter to the minutes-document block.
+
+    The minutes document's face for the rest of the host: `add_entry`,
+    `open_topic`, `current_topic*`, `is_v2`, `mode`. The block renders the sections; this
+    class sends it events and carries its rendered head into the file through
+    `MinutesFile.write_sections` -- the host stays the file's only writer.
+
+    The block host dispatches synchronously on the caller's thread, so the
+    block's `entry_result` answer and the `_tl.write_failed` flag set by
+    `_on_output` belong to the thread that is inside `_send`. The port calls
+    no method of the block: it reads the block's output events.
+
+    Every call holds `file.lock` across the dispatch (the same span
+    the old in-consumer minutes class held); `write_sections` re-enters it. The lock order
+    stays file.lock -> StageWriter._lock (via report).
+    """
+
+    def __init__(self, file: MinutesFile, blocks: SessionBlocks, *,
+                 session_dir: Path, mode: str = DEFAULT_MODE,
+                 block_id: str = "minutes-document", log=log):
+        self.file = file
+        self.blocks = blocks
+        self.session_dir = Path(session_dir)
+        self.block_id = block_id
+        self._log = log
+        self._tl = threading.local()
+        blocks.on_output(self._on_output)
+        with file.lock:
+            blocks.dispatch("block_output", {"minutes_open": {
+                "path": str(file.path), "mode": mode}})
+
+    # --------------------------------------------------------- properties
+    @property
+    def path(self) -> Path:
+        return self.file.path
+
+    @property
+    def lock(self):
+        return self.file.lock
+
+    def _state(self) -> dict:
+        """The block's `minutes_state` answer; {} when there is none."""
+        with self.file.lock:
+            got = self.blocks.collect("block_output", {"minutes_query": {}},
+                                      self.block_id)
+        for out in reversed(got):
+            if out.get("kind") == "minutes_state":
+                return out
+        return {}
+
+    @property
+    def is_v2(self) -> bool:
+        return bool(self._state().get("is_v2", False))
+
+    @property
+    def mode(self) -> str:
+        return self._state().get("mode") or DEFAULT_MODE
+
+    # -------------------------------------------------------------- calls
+    def append_raw(self, text, speaker=None) -> bool:
+        """Host-only convenience: the raw line, never through a block."""
+        return self.file.append_raw(text, speaker)
+
+    def current_topic(self) -> tuple[str, str]:
+        """(key, title) of the last topic block; ("", "") if none. Never raises."""
+        try:
+            st = self._state()
+            return st.get("topic_key", ""), st.get("topic_title", "")
+        except Exception as e:            # noqa: BLE001 -- see the docstring
+            self._log("protocol not read:", repr(e))
+            return "", ""
+
+    def current_topic_title(self) -> str:
+        return self.current_topic()[1]
+
+    def add_entry(self, tag, text, *, stamp=None,
+                  names: Iterable[str] | None = None) -> "minutes_block.EntryResult":
+        """Never raises; see `blocks.minutes_document.minutes.EntryResult`."""
+        # `names` goes through untouched: the block's own never-raise guard
+        # covers a stray value (not iterable, not a string) in it.
+        return self._send("entry", {
+            "tag": tag, "text": text, "stamp": stamp, "names": names})
+
+    def open_topic(self, title, stamp=None) -> bool:
+        return self._send("topic", {"title": title, "stamp": stamp}).reason == ""
+
+    def _send(self, key: str, body: dict) -> "minutes_block.EntryResult":
+        res = minutes_block.EntryResult("not written")
+        with self.file.lock:
+            self._tl.write_failed = False
+            try:
+                answers = self.blocks.collect(
+                    "block_output", {key: body}, self.block_id)
+                got = [o for o in answers if o.get("kind") == "entry_result"]
+                if got:
+                    o = got[-1]
+                    res = minutes_block.EntryResult(
+                        o.get("reason", ""), o.get("links_seen", 0),
+                        o.get("links_dead", 0), attempted=o.get("attempted", True))
+            except Exception as e:        # noqa: BLE001 -- never raise
+                self._log("protocol not written:", repr(e))
+            if res.reason == "" and getattr(self._tl, "write_failed", False):
+                res = minutes_block.EntryResult(
+                    "not written", res.links_seen, res.links_dead)
+        ok = {"": True, "not written": False}.get(res.reason)
+        if not getattr(res, "attempted", True):
+            ok = None       # failed before any write: nothing to report
+        if ok is not None:
+            try:
+                self.file.report(ok)
+            except Exception as e:        # noqa: BLE001 -- never fail a write
+                self._log("protocol report failed:", repr(e))
+        return res
+
+    def _on_output(self, payload) -> None:
+        """Splice the block's rendered head into the file, then drop the artefact."""
+        try:
+            changed = payload.get("minutes_changed") if hasattr(payload, "get") else None
+            if not changed:
+                return
+            art = (self.session_dir / "artefacts" / self.block_id
+                   / str(changed.get("name", "protokoll.md")))
+            try:
+                with open(art, encoding="utf-8", newline="",
+                          errors="surrogateescape") as f:
+                    text = f.read()
+                self.file.write_sections(text)
+            except Exception as e:        # noqa: BLE001 -- see below
+                self._log("protocol not written:", repr(e))
+                self._tl.write_failed = True
+                return
+            try:
+                art.unlink()
+            except OSError:
+                pass
+        except Exception as e:            # noqa: BLE001 -- listeners never raise
+            self._log("minutes output not handled:", repr(e))
+            self._tl.write_failed = True
+
+
+def open_minutes(path: Path, *, mode: str = DEFAULT_MODE,
+                 report: Callable[[bool], None] | None = None,
+                 session_dir: Path | None = None,
+                 log=lambda *a: None) -> MinutesPort:
+    """A MinutesPort over a private block host holding only the minutes
+    block. For tests and helpers; `main()` builds its own."""
+    path = Path(path)
+    file = MinutesFile(path, threading.RLock(), report)
+    sdir = Path(session_dir) if session_dir is not None else path.parent
+    blocks = build_session_blocks(
+        session_dir=sdir, sink=lambda i: None, log=log,
+        registry={"minutes-document": MinutesDocumentBlock})
+    return MinutesPort(file, blocks, session_dir=sdir, mode=mode)
+
+
 # ============================================================ prefilter
 # German: this lands on a surface a meeting reads (AGENTS.md naming
 # convention). Distinct from correction.HEADER on purpose: that one
@@ -1699,7 +1350,7 @@ def write_prefiltered(path: Path, text, speaker=None, stamp: str | None = None) 
     SSE reader, right after the raw line is already on disk.
 
     Never raises: a broken prefilter must cost this display file a line,
-    never the raw transcript that `Protocol.append_raw` already wrote
+    never the raw transcript that `MinutesFile.append_raw` already wrote
     (AGENTS.md -- every utterance lands in the raw transcript first).
     On failure the raw text is written instead, so the display file
     never gets gaps.
@@ -1709,7 +1360,7 @@ def write_prefiltered(path: Path, text, speaker=None, stamp: str | None = None) 
     except Exception as e:                    # noqa: BLE001 -- see docstring
         log("prefilter skipped:", type(e).__name__)
         gefiltert = text
-    zeile = Protocol.line(gefiltert, speaker, stamp)
+    zeile = MinutesFile.line(gefiltert, speaker, stamp)
     try:
         neu = not path.exists() or path.stat().st_size == 0
         with open(path, "a", encoding="utf-8") as f:
@@ -1727,23 +1378,16 @@ POLICY_ASK_LINE = ("  ? {id} — Robo-Rueckfrage: wertet Robo selbst aus -- "
                    "nicht aufloesen, nicht ausfuehren.")
 
 
-def open_state_block(state, include_unrecorded: bool = True, *,
-                     policy_ask_id: str = "") -> str:
-    """The open entries, with their identities, for the prompt -- plus
-    what fell off the stage and still has to be written down.
+def open_state_block(state, *, policy_ask_id: str = "") -> str:
+    """The open entries, with their identities, for the prompt.
 
     The consumer owns the identities; the agent only ever references them.
     Whether a language model reproduces a stable id over four hours is not
     answered by the evidence, and this design does not bet on it.
 
-    The second part is what makes the stage's own claim true. The dimmed
-    parked line says "Rest steht unter Offene Fragen" and the expired
-    question says the same, and nobody was putting either there: the
-    parked text was read by no one and the entry vanished after six
-    seconds. The agent owns the protocol, so the consumer tells it what to
-    file -- in the block of open entries it already receives, marked as
-    still to be recorded. ASCII transliteration, like the rest of the
-    prompt.
+    What fell off the stage (parked notices, expired questions) is not
+    listed: the host files it into the minutes itself
+    (`prepare_turn`). ASCII transliteration, like the rest of the prompt.
 
     `policy_ask_id` names level 2's own open question (MM-B). It sits in
     the ordinary question slot, but it is Robo's to evaluate: listed as
@@ -1763,13 +1407,6 @@ def open_state_block(state, include_unrecorded: bool = True, *,
     if eigene:
         block += ("" if lines else "\n") + \
             POLICY_ASK_LINE.format(id=policy_ask_id) + "\n"
-    filed = ["  - " + ("abgelaufen: " if e.get("kind") == "expired"
-                       else "geparkt: ") + str(e.get("text", ""))
-             for e in state.unrecorded()] if include_unrecorded else []
-    if filed:
-        block += ("\nNOCH NICHT IM PROTOKOLL (kein Platz auf der Buehne "
-                  "gewesen — trag das unter `## Offene Fragen` ein):\n"
-                  + "\n".join(filed) + "\n")
     return block
 
 
@@ -1815,133 +1452,9 @@ def enrollment_mirror(control: str | None, enrolled: str | None,
     return None
 
 
-def order_note_for(fmt: int, wake_word: bool) -> str:
-    """The order note of a turn: none without the wake word, else the
-    note of the turn's protocol format (v2 names no v1 section)."""
-    if not wake_word:
-        return ""
-    return ORDER_NOTE_V2 if fmt == 2 else ORDER_NOTE
-
-
-def policy_turn(policy_runner, fmt: int, b) -> tuple[str, str]:
-    """Level 2's share of one turn: (extra order note, spoken).
-
-    Takes the orders the policy decided since the last turn -- they ride
-    along with this one, finished, the agent only formulates -- and turns
-    them into what the turn needs: the note appended to the prompt's
-    `order_note`, and the text `ingest()` checks the proposals' quotes
-    against. A wake order the policy made out of a block without the wake
-    word gets the same order note a call-out gets; its evidence is the
-    block it was decided on, which may have been said before this turn's
-    own block. Without a runner: ("", b.text), exactly as before level 2.
-    """
-    if policy_runner is None:
-        return "", b.text
-    auftraege = policy_runner.take_turn()
-    extra_note = auftraege.note
-    if auftraege.wake and not b.wake_word:
-        extra_note += order_note_for(fmt, True)
-    spoken = b.text + (" " + auftraege.spoken if auftraege.spoken else "")
-    return extra_note, spoken
-
-
-def page_call_out(writer, policy_runner, b, *, session_dir, project_dir,
-                  log, clock=datetime.now) -> Path | None:
-    """The Zuruf "Robo, leg dafuer eine Seite an" (MM-G D7). Never raises.
-
-    Only for a block that carries the wake word, only into a v2 protocol,
-    only when `wiki.ZURUF_SEITE` matches -- a regex, no model. An explicit
-    order is a confirmation, not an autonomous act, in every mode: the
-    marker is `*(bestätigt HH:MM)*`. With level 2 attached the page goes
-    through it (`PolicyRunner.page_order`), so the agent gets the order to
-    fill it in this very turn; without it the consumer creates skeleton
-    and backlink only. Either way the ONE page path is
-    `StageWriter.file_topic_page`. The block still goes to the agent as
-    usual -- with `page_call_out_note()` in its prompt. Returns the page:
-    the one created now, or -- when the current block already has one
-    (`page_exists`, e.g. a "Ja" to level 2's question got there first) --
-    that one, so the note names it and the agent gets no conflicting
-    order. None when there is no page.
-    """
-    try:
-        if (not getattr(b, "wake_word", False) or writer.protocol is None
-                or not wants_page(getattr(b, "text", ""))):
-            return None
-        if policy_runner is not None:
-            seite = policy_runner.page_order(b.text)
-        else:
-            jetzt = clock()
-            seite = writer.file_topic_page(
-                writer.page_title(), session_dir=session_dir,
-                project_dir=project_dir,
-                mark=marker(False, f"{jetzt:%H:%M}"), created=jetzt)
-        return seite if seite is not None else writer.topic_page()
-    except Exception as e:                # noqa: BLE001 -- agent thread
-        log("topic page call-out skipped:", repr(e))
-        return None
-
-
-def page_call_out_note(page, level2: bool) -> str:
-    """The prompt note of a Zuruf turn whose page already exists (German,
-    ASCII like the rest of the prompt). "" without a page.
-
-    The block carries the wake word, so the turn also gets ORDER_NOTE_V2
-    ("Fuehre ihn AUS ... tag_entry notiz erledigt [[dateiname]]") -- read
-    alone, that makes the agent create a second page and file a second
-    entry. This note says the order is already done. With level 2 the
-    fill order (`ORDER_TEXTS["document"]`) rides along in the same turn,
-    so the filling is not asked for twice; without it, it is asked for
-    here.
-    """
-    if not page:
-        return ""
-    pfad = Path(page)
-    text = (f"\nZURUF SEITE: Die Themenseite `{pfad}` zu diesem Themenblock "
-            f"ist schon angelegt, der Verweis [[{pfad.stem}]] steht schon im "
-            "Protokoll. Das geht dem DIREKTEN AUFTRAG oben vor: lege fuer "
-            "diesen Zuruf KEINE weitere Datei und KEINEN Protokolleintrag "
-            "an (auch keinen `tag_entry` mit **erledigt**).")
-    if not level2:
-        text += (" Ergaenze die Seite unterhalb ihrer ersten Zeilen (die "
-                 "bleiben stehen) um 3-7 Stichpunkte zum Thema, in eigenen "
-                 "Worten.")
-    return text + "\n"
-
-
-def turn_orders(writer, policy_runner, fmt: int, b, *, session_dir,
-                project_dir, log, clock=datetime.now) -> tuple[str, str]:
-    """What one turn adds to `order_note`, and the spoken text: the Zuruf
-    page first (`page_call_out`, so level 2's fill order rides along with
-    THIS turn), then level 2's orders (`policy_turn`), then the note that
-    the Zuruf's page already exists (`page_call_out_note`)."""
-    seite = page_call_out(writer, policy_runner, b, session_dir=session_dir,
-                          project_dir=project_dir, log=log, clock=clock)
-    extra_note, gesprochen = policy_turn(policy_runner, fmt, b)
-    return (extra_note + page_call_out_note(seite, policy_runner is not None),
-            gesprochen)
-
-
-def turn_protocol_format(writer, log) -> tuple[int, bool]:
-    """The protocol format of the NEXT turn: (fmt, switched).
-
-    v2 only while `writer.protocol` is set AND the file is still v2.
-    `Protocol._rewrite()` flips `is_v2` off when it finds the file is no
-    longer v2 (someone rewrote it as v1 mid-run). From then on the file
-    is the agent's again, the v1 way: the writer lets go of it (a
-    `tag_entry` is refused as `v1_protocol`, a decision is no longer
-    mirrored), the prompt is v1 and carries the unrecorded entries again.
-    `switched` is True exactly once, on the turn that notices -- the
-    caller logs nothing else and sends the full v1 prompt, because the
-    worker's history holds only the v2 instruction.
-    """
-    prot = writer.protocol
-    if prot is None:
-        return 1, False
-    if prot.is_v2:
-        return 2, False
-    writer.protocol = None
-    log("protocol is no longer v2 -- falling back to the v1 prompt")
-    return 1, True
+def order_note_for(wake_word: bool) -> str:
+    """The order note of a turn: none without the wake word."""
+    return ORDER_NOTE if wake_word else ""
 
 
 def refresh_link_names(writer, folder, log) -> list[str]:
@@ -1959,8 +1472,8 @@ def refresh_link_names(writer, folder, log) -> list[str]:
     return names
 
 
-def prepare_v2_turn(writer, state, folder, unrecorded, log) -> list[str]:
-    """What a v2 turn does before its prompt is built. Never raises.
+def prepare_turn(writer, state, folder, unrecorded, log) -> list[str]:
+    """What a turn does before its prompt is built. Never raises.
 
     Refreshes the file names for the wikilink check and the prompt, and
     files what fell off the stage (`unrecorded`) as `frage` entries --
@@ -1977,10 +1490,10 @@ def prepare_v2_turn(writer, state, folder, unrecorded, log) -> list[str]:
     return names[:PROMPT_FILE_LIMIT]
 
 
-def build_prompt(protocol_path, proposal_path, block, state,
+def build_prompt(protocol_path, block, state,
                  backlog_note: str = "", order_note: str = "",
                  project_dir=None, first_turn: bool = True,
-                 fmt: int = 1, file_names=None, topic_criterion: bool = False,
+                 file_names=None, topic_criterion: bool = False,
                  thread: list | None = None,
                  *, policy_ask_id: str = "") -> str:
     """The prompt for one run.
@@ -2004,7 +1517,7 @@ def build_prompt(protocol_path, proposal_path, block, state,
 
     B5: the worker holds a running session (gateway/worker.py, one
     process, turns as JSON lines) -- the instruction, the paths and the
-    proposal format only have to go out ONCE. `first_turn=True` (the
+    reply format only have to go out ONCE. `first_turn=True` (the
     default, and everything that calls this without the flag) still
     builds the full AGENT_PROMPT. Every later turn in the SAME session
     gets only what actually changed: the spoken block, the situational
@@ -2015,20 +1528,16 @@ def build_prompt(protocol_path, proposal_path, block, state,
     FULL conversation history to every call; this function only stops
     minting new copies of the static part.
 
-    `fmt` is the protocol format. `fmt=1` (the default) is byte for byte
-    the v1 prompt; `file_names` is ignored there. With 2 the first turn is
-    AGENT_PROMPT_V2 with the project's file names (at most
-    PROMPT_FILE_LIMIT) for the wikilink rule, and the open-state block
-    leaves out what the consumer files itself. Later turns are
-    DELTA_PROMPT in both formats. The order note is the caller's choice
-    (`run_turn` passes ORDER_NOTE_V2 in v2).
+    The first turn is AGENT_PROMPT (the JSON-reply instruction) with the
+    project's file names (at most PROMPT_FILE_LIMIT) for the wikilink rule;
+    later turns are DELTA_PROMPT. The order note is the caller's choice
+    (`run_turn` passes `order_note_for(wake_word)`).
 
     `policy_ask_id`: the stage id of level 2's own open question
-    (`PolicyRunner.open_ask_id()`), passed on to `open_state_block`. ""
+    (`DecisionsBlock.open_ask_id()`), passed on to `open_state_block`. ""
     (the default, and every caller without `--policy`) changes nothing.
     """
-    open_state = open_state_block(state, include_unrecorded=(fmt != 2),
-                                  policy_ask_id=policy_ask_id)
+    open_state = open_state_block(state, policy_ask_id=policy_ask_id)
     if not first_turn:
         thread_block = ""
         if thread is not None:
@@ -2045,9 +1554,7 @@ def build_prompt(protocol_path, proposal_path, block, state,
             situation=backlog_note + order_note + state.follow_up_note(),
             open_state=open_state,
             thread=thread_block)
-    template, extra = AGENT_PROMPT, {}
-    if fmt == 2:
-        template, extra = AGENT_PROMPT_V2, {"files": prompt_file_list(file_names)}
+    template = AGENT_PROMPT
     if topic_criterion:
         if template.count(TOPIC_CRITERION_ANCHOR) != 1:
             # Fail loudly (D4/Task 1): a silent no-op here would ship a
@@ -2058,8 +1565,8 @@ def build_prompt(protocol_path, proposal_path, block, state,
         template = template.replace(
             TOPIC_CRITERION_ANCHOR, TOPIC_CRITERION_ANCHOR + TOPIC_CRITERION)
     return template.format(
-        **extra,
-        path=protocol_path, proposals=proposal_path, block=block.text,
+        files=prompt_file_list(file_names),
+        path=protocol_path, block=block.text,
         # The folder, so the agent can look up the meeting's own background
         # material (Leitfaden, earlier protocol, notes) when a section
         # actually demands it. Derived from the protocol path when nothing
@@ -2071,6 +1578,128 @@ def build_prompt(protocol_path, proposal_path, block, state,
                     else Path(protocol_path).parent),
         situation=backlog_note + order_note + state.follow_up_note(),
         open_state=open_state)
+
+
+# ============================================================ the reply
+# The main turn's reply reaches the host as an `agent_reply` event; the
+# `capture-bullets` block parses it and answers with `block_output` events.
+# These pieces are the host's side of that: it collects the outputs, files
+# the minutes items through the minutes-document block, appends the stage
+# proposals to the proposal file (the host alone writes it and, through
+# `StageWriter.ingest`, the stage file) and keeps an unreadable reply.
+CAPTURE_BLOCK_ID = "capture-bullets"
+# The reply's minutes lists and the tag each item is filed under.
+BULLET_TAGS = {"verlauf": "notiz", "entscheidungen": "beschluss",
+               "aufgaben": "aufgabe", "offene_fragen": "frage"}
+
+
+@dataclass
+class TurnReply:
+    """What one `agent_reply` event came to: the minutes items and the stage
+    actions in the order the agent gave them, or the failure payload."""
+    bullets: list
+    proposals: list
+    failure: dict | None = None
+
+
+DECISIONS_BLOCK_ID = "decisions-tasks-questions"
+
+
+def turn_opened(blocks: SessionBlocks, b, turn: int) -> dict:
+    """Tells the blocks a turn opens (`turn_open`) and returns what the
+    decisions block answered (`turn_orders`): the order note, the spoken
+    text and the id of level 2's open question. Without the block: the
+    block's own text and nothing else."""
+    got = blocks.collect("block_output", {"turn_open": {
+        "turn": turn, "text": b.text, "wake_word": bool(b.wake_word)}},
+        DECISIONS_BLOCK_ID)
+    for out in reversed(got):
+        if out.get("kind") == "turn_orders" and out.get("turn") == turn:
+            return {"note": out.get("note") or "",
+                    "spoken": out.get("spoken") or b.text,
+                    "open_ask_id": out.get("open_ask_id") or ""}
+    return {"note": "", "spoken": b.text, "open_ask_id": ""}
+
+
+def turn_closed(blocks: SessionBlocks, turn: int, *, ok: bool,
+                answered: bool) -> None:
+    """Tells the blocks the turn is over (`turn_closed`)."""
+    blocks.dispatch("block_output", {"turn_closed": {
+        "turn": turn, "ok": ok, "answered": answered}})
+
+
+class ReplyIntake:
+    """Dispatches a reply and collects the capture block's outputs.
+
+    The answers come back through `SessionBlocks.collect`.
+    """
+
+    def __init__(self, blocks: SessionBlocks) -> None:
+        self.blocks = blocks
+
+    def read(self, text: str, turn: int) -> TurnReply:
+        seen = self.blocks.collect(
+            "agent_reply", {"text": text, "turn": turn}, CAPTURE_BLOCK_ID)
+        reply = TurnReply([], [])
+        for out in seen:
+            kind = out.get("kind")
+            if kind == "parse_failed":
+                reply.failure = out
+            elif kind == "bullet":
+                reply.bullets.append(out)
+            elif kind == "stage_proposal" and isinstance(out.get("action"), dict):
+                reply.proposals.append(out["action"])
+        if reply.failure is not None:      # a failed reply files nothing
+            reply.bullets, reply.proposals = [], []
+        return reply
+
+
+def append_proposals(path: Path, actions: list[dict]) -> int:
+    """Append the reply's stage actions to the proposal file, one JSON
+    object per line, in ONE write. Returns how many lines were written;
+    raises `OSError` when the file cannot be written."""
+    lines = [json.dumps(a, ensure_ascii=False) + "\n" for a in actions]
+    if lines:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("".join(lines))
+    return len(lines)
+
+
+def file_bullets(writer, bullets: list[dict], log=log) -> int:
+    """File the reply's minutes items through the writer (and so through
+    the minutes-document block). Returns how many are in the minutes
+    afterwards -- a duplicate counts, it is there already. A refused item
+    is logged and traced; it costs that item only."""
+    filed = 0
+    for out in bullets:
+        tag = BULLET_TAGS.get(out.get("section"))
+        if tag is None:
+            continue
+        reason = writer.file_entry(tag, out.get("text"))
+        if reason in ("", "duplicate"):
+            filed += 1
+            continue
+        log("entry not filed:", reason)
+        writer.trace("entry_failed", kind=tag, reason=reason.replace(" ", "_"))
+    return filed
+
+
+def keep_failed_reply(path: Path, failure: dict, trace, log=log) -> None:
+    """A reply that did not parse: the structural trace gets the numbers
+    and a token (it holds no speech, by design), the raw text goes to
+    `path`, one JSON object per line. Never raises."""
+    reason = "failure_marker" if failure.get("failed") else "no_json"
+    raw = failure.get("raw")
+    raw = raw if isinstance(raw, str) else ""
+    try:
+        trace.record("reply_unreadable", reason=reason, chars=len(raw))
+        row = {"at": datetime.now().astimezone().isoformat(timespec="seconds"),
+               "turn": failure.get("turn"), "reason": failure.get("reason"),
+               "raw": raw}
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except Exception as e:                # noqa: BLE001 -- never cost the turn
+        log("failed reply not kept:", repr(e))
 
 
 # =================================================================== queue
@@ -2266,7 +1895,7 @@ def applied_event(state: StageState, action: dict) -> dict | None:
             # NO TITLE. A topic title is a sentence out of the meeting and
             # therefore not a token; the trace takes its LENGTH, in an
             # existing numeric field, and nothing else. The filter in
-            # gateway/events.py would drop it anyway -- it is not relaxed,
+            # shared/events.py would drop it anyway -- it is not relaxed,
             # and nothing here relies on it catching this.
             return {"event": "topic_changed", "id": state.main.id,
                     "chars": len(state.main.title),
@@ -2431,11 +2060,11 @@ def worker_interpreter() -> str:
 def default_lane_command(*, python_exe: str, worker_py: Path, model: str,
                          provider: str, hermes_home: Path) -> list:
     """The argv `--lanes` builds for a lane worker when neither
-    `--lane-call-worker-command` nor `--lane-coach-worker-command`
-    overrides it.
+    `--lane-call-worker-command` nor the mirroring-coach block's
+    `lane_coach_worker_command` config key overrides it.
 
     Always carries `--no-history`: a lane's prompt
-    (`gateway/lane_context.py`'s `build_prompt()`) already carries the
+    (`blocks/mirroring_coach/context.py`'s `build_prompt()`) already carries the
     full bounded window + Stand summary every turn, so letting
     `gateway/worker.py` ALSO replay the ever-growing per-session
     SessionDB conversation on top of it would defeat the whole point of
@@ -2451,70 +2080,59 @@ def default_lane_command(*, python_exe: str, worker_py: Path, model: str,
 
 
 def build_lanes(a, log: Callable[..., None], *, call_command: list,
-                coach_command: list, session_id: str, project_agenda: str,
-                state, writer, folder: Path, path: Path, run_dir: Path,
-                titler_factory: Callable | None = None):
-    """The meeting's `lane_integration.Lanes`, including the agent-seam
-    wiring for `COTHINKER_AGENT=api`.
+                session_id: str, project_agenda: str,
+                state, writer, folder: Path, path: Path,
+                seam=None):
+    """The meeting's `call_lane.CallLane` (the coach lane is the
+    `mirroring-coach` block; its agent comes from
+    `block_host_wiring.make_agent_for`), including the agent-seam wiring for
+    `COTHINKER_AGENT=api` (`seam` is `agent_seam(log)`, computed once by the
+    caller) -- the call lane stays on the worker unless
+    `COTHINKER_AGENT_CALL=api` too.
 
-    Extracted out of `main()` so the path from
-    `COTHINKER_AGENT=api` through `agent_lane.coach_soul_briefing()` to the
-    `coach_briefing` this function passes into `Lanes(...)` is covered by a
-    test that does not need a full `main()` run --
-    tests/test_lane_briefing_wiring.py calls this function directly.
+    Extracted out of `main()` so it is covered by a test that does not need
+    a full `main()` run.
     """
-    coach_lane_factory = call_lane_factory = None
-    coach_briefing = ""
-    # COTHINKER_AGENT=api (default: worker): the coach lane runs over
-    # the agent seam (gateway/agent_lane.py, a Hermes API server, e.g.
-    # on another machine through an SSH tunnel). The call lane stays on the
-    # worker unless COTHINKER_AGENT_CALL=api too -- the remote agent
-    # cannot see this machine's project folder (no file tools here).
-    if os.environ.get("COTHINKER_AGENT", "worker").strip() == "api":
-        import agent_lane
-        agent_url = os.environ.get("COTHINKER_AGENT_URL", "").strip()
-        key_env = (os.environ.get("COTHINKER_AGENT_KEY_ENV", "").strip()
-                   or "API_SERVER_KEY")
-        agent_key = os.environ.get(key_env, "").strip()
-        if not agent_url or not agent_key:
-            raise SystemExit("COTHINKER_AGENT=api needs COTHINKER_AGENT_URL "
-                             f"and the key in ${key_env}")
-        _make = agent_lane.api_lane_factory(agent_url, agent_key, log=log)
-        coach_lane_factory = _make
-        if os.environ.get("COTHINKER_AGENT_CALL", "").strip() == "api":
-            call_lane_factory = _make
-        # The seam's one shared server has no per-session profile
-        # selector (gateway/agent_lane.py's module docstring)
-        # -- send the coach's own SOUL.md as this
-        # session's briefing instead of trusting the server's
-        # ambient profile to be this one.
-        coach_briefing = agent_lane.coach_soul_briefing(
-            Path.home() / ".hermes/profiles/cothinker-coach")
-        log(f"agent seam: coach=api"
-            f" call={'api' if call_lane_factory else 'worker'}"
-            f" url={agent_url}"
-            f" coach_briefing_chars={len(coach_briefing)}")
-    return lane_integration_mod.Lanes(
-        call_command=call_command, coach_command=coach_command,
+    call_lane_factory = None
+    if seam is not None and os.environ.get("COTHINKER_AGENT_CALL", "").strip() == "api":
+        call_lane_factory = seam[0]
+    extra_dirs = call_lane_mod.extra_dirs_from_env(
+        os.environ.get("COTHINKER_EXTRA_DIRS", ""))
+    return call_lane_mod.CallLane(
+        call_command=call_command,
         call_session_id=f"{session_id}-call",
-        coach_session_id=f"{session_id}-coach",
         project_agenda=project_agenda, state=state, writer=writer,
-        call_paths=lane_integration_mod.call_paths_text(
-            folder, path, lane_integration_mod.extra_dirs_from_env(
-                os.environ.get("COTHINKER_EXTRA_DIRS", ""))),
-        image_dirs=stage_image_mod.allowed_dirs(
-            folder, lane_integration_mod.extra_dirs_from_env(
-                os.environ.get("COTHINKER_EXTRA_DIRS", ""))),
-        history_path=run_dir / "coach-history.jsonl",
-        coach_min_delay_s=a.lane_coach_delay,
-        topic_threshold=a.topic_threshold,
-        topic_min_age_s=a.topic_min_s,
-        titler_factory=titler_factory,
-        coach_rhythm=a.coach_rhythm,
+        call_paths=call_lane_mod.call_paths_text(folder, path, extra_dirs),
+        image_dirs=stage_image_mod.allowed_dirs(folder, extra_dirs),
         call_lane_factory=call_lane_factory,
-        coach_lane_factory=coach_lane_factory,
-        coach_briefing=coach_briefing,
         log=log)
+
+
+def agent_seam(log: Callable[..., None]):
+    """`COTHINKER_AGENT=api` (default: worker): the agent seam
+    (gateway/agent_lane.py, a Hermes API server, e.g. on another machine
+    through an SSH tunnel) as `(lane_factory, coach_briefing)`, else None.
+    The seam's one shared server has no per-session profile selector
+    (gateway/agent_lane.py's module docstring) -- the coach's own SOUL.md is
+    sent as this session's briefing instead of trusting the server's
+    ambient profile to be this one."""
+    if os.environ.get("COTHINKER_AGENT", "worker").strip() != "api":
+        return None
+    import agent_lane
+    agent_url = os.environ.get("COTHINKER_AGENT_URL", "").strip()
+    key_env = (os.environ.get("COTHINKER_AGENT_KEY_ENV", "").strip()
+               or "API_SERVER_KEY")
+    agent_key = os.environ.get(key_env, "").strip()
+    if not agent_url or not agent_key:
+        raise SystemExit("COTHINKER_AGENT=api needs COTHINKER_AGENT_URL "
+                         f"and the key in ${key_env}")
+    factory = agent_lane.api_lane_factory(agent_url, agent_key, log=log)
+    briefing = agent_lane.coach_soul_briefing(
+        Path.home() / ".hermes/profiles/cothinker-coach")
+    log(f"agent seam: coach=api"
+        f" call={'api' if os.environ.get('COTHINKER_AGENT_CALL', '').strip() == 'api' else 'worker'}"
+        f" url={agent_url} coach_briefing_chars={len(briefing)}")
+    return factory, briefing
 
 
 class StageWriter:
@@ -2587,28 +2205,30 @@ class StageWriter:
         self._graph_session: Path | None = None
         self._graph_datum = ""
         self._graph_teilnehmende = ""
-        # Protocol v2: the protocol the consumer files entries into itself.
-        # None means v1 -- the agent maintains the protocol, and a
-        # `tag_entry` proposal is refused. `link_names` is the set of
+        # The protocol the consumer files entries into itself (`main()`
+        # sets it at start-up). None means there is none -- a `tag_entry`
+        # proposal is refused. `link_names` is the set of
         # project file stems every entry's wikilinks are checked against,
         # refreshed by `run_turn` at the start of a turn and again right
         # before its proposals are read; None means "no check".
-        self.protocol: Protocol | None = None
+        self.protocol: MinutesPort | None = None
         self.link_names: set[str] | None = None
-        # Level 2 (gateway/policy_runner.PolicyRunner) when `--policy` is
+        # Level 2 (the decisions-tasks-questions block) when `--policy` is
         # on: gives an order id's marker and hears when it arrived. None
         # keeps every proposal exactly as it was before level 2.
         self.policy = None
-        # The wiki layer (gateway/wiki.WikiLayer) over the project folder:
-        # a new topic block gets the related notes as wikilinks. None
-        # writes the block exactly as before.
-        self.wiki = None
+        # The knowledge-link block (blocks/knowledge_link), which owns the
+        # wiki layer: a new topic block gets the related notes as
+        # wikilinks. Until `main()` hands over the session host's own
+        # instance this one has no vault and writes the block exactly as
+        # before. Interim handle (Wave B.5).
+        self.knowledge_link = KnowledgeLinkBlock()
         # MM-G: at most ONE topic page per protocol topic block per run.
-        # Block key (`Protocol.current_topic`) -> the page. Both threads
+        # Block key (`MinutesPort.current_topic`) -> the page. Both threads
         # that create pages (the decider via level 2, the agent via the
         # Zuruf) meet in `file_topic_page`, which holds `_page_lock` from
         # the check to the registration. LOCK ORDER: `_page_lock` FIRST,
-        # then `Protocol.lock` / this writer's `_lock` -- nobody takes it
+        # then `MinutesPort.lock` / this writer's `_lock` -- nobody takes it
         # while holding either.
         self._page_lock = threading.Lock()
         self._topic_pages: dict[str, Path] = {}
@@ -2692,6 +2312,12 @@ class StageWriter:
             self.write()
         return pending_id
 
+    def settle(self, pending_id: str, outcome: str) -> bool:
+        """End the pending `pending_id`. False when the state had already
+        settled it (a topic arrives as `topic` through StageState.apply) --
+        harmless. The caller flushes (`write()`) after a True."""
+        return self.state.settle(pending_id, outcome)
+
     # ------------------------------------------------ protocol v2 entries
     def file_entry(self, tag, text, stamp=None, mark: str = "",
                    also=()) -> str:
@@ -2699,7 +2325,7 @@ class StageWriter:
 
         Traces `entry_added kind=<tag>` and the wikilink counts -- numbers
         and tokens only, the entry's text never reaches the trace. The
-        caller decides what a refusal is called in the trace. Protocol
+        caller decides what a refusal is called in the trace. Minutes
         writes are not surface changes: `self.applied` is not touched.
 
         `mark` is a level-2 marker (`*(autonom)*`, `*(bestätigt HH:MM)*`):
@@ -2733,19 +2359,21 @@ class StageWriter:
         block the stage's main title stands in; without that, ""
         (`seite-HHMM`). Never raises.
 
-        Returned CLEANED (`clean_line`, `wiki.TITLE_MAX`): the level-2
+        Returned CLEANED (`clean_line`, `title_max()`): the level-2
         guard slugs this very string, and `file_topic_page` passes it on
         unchanged to the links and the page (review item 8)."""
         try:
             lesen = getattr(self.protocol, "current_topic_title", None)
-            titel = bare_title(lesen()) if callable(lesen) else ""
+            titel = (self.knowledge_link.bare_title(lesen())
+                     if callable(lesen) else "")
             titel = clean_line(titel if isinstance(titel, str) else "",
-                               TITLE_MAX)
+                               self.knowledge_link.title_max())
         except Exception:                 # noqa: BLE001 -- never raise
             titel = ""
         if not titel:
             try:
-                titel = clean_line(self.state.main.title or "", TITLE_MAX)
+                titel = clean_line(self.state.main.title or "",
+                                   self.knowledge_link.title_max())
             except Exception:             # noqa: BLE001 -- never raise
                 titel = ""
         return titel if isinstance(titel, str) else ""
@@ -2756,8 +2384,8 @@ class StageWriter:
 
         THE page path: level 2's `document` action and the Zuruf "Robo,
         leg dafuer eine Seite an" both end here. The page is created by
-        `wiki.create_topic_page`; then the consumer itself -- not the
-        agent -- files `[notiz] Themenseite [[<stem>]]` into the current
+        the knowledge-link block's `create_topic_page`; then the consumer
+        itself -- not the agent -- files `[notiz] Themenseite [[<stem>]]` into the current
         topic block, and traces `wiki_create links=<n>`. None when no page
         was created. Never raises: a failure costs the page or the entry,
         never the turn.
@@ -2771,7 +2399,7 @@ class StageWriter:
         agent thread both call this.
 
         CALLER'S DUTY: hold neither `StageWriter._lock` nor
-        `StageState._lock` -- filing takes `Protocol.lock`, whose report
+        `StageState._lock` -- filing takes `MinutesPort.lock`, whose report
         takes the writer's lock.
         """
         with self._page_lock:
@@ -2816,18 +2444,16 @@ class StageWriter:
         """`file_topic_page` without the one-per-block guard; the caller
         holds `_page_lock`."""
         try:
-            wiki = self.wiki
+            block = self.knowledge_link
             # Cleaned ONCE: links and page are about the same string
             # (idempotent on a `page_title()`, which is already clean).
             titel = clean_line(titel if isinstance(titel, str) else "",
-                               TITLE_MAX)
-            links = (wiki.page_links(titel, session_dir=session_dir)
-                     if wiki is not None else [])
+                               block.title_max())
+            links = block.page_links(titel, session_dir=session_dir)
             protokoll = getattr(self.protocol, "path", "") or ""
-            pfad = create_topic_page(
+            pfad = block.create_topic_page(
                 session_dir, project_dir, titel, links, mark, created,
-                protokoll, taken=wiki.taken if wiki is not None else None,
-                report=report)
+                protokoll, report=report)
         except Exception as e:            # noqa: BLE001 -- never raise
             self.log("topic page not created:", repr(e))
             return None
@@ -2849,14 +2475,13 @@ class StageWriter:
         return pfad
 
     def file_unrecorded(self, entries: list[dict]) -> list[dict]:
-        """v2: file what fell off the stage as `frage` entries.
+        """File what fell off the stage as `frage` entries.
 
         Parked notices and expired questions (`StageState.unrecorded()`).
-        In v1 the agent is told to put them under `## Offene Fragen`; in
-        v2 the consumer owns the protocol and does it itself, with the
-        same wording the v1 prompt uses. Returns the entries that actually
-        landed -- exactly those, and only those, may be marked recorded.
-        Under v1 nothing is filed and the list is empty.
+        The consumer owns the protocol and does it itself. Returns the
+        entries that actually landed -- exactly those, and only those, may
+        be marked recorded. Without a protocol nothing is filed and the
+        list is empty.
         """
         if self.protocol is None:
             return []
@@ -2930,15 +2555,15 @@ class StageWriter:
                 # which never raises: a failing wiki costs the links only.
                 # The protocol's folder is this run's session folder: its
                 # notes are not linked, as for the topic page (page_links).
-                titel, links = topic_title(
-                    step[1], step[2], self.wiki,
+                titel, links = self.knowledge_link.topic_title(
+                    step[1], step[2],
                     session_dir=Path(self.protocol.path).parent)
                 if not self.protocol.open_topic(titel):
                     self.log("topic block not written")
                     self.trace("entry_failed", kind="topic",
                                reason="not_written")
                     return False
-                if self.wiki is not None:
+                if self.knowledge_link.has_vault:
                     self.trace("wiki_link", links=links)
                 return True
             if step[0] == "decision":
@@ -3058,7 +2683,7 @@ class StageWriter:
             # purpose -- so the documented order is unchanged.
             if isinstance(action, dict) and action.get("action") == "tag_entry":
                 # Protocol v2: an entry for the protocol, not the surface.
-                # Never under a lock of ours -- Protocol takes its own.
+                # Never under a lock of ours -- the minutes port takes its own.
                 self._tag_entry(action)
                 continue
             if isinstance(action, dict) and action.get("action") == "graph":
@@ -3094,7 +2719,7 @@ class StageWriter:
                 # `StageState.apply()` -- "parked" among them, which is how
                 # a held-back notice becomes countable. Never foreign text;
                 # the space becomes an underscore because the trace takes
-                # tokens only ("no text" -> "no_text", see gateway/events.py).
+                # tokens only ("no text" -> "no_text", see shared/events.py).
                 self.trace("proposal_rejected", reason=reason.replace(" ", "_"))
                 # A parked notice IS a change of the surface: a dimmed line
                 # appears and the entry goes off to the protocol. It is a
@@ -3111,7 +2736,7 @@ class StageWriter:
                 self.trace("decision_dropped", id=dropped)
             if protocol_step is not None:
                 # Outside every lock but the protocol's own (lock order:
-                # nothing holding StageState._lock calls into Protocol).
+                # nothing holding StageState._lock calls into the minutes port).
                 if self._apply_protocol_step(protocol_step):
                     # Here too, outside the state's lock: delivered()
                     # settles a pending and writes the stage.
@@ -3150,7 +2775,7 @@ class StageWriter:
         """
         with self._lock:
             # The warning and the failed run share the SECOND line and
-            # leave the operating line alone -- see status_line.trouble().
+            # leave the operating line alone -- see stage_texts.trouble().
             data = {**self.state.content(),
                     "status": {**self._status, "since": self._since,
                                "warning": trouble_text(self._warning,
@@ -3403,43 +3028,6 @@ def main() -> int:
                          "builds one from --model/--provider against "
                          "~/.hermes/profiles/cothinker (same profile as "
                          "the serial path)")
-    ap.add_argument("--lane-coach-worker-command", default="",
-                    help="overrides the coach lane's worker command; empty "
-                         "builds one from --model/--provider against "
-                         "~/.hermes/profiles/cothinker-coach")
-    ap.add_argument("--lane-coach-delay", type=float,
-                    default=lane_integration_mod.COACH_MIN_DELAY_S,
-                    help="minimum seconds after a confirmed topic start "
-                         "before the coach lane may contribute (default: "
-                         f"{lane_integration_mod.COACH_MIN_DELAY_S:.0f})")
-    ap.add_argument("--topic-threshold", type=float,
-                    default=lane_integration_mod.THRESHOLD,
-                    help="neues_thema probability (single block) that "
-                         "confirms a topic change -- FINAL per the operator's "
-                         "2026-10-20 measurement across 4 sessions "
-                         f"(default: {lane_integration_mod.THRESHOLD:.2f})")
-    ap.add_argument("--topic-min-s", type=float,
-                    default=lane_integration_mod.MIN_TOPIC_AGE_S,
-                    help="minimum age in seconds of the running topic "
-                         "before a change can be confirmed -- FINAL, same "
-                         "measurement (default: "
-                         f"{lane_integration_mod.MIN_TOPIC_AGE_S:.0f})")
-    ap.add_argument("--coach-rhythm", action="store_true",
-                    default=os.environ.get("COTHINKER_COACH_RHYTHM") == "1",
-                    help="--lanes only: the coach speaks at a topic's START "
-                         "(first pause >= 15 s, >= 45 s in), at its END "
-                         "(structure into the closed topic's entry) and "
-                         "once more in a long pause (topic >= 4 min); "
-                         "[SILENT] costs no slot, spoken: >= 8 min apart, "
-                         "<= 4/h. Off = the one-shot-per-topic trigger. "
-                         "Env COTHINKER_COACH_RHYTHM=1.")
-    ap.add_argument("--topic-titles", action="store_true",
-                    help="--lanes only: a confirmed topic change gets a "
-                         "short model-made title (2-5 words, one "
-                         "claude-haiku-4-5 call over the plan proxy, off "
-                         "the hot path, 4 s budget) that replaces the "
-                         "provisional first-line title in place. Off by "
-                         "default. gateway/topic_title.py.")
     ap.add_argument("--speaker-split", action="store_true",
                     help="--speakers only: an utterance >= 4 s is embedded "
                          "in 1.5 s windows; a speaker change inside it "
@@ -3454,6 +3042,10 @@ def main() -> int:
                          "match the stage's --spool-dir")
     a = ap.parse_args()
     install_sigterm_handler()
+    if os.environ.get("COTHINKER_COACH_RHYTHM") is not None:
+        log("warning: COTHINKER_COACH_RHYTHM is no longer read; set "
+            "`coach_rhythm = true` under `[[blocks]] id = \"mirroring-coach\"` "
+            "in the template instead")
 
     try:
         agenda = read_agenda(a.agenda)
@@ -3487,14 +3079,21 @@ def main() -> int:
     sync_window = SyncWindow(run_dir, log=log)
     sync_window.acquire()
     if not path.exists():
-        # New protocols are v2 (topic blocks, tagged entries, derived
-        # view). An existing file -- v1 included -- is continued as it is.
+        # New protocols are in the current format (topic blocks, tagged
+        # entries, derived view).
         atomic_write_text(path, protocol_header(
             title=title, entity=entity, day=day, pslug=pslug,
             participants=", ".join(p.strip() for p in a.participants.split(",") if p.strip()),
             start=datetime.now().strftime("%H:%M"), mode=a.mode, agenda=agenda))
         log("created:", path)
     else:
+        # An existing file of the old format is continued in the current
+        # one below a dated marker line, never rewritten.
+        try:
+            if continue_protocol(path, datetime.now(), a.mode):
+                log("old-format protocol continued in format 2:", path)
+        except (OSError, ValueError) as e:
+            log("protocol not continued in format 2:", repr(e))
         log("appending to:", path)
 
     # The stage: the consumer holds the state and is its only writer. The
@@ -3619,23 +3218,6 @@ def main() -> int:
             f"{a.thought_end_threshold:.2f}")
     state = StageState()
     writer = StageWriter(run_dir, state, proposals=proposals_path, events=trace)
-    # The session host's block host (ADR 0008, issue #38): built from the
-    # Reflect template (ADR 0010), fed every session event below, its
-    # view intents routed to this same StageWriter through the interim
-    # legacy stage sink (replaced as a whole by the Wave C stage surface).
-    session_blocks = build_session_blocks(
-        session_dir=run_dir,
-        sink=make_sink(writer, log),
-        log=log,
-        trace=lambda event, fields: trace.record(event, **fields),
-    )
-    # Participant taps the stage spooled (issue #47). The stage names the
-    # spool folder after the folder holding the buehne.json it shows, which
-    # is this run's folder. The folder name must equal the stage's
-    # `stage_file().parent.name`.
-    actions_reader = ActionsReader(
-        Path(a.spool_dir).expanduser() / run_dir.name / "actions.jsonl",
-        dispatcher_for(session_blocks), log)
     # Diarization-label attribution: names a Speechmatics
     # label (S1, S2, ...) from what is said, independent of --speakers'
     # voice-embedding path above (no audio, no SPEAKER_EMBED_URL needed).
@@ -3693,17 +3275,6 @@ def main() -> int:
         log("agenda on:", orte["agenda"].name,
             f"({len(agenda_ctrl.doc.items)} items)")
     trace.record("meeting_started")
-    # The level-1 decider (gateway/decider.py): OFF unless
-    # COTHINKER_DECIDER is set -- no surprise network call in a running
-    # meeting, and without it nothing here creates a thread, a file or a
-    # log line. On, it asks the question set about every finished block
-    # in its own thread and writes numbers only, next to the event trace.
-    # A backend that cannot be built (jev without a key) is one log line
-    # and the meeting runs on without it.
-    decider = decider_mod.from_env(orte["decisions"], events=trace, log=log)
-    if decider is not None:
-        decider.start()
-        log(f"decider on: {decider.backend_name} -> {orte['decisions'].name}")
     # A RESTART IS NOT A NEW MEETING. Publishing a fresh state here blanked
     # the main area, the decisions, the notices and the question in front
     # of the round -- while the worker re-attaches to the same agent
@@ -3731,112 +3302,12 @@ def main() -> int:
         else:
             writer.clear_warning(warning_text("protocol"))
 
-    # With COTHINKER_PROJECT_DIR the project is its own git repo (a plain
-    # clone outside $COTHINKER_ENTITIES): git must run there, not in
-    # ENTITIES.parent, or every commit -- the shutdown one included -- fails.
-    prot = Protocol(path, (folder if os.environ.get("COTHINKER_PROJECT_DIR",
-                                                    "").strip()
-                           else ENTITIES.parent),
-                    report=protocol_report,
-                    # The session folder AND the project folder above it:
-                    # the round's documents stay in the project folder, and
-                    # that is where a second writer produces `.conflictN`.
-                    conflict_dirs=([run_dir] if orte["flat"]
-                                   else [run_dir, folder]),
-                    mode=a.mode,
-                    commit_scope=project_commit_scope(folder, run_dir))
-    # v2: the consumer files the protocol's entries itself. v1: the agent
-    # does, and the writer refuses `tag_entry`.
-    writer.protocol = prot if prot.is_v2 else None
-    log("protocol format:", 2 if prot.is_v2 else 1)
-    # The wiki layer: new topic blocks link the project's related notes.
-    # The PROJECT folder (the round's documents), not the session folder,
-    # which holds only this run's machine files. v2 only -- in v1 the
-    # agent writes the topic blocks.
-    if writer.protocol is not None:
-        writer.wiki = WikiLayer(folder)
-    # Level 2 (docs/entwurf-meeting-modi.md §3): opt-in, and only where
-    # every part it relies on is there -- the decider's answers, a
-    # protocol the consumer files into, an agent to formulate the orders.
-    # Anything missing is one log line and the meeting runs as before.
-    policy_runner = None
-    if a.policy:
-        if decider is None:
-            log("policy off: needs COTHINKER_DECIDER")
-        elif writer.protocol is None:
-            log("policy off: needs a v2 protocol")
-        elif a.no_agent:
-            log("policy off: nothing would formulate its orders (--no-agent)")
-        else:
-            # Imported only here: without `--policy` the runner module is
-            # never loaded. (`policy.py` itself always is -- the writer
-            # needs its `with_marker` -- but it is pure: tables, no I/O.)
-            from policy_runner import PolicyRunner
-            # `prot.mode` is the mode the existing file was created with,
-            # not the flag's: the policy table must match the protocol.
-            policy_runner = PolicyRunner(writer, mode=prot.mode,
-                                         session_dir=run_dir,
-                                         project_dir=folder,
-                                         backend=decider.backend, log=log)
-            writer.policy = policy_runner
-            # Set after start(): the first block reaches the decider only
-            # once the SSE loop below runs, long after this line.
-            decider.on_result = policy_runner.on_result
-            log(f"policy on: mode {prot.mode}")
-
-    def refresh_conflicts() -> bool:
-        """Raise or withdraw the conflict warning from the FACTS on disk.
-
-        Checked repeatedly, not once at startup: conflict files do not
-        remove themselves, so clearing the warning after a successful run
-        told the round the problem was over while it was not -- and the
-        realistic case, conflict files appearing DURING the meeting, was
-        never announced at all. Only this warning is withdrawn here: the
-        discard warning is re-raised by the ingest that follows the
-        clear, and the restored-lines warning is a past event.
-        """
-        try:
-            files = prot.conflict_files()
-        except OSError as e:
-            log("conflict check skipped:", repr(e))
-            return False
-        if files:
-            writer.warn(warning_text("conflicts"))
-            return True
-        writer.clear_warning(warning_text("conflicts"))
-        return False
-
-    conflicts_seen = [refresh_conflicts()]
-    if conflicts_seen[0]:
-        log("warning: conflict files in the project folder:",
-            ", ".join(p.name for p in prot.conflict_files()[:5]))
-        log("    A sync service is writing too. Better switch it off during the meeting.")
-    writer.write()
-    if (not a.no_agent and not a.dry_agent and not a.worker_command
-            and shutil.which("hermes") is None):
-        log("warning: 'hermes' is not in PATH — the worker will start under "
-            f"{sys.executable}, which most likely cannot import Hermes.")
-    prot.git(f"Live-Mitschrift begonnen: {title}")
-
-    # One long-lived agent per meeting. It is started lazily, on the first
-    # turn: the round should be transcribed from the first second, and a
-    # worker that takes its time booting must not delay the SSE connect.
-    worker = WorkerClient(
-        # shlex, not str.split(): the interpreter or the worker script can
-        # sit in a path with a space in it, and splitting on whitespace
-        # turns that into two arguments and a worker that never starts.
-        command=(shlex.split(a.worker_command) if a.worker_command
-                 else [worker_interpreter(),
-                       str(Path(__file__).resolve().parent / "worker.py"),
-                       "--model", a.model, "--provider", a.provider]),
-        session_id=session_id, log=log)
-    log("agent session:", session_id)
-
     # konzept-spuren-architektur.md (2026-10-20), --lanes: additive only --
     # with the flag off, `lanes` stays None and nothing below in this
     # function ever looks at it, so the serial path above is byte for
-    # byte unaffected. See gateway/lane_integration.py for what it does.
+    # byte unaffected. See gateway/call_lane.py for what it does.
     lanes = None
+    coach_agent_for = None
     # Point 7 (2026-10-20): the --speakers resolution is per utterance,
     # but lanes see whole blocks -- this carries the last resolved name
     # (or "unbekannt") forward to block_done(). Stays "unbekannt" for
@@ -3873,10 +3344,155 @@ def main() -> int:
                         if a.lane_call_worker_command else
                         _default_lane_command(
                             Path.home() / ".hermes/profiles/cothinker"))
-        coach_command = (shlex.split(a.lane_coach_worker_command)
-                         if a.lane_coach_worker_command else
+        # The coach lane is the mirroring-coach block (ADR 0010): its
+        # worker command comes from the block's configuration, its agent
+        # (a LanePort) from the block host wiring.
+        coach_cfg = coach_block_config()
+        coach_command = (shlex.split(coach_cfg["lane_coach_worker_command"])
+                         if coach_cfg["lane_coach_worker_command"] else
                          _default_lane_command(
                              Path.home() / ".hermes/profiles/cothinker-coach"))
+        seam = agent_seam(log)
+        coach_agent_for = make_agent_for(
+            coach_command=coach_command, session_id=session_id,
+            lane_factory=seam[0] if seam else None,
+            coach_briefing=seam[1] if seam else "", log=log)
+    # The session host's block host (ADR 0008, issue #38): built from the
+    # Reflect template (ADR 0010), fed every session event below. Every
+    # change of its current view intents renders through the stage surface
+    # (ADR 0006, issue #46) onto this same StageWriter -- the consumer
+    # stays the only writer of buehne.json. The call lane sees the coach's
+    # mirror lines through the same board.
+    stage_surface = StageSurface(writer, state, log,
+                                 coach_history_path=run_dir / "coach-history.jsonl")
+    session_blocks_cell: list = []
+
+    def block_sink(intent) -> None:
+        # The snapshot, not just `intent`: render() needs the whole board
+        # to notice what has left it since the last call. `intent` itself
+        # is added back in when missing: a settle's own intent expires at
+        # once (IntentWriter.settle, blocks/decisions_tasks_questions), so
+        # by the time `current()` runs it may already be gone from the
+        # board -- the row that applies it must still see it this once.
+        if session_blocks_cell:
+            current = {i.id: i for i in session_blocks_cell[0].intents.current()}
+            current.setdefault(intent.id, intent)
+            stage_surface.render(list(current.values()))
+        if lanes is not None:
+            lanes.observe_intent(intent)
+
+    session_blocks = build_session_blocks(
+        session_dir=run_dir,
+        sink=block_sink,
+        log=log,
+        trace=lambda event, fields: trace.record(event, **fields),
+        agent_for=coach_agent_for,
+    )
+    session_blocks_cell.append(session_blocks)
+    stage_surface.render(session_blocks.intents.current())
+    # Participant taps the stage spooled (issue #47). The stage names the
+    # spool folder after the folder holding the buehne.json it shows, which
+    # is this run's folder. The folder name must equal the stage's
+    # `stage_file().parent.name`.
+    actions_reader = ActionsReader(
+        Path(a.spool_dir).expanduser() / run_dir.name / "actions.jsonl",
+        dispatcher_for(session_blocks), log)
+    minutes_file = MinutesFile(path, threading.RLock(), report=protocol_report)
+    minutes_doc = MinutesPort(minutes_file, session_blocks, session_dir=run_dir,
+                              mode=a.mode)
+    # With COTHINKER_PROJECT_DIR the project is its own git repo (a plain
+    # clone outside $COTHINKER_ENTITIES): git must run there, not in
+    # ENTITIES.parent, or every commit -- the shutdown one included -- fails.
+    session_git = SessionGit(
+        path,
+        (folder if os.environ.get("COTHINKER_PROJECT_DIR", "").strip()
+         else ENTITIES.parent),
+        commit_scope=project_commit_scope(folder, run_dir))
+    # Where to look for sync conflict copies. The protocol's own folder
+    # always; the project folder as well once the protocol sits one
+    # level down in `sessions/<YYYY-MM-DD>-<slug>/`, because rclone
+    # bisync writes its `.conflictN` copies wherever the second writer
+    # touched a file -- and the round's documents, the ones a parallel
+    # session is most likely to edit, are still in the project folder.
+    # Looking only next to the protocol would have made the warning
+    # blind to exactly the case AGENTS.md documents.
+    conflict_dirs = [run_dir] if orte["flat"] else [run_dir, folder]
+    # The consumer files the protocol's entries itself (format 1 removed,
+    # issue #49): v2 protocol is the only path now.
+    writer.protocol = minutes_doc
+    # The decisions-tasks-questions block owns the level-1 decider (OFF
+    # unless COTHINKER_DECIDER is set -- no surprise network call in a
+    # running meeting; a backend that cannot be built is one log line) and,
+    # with `--policy`, level 2 (docs/entwurf-meeting-modi.md §3): opt-in,
+    # and only where every part it relies on is there -- the decider's
+    # answers, a protocol the consumer files into, an agent to formulate
+    # the orders. Anything missing is one log line and the meeting runs
+    # as before. `minutes_doc.mode` is the mode the existing file was
+    # created with, not the flag's: the policy table must match it.
+    decisions = session_blocks.get("decisions-tasks-questions")
+    decisions.attach(
+        writer, decisions_path=orte["decisions"], session_dir=run_dir,
+        project_dir=folder, events=trace, log=log, policy=a.policy,
+        no_agent=a.no_agent, mode=minutes_doc.mode,
+        wants_page=writer.knowledge_link.wants_page,
+        order_note_for=order_note_for)
+    if writer.protocol is not None:
+        kl_block = session_blocks.get("knowledge-link")
+        if kl_block is not None:
+            writer.knowledge_link = kl_block
+        else:
+            log("knowledge-link block not in the template: default instance")
+        writer.knowledge_link.use_project(folder)
+
+    def refresh_conflicts() -> bool:
+        """Raise or withdraw the conflict warning from the FACTS on disk.
+
+        Checked repeatedly, not once at startup: conflict files do not
+        remove themselves, so clearing the warning after a successful run
+        told the round the problem was over while it was not -- and the
+        realistic case, conflict files appearing DURING the meeting, was
+        never announced at all. Only this warning is withdrawn here: the
+        discard warning is re-raised by the ingest that follows the
+        clear, and the restored-lines warning is a past event.
+        """
+        try:
+            files = find_conflicts(conflict_dirs)
+        except OSError as e:
+            log("conflict check skipped:", repr(e))
+            return False
+        if files:
+            writer.warn(warning_text("conflicts"))
+            return True
+        writer.clear_warning(warning_text("conflicts"))
+        return False
+
+    conflicts_seen = [refresh_conflicts()]
+    if conflicts_seen[0]:
+        log("warning: conflict files in the project folder:",
+            ", ".join(p.name for p in find_conflicts(conflict_dirs)[:5]))
+        log("    A sync service is writing too. Better switch it off during the meeting.")
+    writer.write()
+    if (not a.no_agent and not a.dry_agent and not a.worker_command
+            and shutil.which("hermes") is None):
+        log("warning: 'hermes' is not in PATH — the worker will start under "
+            f"{sys.executable}, which most likely cannot import Hermes.")
+    session_git.git(f"Live-Mitschrift begonnen: {title}")
+
+    # One long-lived agent per meeting. It is started lazily, on the first
+    # turn: the round should be transcribed from the first second, and a
+    # worker that takes its time booting must not delay the SSE connect.
+    worker = WorkerClient(
+        # shlex, not str.split(): the interpreter or the worker script can
+        # sit in a path with a space in it, and splitting on whitespace
+        # turns that into two arguments and a worker that never starts.
+        command=(shlex.split(a.worker_command) if a.worker_command
+                 else [worker_interpreter(),
+                       str(Path(__file__).resolve().parent / "worker.py"),
+                       "--model", a.model, "--provider", a.provider]),
+        session_id=session_id, log=log)
+    log("agent session:", session_id)
+
+    if a.lanes:
         # Point 7 (2026-10-20): participants belong in the STABLE part of
         # the prompt (same cache segment as profile/tools), set once here
         # -- see `project_agenda_text()` below for the ONE later change
@@ -3884,36 +3500,44 @@ def main() -> int:
         # bare participant list.
         project_agenda = project_agenda_text(title, a.participants, agenda)
 
-        def _titler_factory(on_title, on_fail):
-            from topic_title import TopicTitler
-            log("topic titles on: claude-haiku-4-5 via the plan proxy, 4 s")
-            return TopicTitler(on_title, on_fail=on_fail, log=log)
-
         lanes = build_lanes(
-            a, log, call_command=call_command, coach_command=coach_command,
+            a, log, call_command=call_command,
             session_id=session_id, project_agenda=project_agenda,
             state=state, writer=writer, folder=folder, path=path,
-            run_dir=run_dir,
-            titler_factory=(_titler_factory if a.topic_titles else None))
-        if a.coach_rhythm:
-            log("coach rhythm on: start / end / long pause, pause >= "
-                f"{lane_integration_mod.COACH_PAUSE_S:.0f} s")
-        call_started, coach_started = lanes.start()
-        log(f"lanes on: call started={call_started}, "
-            f"coach started={coach_started}")
-        if decider is not None:
-            # Chained, not replaced: --policy's hook (if set above) keeps
-            # running first, the coach's hysteresis feed runs after --
-            # both read the same result, neither mutates it.
-            previous_on_result = decider.on_result
+            seam=seam)
+        lanes.attach(session_blocks.dispatch)
+        if coach_cfg["coach_rhythm"]:
+            log("coach rhythm on: start / end / long pause")
+        call_started = lanes.start()
+        log(f"lanes on: call started={call_started}")
+        # Confirmed topic changes come from the `topics` block (issue #39):
+        # the block's `topic` output reaches the call lane through the host
+        # listener; the decisions-tasks-questions block's hook below is
+        # what feeds the block. The call lane's own re-announcement
+        # (`from` = session-host) is not a new topic.
+        session_blocks.on_output(
+            lambda payload: lanes.on_topic(payload["topic"])
+            if "topic" in payload and payload.get("from") != "session-host"
+            else None)
+        if decisions.decider_on:
+            # Confirmed topic changes come from the `topics` block
+            # (issue #39): the block's `topic` output reaches the call
+            # lane through the host listener; this hook is what feeds
+            # the block.
+            def _lanes_feeds_topics(result, snap, reason) -> None:
+                by_id = result.by_id()
+                previous = list(getattr(snap, "previous", None) or [])
+                block_text = str(getattr(snap, "block", "") or "")
+                lanes.note_decider_block(block_text)
+                session_blocks.dispatch("block_output", {"decider_result": {
+                    "neues_thema": (by_id.get("neues_thema") or {}).get("p"),
+                    "rueckkehr_thema":
+                        (by_id.get("rueckkehr_thema") or {}).get("p"),
+                    "block": block_text,
+                    "previous": str(previous[-1]) if previous else "",
+                }})
 
-            def _lanes_on_result(result, snap, reason,
-                                 _previous=previous_on_result) -> None:
-                if _previous is not None:
-                    _previous(result, snap, reason)
-                lanes.on_decider_result(result, snap, reason)
-
-            decider.on_result = _lanes_on_result
+            decisions.add_result_hook(_lanes_feeds_topics)
         else:
             log("lanes: coach gets no topic signal -- needs COTHINKER_DECIDER")
 
@@ -3926,11 +3550,11 @@ def main() -> int:
     # process always gets a fresh `session_id` (make_session_id uses
     # `datetime.now()`), so a restart -- crash recovery included --
     # naturally starts a new worker session and needs the full prompt
-    # again. Never reset back to True while this process lives -- with
-    # ONE exception: the v2 -> v1 fallback (`turn_protocol_format`
-    # reports `switched`) resets it once, because the history then holds
-    # only the v2 instruction and the agent needs the full v1 one.
+    # again. Never reset back to True while this process lives.
     first_turn = [True]
+    turn_no = [0]
+    replies = ReplyIntake(session_blocks)
+    failed_replies_path = orte["events"].parent / f"reply-failures-{day}.jsonl"
 
     stopp = threading.Event()
     # A turn is in flight. The queue cannot answer this: next_batch() pops
@@ -3946,11 +3570,16 @@ def main() -> int:
         """Decide and write the operating line -- in ONE place.
 
         Every caller states the facts it knows; the precedence
-        (working > backlog > listening) lives in status_line.pick() so two
-        call sites can never disagree about who wins. The listening
-        refresh therefore keeps running while nothing is in flight,
-        including under --no-agent and --dry-agent, where the
-        acknowledgement is the only thing the stage has to offer.
+        (working > backlog > listening) lives in the status-line block's
+        pick() (blocks/status_line/line.py) so two call sites can never
+        disagree about who wins. This function only reports the facts as a
+        `tick` to the block host; the block turns them into the winning
+        state and -- only when it changes -- a view intent that
+        `gateway.stage_surface.StageSurface` applies to `writer` via
+        `writer.set_status()`. The listening refresh therefore keeps
+        running while nothing is in flight, including under --no-agent and
+        --dry-agent, where the acknowledgement is the only thing the stage
+        has to offer.
 
         A FAILED run does not take this line. It goes to the second one,
         beside the warnings: for 40-180 s after every failure the round
@@ -3965,14 +3594,13 @@ def main() -> int:
         """
         try:
             waiting = 0 if a.no_agent else queue.backlog()
-            states = ["listening"]
-            if waiting > 1:
-                states.append("backlog")
-            if turn_running.is_set():
-                states.append("working")
-            writer.set_status(pick_status(states),
-                              at=datetime.now().strftime("%H:%M:%S"),
-                              count=waiting, failed=last_run_failed.is_set())
+            session_blocks.dispatch("tick", {
+                "components": {
+                    "queue_backlog": waiting,
+                    "turn_running": turn_running.is_set(),
+                    "run_failed": last_run_failed.is_set(),
+                },
+            })
             writer.write()
         except Exception as e:            # noqa: BLE001 -- see the docstring
             log("operating line skipped:", repr(e))
@@ -4000,21 +3628,12 @@ def main() -> int:
         # expired questions. Read BEFORE the prompt is built, so only what
         # this run was really told about is ticked off afterwards.
         unrecorded = state.unrecorded()
-        # v2 only while the file still IS v2 (turn_protocol_format). If it
-        # stopped being v2 mid-run, this turn and every later one are v1:
-        # unrecorded entries go back into the prompt, the v1 texts go out,
-        # and -- once -- the FULL v1 prompt, because the worker's history
-        # only knows the v2 instruction that forbids writing the protocol.
-        fmt, switched = turn_protocol_format(writer, log)
-        if switched:
-            first_turn[0] = True
-        file_names: list[str] = []
-        if fmt == 2:
-            # v2: the consumer owns the protocol, so it files these itself
-            # -- now, independent of how the run goes -- and marks exactly
-            # those that landed. The prompt no longer mentions them.
-            file_names = prepare_v2_turn(writer, state, folder, unrecorded, log)
-            unrecorded = []
+        # The consumer owns the protocol, so it files what fell off the
+        # stage itself -- now, independent of how the run goes -- and marks
+        # exactly those that landed. The prompt does not mention them.
+        file_names = prepare_turn(writer, state, folder, unrecorded, log)
+        unrecorded = []
+        turn_no[0] += 1
         # A merged block (backlog) and a carry-over need different
         # instructions than a normal section: the agent should know it is
         # behind and orient itself on what was said LAST.
@@ -4052,22 +3671,20 @@ def main() -> int:
             # that holds even when building the prompt raises: the orders
             # then fail with THIS turn, not the next one.
             # MM-G D7: "Robo, leg dafuer eine Seite an" creates the topic
-            # page BEFORE policy_turn(), so level 2's fill order rides
+            # page BEFORE turn_orders, so level 2's fill order rides
             # along with this very turn.
-            extra_note, gesprochen = turn_orders(
-                writer, policy_runner, fmt, b, session_dir=run_dir,
-                project_dir=folder, log=log)
+            orders = turn_opened(session_blocks, b, turn_no[0])
+            extra_note, gesprochen = orders["note"], orders["spoken"]
             prompt = build_prompt(
-                prot.path, proposals_path, b, state,
+                minutes_file.path, b, state,
                 backlog_note=(BACKLOG_NOTE if b.reason in ("batch", "carry")
                               else ""),
-                order_note=order_note_for(fmt, b.wake_word) + extra_note,
+                order_note=order_note_for(b.wake_word) + extra_note,
                 project_dir=folder, first_turn=dieser_turn_ist_erster,
-                fmt=fmt, file_names=file_names,
+                file_names=file_names,
                 # Level 2's own open question is Robo's to evaluate: the
                 # agent sees it marked as such, not as one to resolve.
-                policy_ask_id=(policy_runner.open_ask_id()
-                               if policy_runner is not None else ""))
+                policy_ask_id=orders["open_ask_id"])
             if a.dry_agent:
                 log("  [dry] prompt would be:",
                     prompt[:120].replace("\n", " "), "…")
@@ -4076,6 +3693,7 @@ def main() -> int:
                 result = worker.run(prompt, timeout=TURN_TIMEOUT_S)
             duration = time.monotonic() - t0
             gelungen = bool(result["ok"])
+            reply = TurnReply([], [])
             if gelungen:
                 # The worker actually sent this prompt and Hermes wrote it
                 # into the conversation history (worker.py: `send()` after
@@ -4086,6 +3704,18 @@ def main() -> int:
                 # conservative choice is to send the full prompt again
                 # until one run is confirmed to have gone through.
                 first_turn[0] = False
+                if not a.dry_agent:
+                    reply = replies.read(result.get("final") or "", turn_no[0])
+                if reply.failure is not None:
+                    # The agent's answer is not the JSON reply: the turn
+                    # counts as failed (the block is carried to the next
+                    # run), the text is kept.
+                    keep_failed_reply(failed_replies_path, reply.failure,
+                                      trace, log)
+                    gelungen = False
+                    result = {**result, "ok": False,
+                              "error": "reply not readable: "
+                              + str(reply.failure.get("reason"))}
             if result["ok"]:
                 # Cleared BEFORE reading the proposals, not after: a line
                 # this very run wrote unreadably has to survive to the
@@ -4107,11 +3737,19 @@ def main() -> int:
                 # entry links to, and the set from the start of the turn
                 # would strip that link as dead.
                 refresh_link_names(writer, folder, log)
+            # The reply's stage actions go into the proposal file -- the
+            # host writes it, the agent never does -- and are applied
+            # first: a `topic` opens the block the reply's items belong to.
+            try:
+                append_proposals(proposals_path, reply.proposals)
+            except OSError as e:
+                log("stage proposals not written:", repr(e))
             # A wake order's evidence is the block it was decided on, which
             # may have been said before this turn's own block.
             discarded = writer.ingest(proposals_path, spoken=gesprochen)
             if discarded:
                 log(f"  {discarded} unreadable proposal lines discarded")
+            file_bullets(writer, reply.bullets, log)
             veraendert = writer.applied > vorher_angewandt
             trace.record_all(state.tick())
             # The middle of the three call-out outcomes section 7 asks for.
@@ -4136,18 +3774,17 @@ def main() -> int:
             # In a `finally`, so a turn can never leave "⚙️ Robo werkelt"
             # standing for the rest of the meeting -- and so a run that
             # threw still leaves its outcome in the trace.
-            if policy_runner is not None:
-                # This turn's orders that brought nothing end here, so
-                # their pendings do not stand until the 60 s timeout.
-                # A wake order arrived when this turn put up an answer to
-                # a call-out -- the same test the call-out itself gets.
-                try:
-                    policy_runner.end_turn(
-                        gelungen,
-                        answered=answered_the_call(
-                            state.main.id, vorher_flaeche, state.main.quote))
-                except Exception as e:    # noqa: BLE001
-                    log("policy end_turn failed:", repr(e))
+            # This turn's orders that brought nothing end here, so
+            # their pendings do not stand until the 60 s timeout.
+            # A wake order arrived when this turn put up an answer to
+            # a call-out -- the same test the call-out itself gets.
+            try:
+                turn_closed(
+                    session_blocks, turn_no[0], ok=gelungen,
+                    answered=answered_the_call(
+                        state.main.id, vorher_flaeche, state.main.quote))
+            except Exception as e:        # noqa: BLE001
+                log("policy end_turn failed:", repr(e))
             if own_announcement:
                 # The announcement ends here too, so an exception anywhere
                 # above (worker.run, ingest, the call-out bookkeeping
@@ -4216,8 +3853,13 @@ def main() -> int:
         # "speakers" stays empty until that lands.
         session_blocks.dispatch("segment", {
             "id": segment_counter[0], "text": b.text, "speakers": [],
-            "wake_word": b.wake_word, "reason": b.reason,
+            "wake_word": b.wake_word, "reason": b.reason, "chars": b.chars,
             "at": jetzt_block.timestamp(),
+            # The last resolved speaker (see `letzter_sprecher`) and the
+            # prefiltered agent-facing text, for the mirroring coach.
+            "speaker": letzter_sprecher[0],
+            "agent_text": (lanes.agent_text(b.text) if lanes is not None
+                           else b.text),
         })
         if lanes is not None:
             # --lanes: a separate code path entirely, never touching
@@ -4239,10 +3881,6 @@ def main() -> int:
             except Exception as e:        # noqa: BLE001 — never take the reader down with it
                 log("block not handed to lanes:", repr(e))
             letzte_bloecke.append(b)
-            if decider is not None:
-                decider.submit(b.text, reason=b.reason, chars=b.chars,
-                               at=jetzt_block,
-                               **decider_mod.stage_context(state))
             if b.reason == "pause":
                 try:
                     timing.record_pause_marker(jetzt_block)
@@ -4290,24 +3928,14 @@ def main() -> int:
         except Exception as e:            # noqa: BLE001 — never take the reader down with it
             log("block could not be enqueued:", repr(e))
         letzte_bloecke.append(b)
-        # The level-1 decider gets the block AFTER the agent queue: it is a
-        # measurement, the queue is the stage. `submit()` does no I/O,
-        # never blocks and never raises (a full queue drops the block and
-        # counts it) -- this runs under BlockBuilder's lock, in the SSE
-        # reader or the ticker. The raw transcript already has every line
-        # of this block. Heading, last topic titles and the open question
-        # are read off the stage as it stands, without a lock.
-        if decider is not None:
-            decider.submit(b.text, reason=b.reason, chars=b.chars,
-                           at=jetzt_block, **decider_mod.stage_context(state))
-        # `_emit("pause")` (gateway/blocks.py) never runs synchronously
+        # `_emit("pause")` (gateway/segmenter.py) never runs synchronously
         # with the sentence that "caused" it -- it fires either at the
         # start of the NEXT sentence() call (closing THIS now-stale
         # block) or from the ticker thread's tick(), when nobody has
         # spoken for pause_s. Both callers land here synchronously, under
         # BlockBuilder's own lock -- so even though sentence() runs in
         # the SSE reader thread and tick() in the separate ticker thread
-        # (see the CONCURRENCY note in gateway/blocks.py), the lock keeps
+        # (see the CONCURRENCY note in gateway/segmenter.py), the lock keeps
         # block_done() itself from ever running concurrently, so this is
         # the one place that can write the marker line the instant the
         # block actually closes, rather than waiting for (and possibly
@@ -4353,8 +3981,6 @@ def main() -> int:
                 writer.write()
                 if lanes is not None:
                     lanes.mirror_tick()
-                    if a.coach_rhythm:
-                        lanes.coach_tick()
                 # Once per second, not every 0.5 s wakeup -- the block
                 # host's own clock, not this thread's poll interval.
                 now_mono = time.monotonic()
@@ -4382,7 +4008,7 @@ def main() -> int:
                 continue
             naechste = time.monotonic() + a.check_every
             try:
-                restored = prot.restore_missing()
+                restored = minutes_file.restore_missing()
                 if restored:
                     writer.warn(warning_text("restored", count=restored))
                     writer.write()
@@ -4395,7 +4021,7 @@ def main() -> int:
                     conflicts_seen[0] = now_conflicted
                     log("warning: conflict files in the project folder:"
                         if now_conflicted else "conflict files are gone.",
-                        ", ".join(p.name for p in prot.conflict_files()[:5]))
+                        ", ".join(p.name for p in find_conflicts(conflict_dirs)[:5]))
                 writer.write()
             except Exception as e:        # noqa: BLE001
                 log("watchdog error (continuing):", repr(e))
@@ -4413,7 +4039,7 @@ def main() -> int:
         try:
             if time.monotonic() - letzter_commit[0] > a.commit_every:
                 letzter_commit[0] = time.monotonic()
-                prot.git("Live-Mitschrift laeuft")
+                session_git.git("Live-Mitschrift laeuft")
         except Exception as e:            # noqa: BLE001
             log("commit skipped:", repr(e))
 
@@ -4592,11 +4218,11 @@ def main() -> int:
                     try:
                         if turns:
                             for turn in turns:
-                                feed_utterance(prot, session_blocks, turn.text, turn.name,
+                                feed_utterance(minutes_file, session_blocks, turn.text, turn.name,
                                               {"t_start": turn.t_start, "t_end": turn.t_end,
                                                "at": time.time()})
                         else:
-                            feed_utterance(prot, session_blocks, text, spk,
+                            feed_utterance(minutes_file, session_blocks, text, spk,
                                           {"t_start": t_start, "t_end": t_end,
                                            "at": time.time()})
                     except Exception as e:         # noqa: BLE001
@@ -4628,8 +4254,6 @@ def main() -> int:
                             write_prefiltered(orte["correction"], t_text, t_spk,
                                               stamp=f"{datetime.now():%H:%M}")
                     n += 1
-                    if lanes is not None and a.coach_rhythm:
-                        lanes.note_utterance()
                     log(f"[{n}] {text[:80]}")
                     # "Did you hear me?" — the one question the round asked
                     # again and again. It is answered here, in seconds,
@@ -4809,24 +4433,12 @@ def main() -> int:
             korrektur.finish()
         except KeyboardInterrupt:
             log("correction: finish aborted, the raw transcript is complete")
-    if decider is not None:
-        # Bounded (decider.FINISH_TIMEOUT_S): the backlog is a measurement,
-        # the closing note and the final commit below are not to wait on
-        # it. A second Ctrl-C here costs the decisions' tail only.
-        if policy_runner is not None:
-            # The agent is gone: level 2 must not act on the backlog -- a
-            # stage question, a pending or a skeleton now would freeze into
-            # the final stage file. Detached first, and closed too, in case
-            # a block is already inside the hook.
-            decider.on_result = None
-            try:
-                policy_runner.close()
-            except (Exception, KeyboardInterrupt) as e:  # noqa: BLE001
-                log("policy close failed:", repr(e))
-        try:
-            decider.finish()
-        except KeyboardInterrupt:
-            log("decider: finish aborted, the raw transcript is complete")
+    # Bounded (decider.FINISH_TIMEOUT_S): the backlog is a measurement,
+    # the closing note and the final commit below are not to wait on
+    # it. A second Ctrl-C here costs the decisions' tail only. Level 2 is
+    # detached and closed first inside: the agent is gone, and an action
+    # on the backlog would freeze into the final stage file.
+    decisions.finish()
     if gedankenende is not None:
         # Bounded like the correction: late rows are written without Laya
         # and marked `skipped`; a second Ctrl-C costs the lane's tail only.
@@ -4843,18 +4455,18 @@ def main() -> int:
     # the evening.
     writer.set_status("listening", at=datetime.now().strftime("%H:%M:%S"))
     writer.write()
-    prot.restore_missing()
+    minutes_file.restore_missing()
     # Closes this meeting in the append-only trace: everything between
     # `meeting_started` and here belongs to one run.
     trace.record("meeting_ended", count=n)
-    prot.append_note(f"\n*Mitschrift beendet {datetime.now():%H:%M} — "
+    minutes_file.append_note(f"\n*Mitschrift beendet {datetime.now():%H:%M} — "
                      f"{n} Aeusserungen.*\n")
     if queue.failed:
         log(f"note: {queue.failed} agent runs failed.")
     if worker.restarts:
         log(f"note: the worker was restarted {worker.restarts} times.")
-    prot.git_wait(60)
-    prot._git_run(f"Live-Mitschrift beendet ({n} Aeusserungen)")
+    session_git.git_wait(60)
+    session_git._git_run(f"Live-Mitschrift beendet ({n} Aeusserungen)")
     # Last step, still under the sync lock and as the folder's only
     # writer: sort `.conflictN` fragments into konflikte-<date>/ (moved,
     # never deleted). A triage problem must never break the shutdown.

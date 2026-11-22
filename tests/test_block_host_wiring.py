@@ -119,3 +119,54 @@ def test_on_output_sees_block_output(tmp_path):
     blocks.on_output(seen.append)
     blocks.dispatch("utterance", {"text": "hallo"})
     assert seen == [{"from": "capture-bullets"}]
+
+
+def test_infomaniak_llm_adapter_maps_to_chat_and_raises_on_empty():
+    from gateway.infomaniak_chat import ChatError, ChatReply
+
+    class FakeClient:
+        def __init__(self, text):
+            self.text, self.seen = text, None
+
+        def chat(self, model, system, user, schema, **kw):
+            self.seen = (model, system, user, schema, kw)
+            return ChatReply(text=self.text)
+
+    ok = FakeClient('{"topics": []}')
+    llm = bhw.InfomaniakLlm(ok, model="m")
+    assert llm.complete("sys", "usr", timeout_s=7) == '{"topics": []}'
+    assert ok.seen[:3] == ("m", "sys", "usr")
+    assert ok.seen[4]["request_timeout_s"] == 7
+    with pytest.raises(ChatError):
+        bhw.InfomaniakLlm(FakeClient("  "), model="m").complete("s", "u")
+
+
+def test_default_llm_for_only_condense_with_key(monkeypatch):
+    monkeypatch.setenv("INFOMANIAK_API_KEY", "k")
+    assert isinstance(bhw.default_llm_for("condense"), bhw.InfomaniakLlm)
+    assert bhw.default_llm_for("capture-bullets") is None
+    monkeypatch.delenv("INFOMANIAK_API_KEY")
+    assert bhw.default_llm_for("condense") is None
+
+
+def test_collect_returns_only_the_named_blocks_answers(tmp_path):
+    from blocks.minutes_document import MinutesDocumentBlock
+    blocks = bhw.build_session_blocks(
+        session_dir=tmp_path, sink=lambda i: None, log=lambda *a: None,
+        registry={"minutes-document": MinutesDocumentBlock})
+    got = blocks.collect("block_output", {"minutes_query": {}}, "minutes-document")
+    assert [o["kind"] for o in got] == ["minutes_state"]
+    assert blocks.collect("block_output", {"minutes_query": {}}, "other") == []
+    # nothing leaks into a plain dispatch afterwards
+    assert blocks.collect("tick", {"at": 0.0, "components": {}}, "minutes-document") == []
+
+
+def test_capture_bullets_gets_the_worker_failure_markers(tmp_path):
+    from gateway.worker import FAILURE_MARKERS
+    blocks = bhw.build_session_blocks(
+        session_dir=tmp_path, sink=lambda i: None, log=lambda *a: None)
+    got = blocks.collect(
+        "agent_reply",
+        {"text": FAILURE_MARKERS[0] + ' ```json\n{"verlauf": ["x"]}\n```', "turn": 1},
+        "capture-bullets")
+    assert [(o["kind"], o["failed"]) for o in got] == [("parse_failed", True)]
