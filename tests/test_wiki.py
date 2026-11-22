@@ -31,6 +31,9 @@ from check_collector import Checks  # noqa: E402
 _C = Checks()
 check = _C.check
 import blocks.knowledge_link.wiki as wiki  # noqa: E402
+from shared.minutes_format import marker  # noqa: E402
+import blocks.decisions_tasks_questions as decisions_mod  # noqa: E402
+from blocks.decisions_tasks_questions import page_call_out_note  # noqa: E402
 
 
 def attach_wiki(writer, layer):
@@ -423,10 +426,32 @@ def blk(text, wake):
                  wake_word=wake)
 
 
+def _page_call_out(writer, runner, b, *, session_dir, project_dir, log,
+                   clock):
+    """Mirrors `DecisionsBlock._page_call_out` (blocks/decisions_tasks_questions)
+    for a bare writer/runner stand-in, without going through `attach()`."""
+    try:
+        if (not getattr(b, "wake_word", False) or writer.protocol is None
+                or not writer.knowledge_link.wants_page(getattr(b, "text", ""))):
+            return None
+        if runner is not None:
+            seite = runner.page_order(b.text)
+        else:
+            jetzt = clock()
+            seite = writer.file_topic_page(
+                writer.page_title(), session_dir=session_dir,
+                project_dir=project_dir,
+                mark=marker(False, f"{jetzt:%H:%M}"), created=jetzt)
+        return seite if seite is not None else writer.topic_page()
+    except Exception as e:                # noqa: BLE001 -- agent thread
+        log("topic page call-out skipped:", repr(e))
+        return None
+
+
 def zuruf(writer, runner, text, wake=True):
-    return consumer.page_call_out(writer, runner, blk(text, wake),
-                                  session_dir=z_dir, project_dir=projekt,
-                                  log=zlog, clock=lambda: JETZT)
+    return _page_call_out(writer, runner, blk(text, wake),
+                          session_dir=z_dir, project_dir=projekt,
+                          log=zlog, clock=lambda: JETZT)
 
 
 # The page title: the protocol's CURRENT block, not the stage.
@@ -548,20 +573,37 @@ z_w.protocol = consumer.Protocol(z_prot, tmp)
 check("a failing level 2 never raises into the turn",
       zuruf(z_w, Kaputt2(), "Robo, leg eine Seite an") is None)
 check("turn_orders runs page_call_out before policy_turn",
-      (lambda src: 0 < src.index("seite = page_call_out(writer, "
-                                 "policy_runner, b")
-       < src.index("policy_turn(policy_runner, fmt, b)\n    return"))(
-          Path(consumer.__file__).read_text(encoding="utf-8")))
+      (lambda src: 0 < src.index("seite = self._page_call_out(segment)")
+       < src.index("self._policy_turn(fmt, segment)"))(
+          Path(decisions_mod.__file__).read_text(encoding="utf-8")))
 
 print("\nconsumer: the prompt of a Zuruf turn")
-import policy_runner as _pr  # noqa: E402
+import blocks.decisions_tasks_questions.policy_runner as _pr  # noqa: E402
 
 ZURUF = "Robo, leg dafür eine Seite an"
 
 
+def _turn_orders(writer, runner, fmt, b, *, session_dir, project_dir, log,
+                 clock):
+    """Mirrors `DecisionsBlock.turn_orders` for a bare writer/runner
+    stand-in, without going through `attach()`."""
+    seite = _page_call_out(writer, runner, b, session_dir=session_dir,
+                           project_dir=project_dir, log=log, clock=clock)
+    if runner is None:
+        extra_note, gesprochen = "", b.text
+    else:
+        auftraege = runner.take_turn()
+        extra_note = auftraege.note
+        if auftraege.wake and not b.wake_word:
+            extra_note += consumer.order_note_for(fmt, True)
+        gesprochen = b.text + (" " + auftraege.spoken if auftraege.spoken else "")
+    return (extra_note + page_call_out_note(seite, runner is not None),
+            gesprochen)
+
+
 def zuruf_prompt(runner):
     b = blk(ZURUF, True)
-    extra, gesprochen = consumer.turn_orders(
+    extra, gesprochen = _turn_orders(
         z_w, runner, 2, b, session_dir=z_dir, project_dir=projekt,
         log=zlog, clock=lambda: JETZT)
     return consumer.build_prompt(
@@ -618,7 +660,7 @@ check("A with level 2: same block again -> no page, no second fill order, "
       and "AUFTRAG A2" not in prompt and f"`{mit_seite}`" in prompt
       and "ZURUF SEITE" in prompt, prompt[-1500:])
 z_w.policy = None
-check("no page: no note", consumer.page_call_out_note(None, False) == "")
+check("no page: no note", page_call_out_note(None, False) == "")
 
 print("\npage_links: the page's own session folder is not a candidate")
 note("sitzungen/2026-09-26-zuruf/eigene-liste.md",
@@ -736,7 +778,7 @@ check("e2e lint: the links are live -- no dead, no ambiguous link added",
       f"{lint_0} -> {lint_1}")
 
 # 2. The Zuruf, without level 2: skeleton + backlink by the consumer.
-e_seite = consumer.page_call_out(
+e_seite = _page_call_out(
     e_w, None, blk("Robo, leg dafuer eine Seite an", True),
     session_dir=e_dir, project_dir=projekt, log=zlog, clock=lambda: JETZT)
 e_page = e_dir / "entwuerfe" / "ernte-und-pflege.md"
