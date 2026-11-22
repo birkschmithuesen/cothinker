@@ -108,7 +108,7 @@ from gateway.block_host_wiring import (SessionBlocks, build_session_blocks,  # n
 from gateway.raw_transcript import MinutesFile  # noqa: E402
 from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
 from blocks.minutes_document import minutes as minutes_block  # noqa: E402
-from gateway.legacy_stage_sink import make_sink      # noqa: E402
+from gateway.stage_surface import StageSurface       # noqa: E402
 
 ENTITIES = Path(os.environ.get(
     "COTHINKER_ENTITIES", Path.home() / "vault/entities"))
@@ -3353,16 +3353,19 @@ def main() -> int:
             lane_factory=seam[0] if seam else None,
             coach_briefing=seam[1] if seam else "", log=log)
     # The session host's block host (ADR 0008, issue #38): built from the
-    # Reflect template (ADR 0010), fed every session event below, its
-    # view intents routed to this same StageWriter through the interim
-    # legacy stage sink (replaced as a whole by the Wave C stage surface).
-    # The call lane sees the coach's mirror lines through the same sink.
-    stage_sink = make_sink(writer, log,
-                           row_config={"coach_history_path":
-                                       run_dir / "coach-history.jsonl"})
+    # Reflect template (ADR 0010), fed every session event below. Every
+    # change of its current view intents renders through the stage surface
+    # (ADR 0006, issue #46) onto this same StageWriter -- the consumer
+    # stays the only writer of buehne.json. The call lane sees the coach's
+    # mirror lines through the same board.
+    stage_surface = StageSurface(writer, state, log)
+    session_blocks_cell: list = []
 
     def block_sink(intent) -> None:
-        stage_sink(intent)
+        # The snapshot, not just `intent`: render() needs the whole board
+        # to notice what has left it since the last call.
+        if session_blocks_cell:
+            stage_surface.render(session_blocks_cell[0].intents.current())
         if lanes is not None:
             lanes.observe_intent(intent)
 
@@ -3373,6 +3376,8 @@ def main() -> int:
         trace=lambda event, fields: trace.record(event, **fields),
         agent_for=coach_agent_for,
     )
+    session_blocks_cell.append(session_blocks)
+    stage_surface.render(session_blocks.intents.current())
     minutes_file = MinutesFile(path, threading.RLock(), report=protocol_report)
     minutes_doc = MinutesPort(minutes_file, session_blocks, session_dir=run_dir,
                               mode=a.mode)
@@ -3551,7 +3556,7 @@ def main() -> int:
         disagree about who wins. This function only reports the facts as a
         `tick` to the block host; the block turns them into the winning
         state and -- only when it changes -- a view intent that
-        `gateway.legacy_stage_sink` applies to `writer` via
+        `gateway.stage_surface.StageSurface` applies to `writer` via
         `writer.set_status()`. The listening refresh therefore keeps
         running while nothing is in flight, including under --no-agent and
         --dry-agent, where the acknowledgement is the only thing the stage

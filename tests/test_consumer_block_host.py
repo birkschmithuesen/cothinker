@@ -86,18 +86,6 @@ def test_feed_utterance_keeps_raw_when_dispatch_breaks(tmp_path):
     assert any("dispatch failed" in line for line in blocks.log_lines)
 
 
-def test_legacy_sink_unknown_prefix_logged_once():
-    logs = []
-    writer = object()
-    sink = lss.make_sink(writer, logs.append)
-    sink(ViewIntent(id="capture-bullets:1", block="capture-bullets", kind="status",
-                    audience="room", payload={}))
-    sink(ViewIntent(id="capture-bullets:2", block="capture-bullets", kind="status",
-                    audience="room", payload={}))
-    unknown_logs = [line for line in logs if "capture-bullets" in line]
-    assert len(unknown_logs) == 1
-
-
 def test_legacy_sink_links_row_updates_state_and_writes():
     from gateway.stage_state import StageState
 

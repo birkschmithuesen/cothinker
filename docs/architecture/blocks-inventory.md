@@ -183,6 +183,7 @@ gateway/speaker_label_llm.py                                                    
 gateway/speaker_split.py                                                          stt:speaker-labels
 gateway/stage_image.py                                                            surface:stage
 gateway/stage_state.py                                                            surface:stage
+gateway/stage_surface.py                                                          surface:stage
 gateway/stage_texts.py                                                            surface:stage
 gateway/sync_safe.py                                                              core:session
 gateway/thought_end.py                                                            stt:thought-end

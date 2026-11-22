@@ -6,7 +6,7 @@
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
 """The stage as a Surface (ADR 0006, `docs/architecture/target.md` §2.3, §7;
-issue #46, Wave C.1). It replaces the interim `legacy_stage_sink`.
+issue #46, Wave C.1). It replaces the interim legacy sink.
 
 Blocks emit `ViewIntent`s; `render(intents)` receives the CURRENT set (the
 `IntentBoard`'s snapshot) on every change and maps each intent, by the
