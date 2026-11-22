@@ -2170,7 +2170,7 @@ def sec_13(sec_12):
         rec.error += traceback.format_exc()[-1200:]
     # Every one of them has to pass the trace's own filter -- a kind that is
     # not a token is dropped, and the measurement would be gone.
-    import events as _events  # noqa: E402
+    import shared.events as _events  # noqa: E402
     try:
         _chk(173, "every kind is a token the trace will actually write",
               all(_events.is_token(k) for k in
@@ -5209,7 +5209,7 @@ def sec_38(sec_37):
         print("\nprotocol v2: the consumer is the only writer of protokoll.md")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
-    import protocol_doc as _pd  # noqa: E402
+    import shared.minutes_format as _pd  # noqa: E402
 
     try:
         _v2 = Path(_mkdtemp(prefix="cothinker-v2-"))
@@ -8047,8 +8047,8 @@ def sec_73(sec_72):
         rec.error += traceback.format_exc()[-1200:]
     import json as _pjson  # noqa: E402
     import tempfile as _ptf  # noqa: E402
-    import protocol_doc as _ppd  # noqa: E402
-    from events import EventLog as _EventLog  # noqa: E402
+    import shared.minutes_format as _ppd  # noqa: E402
+    from shared.events import EventLog as _EventLog  # noqa: E402
     try:
         _ptmp = Path(_mkdtemp())
     except Exception:  # noqa: BLE001
