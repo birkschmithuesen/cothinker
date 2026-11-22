@@ -125,12 +125,14 @@ Scope: `gateway/ stage/ shared/ stt/ graph/ modules/ blocks/ templates/
 surfaces/`, every `*.py` outside a `tests/` directory, at `HEAD`.
 
 ```inventory cothinker
+blocks/__init__.py                                                                core:session
 blocks/speaking_share/__init__.py                                                 block:speaking-share
 blocks/speaking_share/room_talk_time.py                                           block:speaking-share
 blocks/speaking_share/talk_share.py                                               block:speaking-share
 blocks/timer/__init__.py                                                         block:timer
 blocks/timer/clock.py                                                            block:timer
 gateway/agent_lane.py                                                             core:agent
+gateway/block_host_wiring.py                                                      core:session
 gateway/conflict_triage.py                                                        core:session
 gateway/consumer.py                                                               core:session
 gateway/correction.py                                                             stt:correction
@@ -144,6 +146,7 @@ gateway/infomaniak_limiter.py                                                   
 gateway/lane_context.py                                                           block:mirroring-coach
 gateway/lane_integration.py                                                       block:mirroring-coach
 gateway/lanes.py                                                                  core:agent
+gateway/legacy_stage_sink.py                                                      core:session
 gateway/openrouter_jev.py                                                         block:decisions-tasks-questions
 gateway/policy.py                                                                 block:decisions-tasks-questions
 gateway/policy_runner.py                                                          block:decisions-tasks-questions
