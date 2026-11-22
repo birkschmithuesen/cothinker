@@ -175,6 +175,7 @@ shared/instance.py                                                              
 shared/modules.py                                                                 core:module
 shared/phases.py                                                                  core:session
 shared/profiles.py                                                                core:instance
+shared/templates.py                                                               core:instance
 shared/surface.py                                                                  core:surface-api
 shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py               block:write-text
 shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py                block:write-text

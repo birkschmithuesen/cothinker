@@ -43,6 +43,16 @@ class InstanceConfig:
     secret_env: Mapping[str, str] = field(default_factory=dict)
     hosts: Mapping[str, str] = field(default_factory=dict)
     modules: tuple[str, ...] = ()
+    tables: Mapping[str, object] = field(default_factory=dict)
+
+    def template_name(self) -> str | None:
+        return self.tables.get("template", {}).get("name")
+
+    def block_config(self, id: str) -> Mapping:
+        return self.tables.get("blocks", {}).get(id, {})
+
+    def module_config(self, name: str) -> Mapping:
+        return self.tables.get("modules", {}).get(name, {})
 
     def _existing(self, p: Path, what: str) -> Path:
         if not p.exists():
@@ -84,6 +94,7 @@ def _from_dir(path: Path) -> InstanceConfig:
         app_format=i["app_format"], poster_format=i["poster_format"], expires=i.get("expires"),
         secret_env=dict(raw.get("secrets", {})), hosts=dict(raw.get("hosts", {})),
         modules=tuple(raw.get("modules", {}).get("enabled", [])),
+        tables=raw,
     )
 
 
