@@ -144,7 +144,7 @@ class ViewIntent:
 @dataclass(frozen=True)
 class UserAction:
     intent_id: str
-    kind: str                  # "choose" | "accept" | "reject" | "edit" | "tap" | "voice"
+    kind: str                  # "choose" | "accept" | "reject" | "edit" | "tap" | "voice" | "message"
     person: str | None
     payload: Mapping[str, object]
     at: float

@@ -30,7 +30,9 @@ INTENT_KINDS = frozenset(
     }
 )
 
-ACTION_KINDS = frozenset({"choose", "accept", "reject", "edit", "tap", "voice"})
+ACTION_KINDS = frozenset(
+    {"choose", "accept", "reject", "edit", "tap", "voice", "message"}
+)
 
 _AUDIENCE_RE = re.compile(r"^(room|operator|person:[A-Za-z0-9_-]{1,32})$")
 
