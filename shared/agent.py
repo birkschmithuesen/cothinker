@@ -8,12 +8,8 @@
 """The agent seam (docs/architecture.md §1): one thin interface of
 CoThinker's own, one adapter per agent framework. Nothing outside an
 adapter module may know which framework is behind it --
-`tests/test_agent_port.py` enforces that for `workshop/` with a grep for
-Hermes HTTP patterns.
-
-Moved here from `workshop/agent_port.py` and `workshop/agent_api.py` (repo
-split plan task 4.3) so `gateway/` can use the seam without importing
-`workshop/`; both old modules re-export these names.
+`tests/test_agent_port.py` enforces that for `gateway/`, `blocks` and
+`surfaces` with a grep for Hermes HTTP patterns.
 
 Contract:
 
@@ -57,6 +53,14 @@ EVENT_KINDS = frozenset({
 })
 
 RETRY_WAIT_S_DEFAULT = 2.0
+
+# Kept from AGENTS.md as a regression net. The structured `failed` signal
+# is the primary one now, but a reply whose text carries one of these has
+# reported success upstream before, so this check is pinned by a test and
+# must never be removed. The sole source of truth: gateway/worker.py and
+# scripts/measure_hermes/m1_turns.py import this instead of keeping their
+# own copy (ADR 0018 migration rule: no second copy).
+FAILURE_MARKERS = ("API call failed", "HTTP 4")
 
 
 @dataclass(frozen=True)
@@ -315,6 +319,7 @@ class HermesApiAgentPort:
             yield Event(kind="failed", reason=f"http_{err_code}")
             return
         tool_started: dict[str, str] = {}
+        reply_text: list[str] = []
         with resp:
             event_name = None
             for raw in resp:
@@ -332,7 +337,14 @@ class HermesApiAgentPort:
                     payload = json.loads(raw_data) if raw_data else {}
                 except ValueError:
                     payload = {}
-                yield from self._map(event_name, payload, tool_started)
+                for mapped in self._map(event_name, payload, tool_started):
+                    if mapped.kind == "text_delta":
+                        reply_text.append(mapped.text)
+                    if mapped.kind == "done" and any(
+                            marker in "".join(reply_text) for marker in FAILURE_MARKERS):
+                        yield Event(kind="failed", reason="failure_marker", usage=mapped.usage)
+                    else:
+                        yield mapped
                 if event_name in ("run.completed", "run.failed", "run.cancelled"):
                     return
                 event_name = None
