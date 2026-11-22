@@ -26,10 +26,11 @@ import asyncio
 import json
 from collections import Counter
 from dataclasses import dataclass
-from typing import AsyncIterator
+from typing import AsyncIterator, Mapping, Sequence
 
 SPEECHMATICS_URL = "wss://eu.rt.speechmatics.com/v2"
 RATE = 16000
+BYTES_PER_S = RATE * 2  # s16le mono
 CHUNK_S = 0.1  # 100 ms per send, paced in real time
 # The table's placeholder-label budget: how many "names never go to the
 # model" labels (P1..Pn) a table can seat. 5 today; the hub's
@@ -46,6 +47,33 @@ def effective_max_speakers(max_speakers: int | None) -> int:
     `sm_config` sends over the wire without a second, driftable copy of
     the "None -> +3" rule."""
     return MAX_SPEAKERS + 3 if max_speakers is None else int(max_speakers)
+
+
+def additional_vocab_for_roles(roles: Sequence[Mapping[str, object]]) -> list[dict]:
+    """Speechmatics `additional_vocab` entries (custom dictionary): one per
+    role's `given` name (with any `sounds_like` the role lists), `short` and
+    `object` -- content only, duplicates collapsed, order preserved. Without
+    them the engine never hears these names, and a mis-heard name is a miss
+    a downstream role matcher can not recover from."""
+    seen: set = set()
+    out: list[dict] = []
+
+    def add(content: object, sounds_like: list[str] | None = None) -> None:
+        if not isinstance(content, str) or not content.strip() or content in seen:
+            return
+        seen.add(content)
+        entry: dict = {"content": content}
+        if sounds_like:
+            entry["sounds_like"] = sounds_like
+        out.append(entry)
+
+    for role in roles:
+        sounds_like = [s for s in (role.get("sounds_like") or [])
+                       if isinstance(s, str) and s.strip()]
+        add(role.get("given"), sounds_like or None)
+        add(role.get("short"))
+        add(role.get("object"))
+    return out
 
 
 def sm_config(speakers: list[dict] | None, get_speakers: bool, language: str,
