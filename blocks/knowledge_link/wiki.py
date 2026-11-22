@@ -51,7 +51,7 @@ RESCAN_S = 60
 # inside every other title). Counted after normalising.
 MIN_STEM = 4
 
-# The protocol's title line limit (`Protocol.open_topic`, `clean_line`).
+# The protocol's title line limit (`MinutesDocument.open_topic`, `clean_line`).
 TITLE_MAX = 120
 
 # Topic pages (MM-G D4/D5): how many links, how many names.

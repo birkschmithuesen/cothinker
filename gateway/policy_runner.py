@@ -378,7 +378,7 @@ class PolicyRunner:
         cannot create a second page.
 
         The caller must NOT hold `StageState._lock` or `StageWriter._lock`
-        (the page's backlink takes `Protocol.lock`)."""
+        (the page's backlink takes `MinutesPort.lock`)."""
         try:
             if self._closed or self.writer.protocol is None:
                 return None
