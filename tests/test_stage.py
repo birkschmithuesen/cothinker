@@ -2285,8 +2285,38 @@ def test_and_the_new_line_reaches_the_render(protokoll_sitz):
 # ================================================================ graph tab
 # A second tab next to the stage draws the session as a graph. It reads the
 # same `/parts` poll with `g=1`; without it the stage's payload stays
-# exactly what it was. Everything here is synthetic.
+# exactly what it was. The graph itself is built by the `graph` block
+# (issue #48, ADR 0006) and written into `buehne.json["session_graph"]`;
+# `stage/stage.py::session_graph_payload()` only reads it back out, so
+# these fixtures set that field directly instead of synthesising history
+# rows for the stage to build from (that build path no longer exists
+# here -- see tests/test_session_graph.py and tests/test_block_graph.py
+# for the block's own build/emit coverage, and
+# tests/test_stage_session_graph.py for the read-back path).
 KANARIE = "KANARIENVOGEL-9c1e"
+
+_PROBE_GRAPH = {
+    "seed": "file:sessions/2026-09-26-probe/protokoll",
+    "nodes": [
+        {"id": "file:sessions/2026-09-26-probe/protokoll", "label": "Probe-Sitzung",
+         "kind": "session", "ring": 0, "href": "file/sessions/2026-09-26-probe/protokoll",
+         "time": "", "tag": "", "parent": None, "hidden": False, "grace": False},
+        {"id": "T:H1", "label": "Budget", "kind": "topic", "ring": 0,
+         "href": "", "time": "10:00", "tag": "", "parent": "session",
+         "hidden": False, "grace": False},
+        {"id": "T:H2", "label": "Personal", "kind": "topic", "ring": 0,
+         "href": "", "time": "10:15", "tag": "", "parent": "session",
+         "hidden": False, "grace": False},
+        {"id": "file:usecases", "label": "usecases", "kind": "note", "ring": 1,
+         "href": "file/usecases", "time": "", "tag": "", "parent": "session",
+         "hidden": False, "grace": False},
+    ],
+    "edges": [
+        {"id": "e1", "source": "session", "target": "file:usecases",
+         "kind": "link", "ring": 1},
+    ],
+    "hidden": 0,
+}
 
 
 @pytest.fixture
@@ -2302,7 +2332,7 @@ def graf_sitz(tmp_path):
         f"## Rohtranskript\n- **10:30** {KANARIE} sagt [[{KANARIE}]]\n",
         encoding="utf-8")
     (g_ordner / "buehne.json").write_text(json.dumps(v2(
-        headline="Probe",
+        headline="Probe", session_graph=_PROBE_GRAPH,
         history=[{"id": "H1", "title": "Budget", "kind": "markdown",
                   "markdown": "- eins", "set_at": "2026-09-26T10:00:00",
                   "collapsed_lines": 0, "collapsed_markdown": ""},
@@ -2382,36 +2412,12 @@ def test_parts_g1_answers_with_exactly_graph_and_clock(graf_sitz, hole):
     assert set(json.loads(hole("/parts?g=1")[1])) == {"graph", "clock"}
 
 
-def test_every_node_has_exactly_the_builders_keys(graf_sitz, hole):
-    graf = _graf(hole)
-    knoten_schluessel = {"id", "label", "kind", "ring", "href", "time",
-                         "tag", "parent", "hidden", "grace"}
-    assert graf["nodes"] and all(set(n) == knoten_schluessel for n in graf["nodes"])
-
-
-def test_every_edge_has_exactly_id_source_target_kind_ring(graf_sitz, hole):
-    graf = _graf(hole)
-    assert graf["edges"] and all(set(e) == {"id", "source", "target", "kind", "ring"}
-                                 for e in graf["edges"])
-
-
-def test_the_seed_is_the_running_protocol_addressed_like_file(graf_sitz, hole):
-    graf = _graf(hole)
-    sitzung = next((n for n in graf["nodes"] if n["kind"] == "session"), {})
-    assert graf.get("seed") == "file:sessions/2026-09-26-probe/protokoll" \
-        and sitzung.get("href") == "file/sessions/2026-09-26-probe/protokoll"
-
-
-def test_both_history_topics_are_nodes(graf_sitz, hole):
-    graf = _graf(hole)
-    assert {n["label"] for n in graf["nodes"] if n["kind"] == "topic"} \
-        == {"Budget", "Personal"}
-
-
-def test_a_wikilink_to_a_project_file_resolves_to_a_file_node(graf_sitz, hole):
-    graf = _graf(hole)
-    assert any(n["id"] == "file:usecases" and n["href"] == "file/usecases"
-               for n in graf["nodes"])
+def test_parts_g1_echoes_the_session_graph_from_buehne_json(graf_sitz, hole):
+    # The graph tab's build/emit side is the `graph` block's own concern
+    # (tests/test_session_graph.py, tests/test_block_graph.py). Here the
+    # stage only has to read `session_graph` back out of `buehne.json` and
+    # hand it through unchanged.
+    assert _graf(hole) == _PROBE_GRAPH
 
 
 def test_canary_nothing_from_rohtranskript_reaches_the_graph_field(graf_sitz, hole):
@@ -2421,10 +2427,6 @@ def test_canary_nothing_from_rohtranskript_reaches_the_graph_field(graf_sitz, ho
 def test_canary_the_parts_g1_response_body_carries_no_rohtranskript_text_anywhere(
         graf_sitz, hole):
     assert KANARIE not in hole("/parts?g=1")[1]
-
-
-def test_session_resolve_answers_the_node_id_only_href_is_the_builders_job(graf_sitz):
-    assert b._session_resolve("usecases") == "file:usecases"
 
 
 def test_the_file_views_parts_never_carries_a_graph(graf_sitz, hole):
@@ -2469,106 +2471,15 @@ def test_canary_sg_blocks_never_carries_anything_below_rohtranskript(graf_sitz, 
     assert KANARIE not in (treffer.group(1) if treffer else "")
 
 
-# Befund 1: the graph cache is keyed on the vault scan's CONTENT digest, not
-# on when the scan ran. Prove it: age `_vault_cache`'s timestamp past
-# VAULT_TTL (without `clear_cache()`, which would also drop the graph cache
-# itself and defeat the point) so the next call rescans the vault, then
-# check that an unchanged vault does not trigger a rebuild -- the returned
-# payload is the SAME cached object, and `_build_session_graph` was not
-# called again.
-@pytest.fixture
-def zaehlender_build(graf_sitz, tmp_path, monkeypatch):
-    vault_g = tmp_path / "graphvault"
-    vault_g.mkdir()
-    (vault_g / "notiz.md").write_text("# Notiz\n", encoding="utf-8")
-    b.VAULT = vault_g
+def test_without_a_session_graph_key_the_seed_falls_back_to_empty(graf_sitz, hole):
+    # Without the `graph` block ever running yet, `buehne.json` carries no
+    # `session_graph` key at all; the stage must not error, just fall
+    # back (stage.EMPTY_SESSION_GRAPH, tests/test_stage_session_graph.py).
+    ohne_graph = v2(headline="Probe")
+    (graf_sitz / "buehne.json").write_text(
+        json.dumps(ohne_graph, ensure_ascii=False), encoding="utf-8")
     b.clear_cache()
-    aufrufe = []
-    orig_build = b._build_session_graph
-
-    def zaehlend(hysteresis):
-        aufrufe.append(1)
-        return orig_build(hysteresis)
-    monkeypatch.setattr(b, "_build_session_graph", zaehlend)
-    return aufrufe
-
-
-def test_befund_1_setup_the_first_call_builds_the_graph_once(zaehlender_build):
-    b.session_graph_payload()
-    assert len(zaehlender_build) == 1
-
-
-def test_befund_1_an_unchanged_rescan_does_not_rebuild_the_graph(zaehlender_build):
-    g1 = b.session_graph_payload()
-    ts, rest = b._vault_cache
-    b._vault_cache = (ts - b.VAULT_TTL - 1.0, rest)  # force a rescan
-    g2 = b.session_graph_payload()
-    assert len(zaehlender_build) == 1 and g2 is g1
-
-
-# Review minor c: the hysteresis must not carry one meeting's notes into the
-# next as grace nodes. Session A links a vault note (which has a neighbour);
-# then session B -- a new folder with a NEWER buehne.json, no links at all --
-# becomes the running one.
-@pytest.fixture
-def hysterese(graf_sitz, tmp_path):
-    vault_h = tmp_path / "graphhyst"
-    vault_h.mkdir()
-    (vault_h / "notizh.md").write_text("# Notiz H\nsiehe [[nachbarh]]\n",
-                                       encoding="utf-8")
-    (vault_h / "nachbarh.md").write_text("# Nachbar H\n", encoding="utf-8")
-    sessions = b.PROJECT / "sessions"
-    hyst_a = sessions / "2026-09-26-hyst-a"
-    hyst_b = sessions / "2026-09-26-hyst-b"
-    b.VAULT = vault_h
-    hyst_a.mkdir(parents=True)
-    (hyst_a / "protokoll.md").write_text(
-        "# Sitzung A\n\n## Entscheidungen\n- 10:05 siehe [[notizh]]\n",
-        encoding="utf-8")
-    (hyst_a / "buehne.json").write_text(json.dumps(v2(headline="A")),
-                                        encoding="utf-8")
-    jetzt = time.time()
-    os.utime(hyst_a / "buehne.json", (jetzt + 50, jetzt + 50))
-    b.clear_cache()
-    ga = b.session_graph_payload()
-
-    def start_b():
-        hyst_b.mkdir(parents=True)
-        (hyst_b / "protokoll.md").write_text(
-            "# Sitzung B\n\n## Aufgaben\n- 11:00 etwas ohne Links\n",
-            encoding="utf-8")
-        (hyst_b / "buehne.json").write_text(json.dumps(v2(headline="B")),
-                                            encoding="utf-8")
-        os.utime(hyst_b / "buehne.json", (jetzt + 100, jetzt + 100))
-        return b.session_graph_payload()
-    return ga, start_b
-
-
-def test_minor_c_setup_session_a_draws_its_vault_note(hysterese):
-    ga, _ = hysterese
-    assert ga["seed"].endswith("2026-09-26-hyst-a/protokoll") \
-        and any(n["id"] == "vault:notizh.md" for n in ga["nodes"])
-
-
-def test_minor_c_setup_session_b_is_now_the_running_one(hysterese):
-    _, start_b = hysterese
-    assert start_b()["seed"].endswith("2026-09-26-hyst-b/protokoll")
-
-
-def test_minor_c_a_new_session_starts_without_the_old_ones_grace_nodes(hysterese):
-    _, start_b = hysterese
-    gb = start_b()
-    assert not any(n["grace"] for n in gb["nodes"]) \
-        and not any(n["id"] in ("vault:notizh.md", "vault:nachbarh.md")
-                    for n in gb["nodes"])
-
-
-def test_without_a_protocol_the_seed_is_session_with_no_href(graf_sitz):
-    # No protocol at all: a seed called `session`, no href.
-    (graf_sitz / "protokoll.md").unlink()
-    b.clear_cache()
-    leer = b.session_graph_payload()
-    assert leer["seed"] == "session" and leer["nodes"][0]["href"] == ""
+    assert _graf(hole) == b.EMPTY_SESSION_GRAPH
 
 
 # ===================================== the announcement line (pending)

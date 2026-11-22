@@ -55,7 +55,7 @@ tables below are built from.
 | mirroring / coach question | Agent behaviour | `blocks/mirroring_coach/context.py` 130, `coach.py` 588 (the call lane in `gateway/call_lane.py` and scheduling in `lanes.py`/`agent_lane.py` belong to the Agent API) — 718 | Reflect | 1× |
 | knowledge link (vault) | Agent behaviour | `blocks/knowledge_link/__init__.py` 123, `blocks/knowledge_link/wiki.py` 408, `shared/wiki_names.py` 49 (`graph/*.py`, the vault-note library, is a core library: `core:session`) | Reflect | 1× |
 | status line | Show + share | `blocks/status_line/__init__.py` 143, `group.py` 57, `line.py` 24 — 224 | Reflect | 1× |
-| graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
+| graph (session / results / terms) | Show + share | `blocks/graph/__init__.py` 143, `session_graph.py` 386 — 529 | Reflect | 1× |
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
 | timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
 | speaker queue | Show + share | `blocks/speaker_queue/__init__.py` 102, `queue.py` 82 — 184 | Reflect | 1× |
@@ -154,6 +154,8 @@ blocks/topics/hysteresis.py                                                     
 blocks/topics/laya_worker.py                                                      block:topics
 blocks/topics/title.py                                                            block:topics
 gateway/actions_reader.py                                                         core:session
+blocks/graph/__init__.py                                                          block:graph
+blocks/graph/session_graph.py                                                     block:graph
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
 gateway/conflict_triage.py                                                        core:session
@@ -222,7 +224,6 @@ shared/text.py                                                                  
 shared/utterance.py                                                              stt:engine-speechmatics
 shared/wake_word.py                                                               block:segment
 shared/wiki_names.py                                                              block:knowledge-link
-stage/session_graph.py                                                           block:graph
 stage/stage.py                                                                   surface:stage
 stt/fundusapps/__init__.py                                                       stt:server
 stt/fundusapps/bbb_tap/__init__.py                                               stt:audio

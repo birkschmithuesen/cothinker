@@ -75,21 +75,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, quote, unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from graph.neighbours import HardEdges                     # noqa: E402
-from graph.ring_select import Hysteresis                   # noqa: E402
 from graph.vault_notes import DEFAULT_EXCLUDE, scan_vault   # noqa: E402
-# `session_graph` sits next to this file. Run as a script, this directory
-# is already on the path; imported by a test or a tool, it might not be.
-# `append`, not `insert(0, ...)`: putting this directory FIRST would let a
-# bare `import stage` resolve to `stage/stage.py` as a flat module instead
-# of the `stage` package rooted one level up (line above), which breaks
-# `import stage.<x>` for anything else in the process. Appended, it is
-# only consulted after the repo root, and `from session_graph import ...`
-# below still finds it either way.
-if str(Path(__file__).resolve().parent) not in sys.path:
-    sys.path.append(str(Path(__file__).resolve().parent))
-from session_graph import (build_session_graph,             # noqa: E402
-                           protocol_head, topics_from_stage)
 from shared.minutes_format import is_v2, parse_topics         # noqa: E402
 from gateway import stage_image                              # noqa: E402
 
@@ -174,12 +160,9 @@ VENDOR_FILES = ("cytoscape.min.js", "layout-base.js", "cose-base.js",
                 "cytoscape-fcose.js", "cytoscape-layout-utilities.js",
                 "qrcode.js")
 VAULT_TTL = 60.0                 # the vault changes slowly, the stage polls fast
-# (timestamp, (NoteIndex | None, HardEdges | None, rel -> Path, digest)):
-# ONE scan feeds both the `/vault/` allow-list and the graph tab's ring 1
-# and 2. `digest` is a content hash of the scan result (see `_vault_scan`)
-# -- the graph tab's cache key uses it INSTEAD of the timestamp, so a
-# rescan that finds the same notes does not count as a change.
-_vault_cache: tuple[float, tuple] | None = None
+# (timestamp, rel -> Path): feeds the `/vault/` allow-list. The graph
+# tab's ring 1 and 2 are built by the `graph` block (issue #48), not here.
+_vault_cache: tuple[float, dict] | None = None
 # One folder per meeting: `sessions/<YYYY-MM-DD>-<slug>/`, written by
 # `gateway/consumer.py`. Runs from before that convention still lie flat
 # in the project folder; the stage reads both.
@@ -235,30 +218,17 @@ FILES_TTL = 2.0                          # seconds
 # already uses below: the work happens once per WRITE, not once per POLL.
 _parts_cache: tuple | None = None       # (schluessel, teile, mark)
 
-# The graph tab (MM-J) polls `/parts?g=1`. Same posture as `_parts_cache`:
-# built once per WRITE (plus once per vault rescan), not once per poll.
-# The hysteresis lives here, at module level, and is only advanced by an
-# actual build -- so its grace rounds count changes of the session, not
-# how many tabs happen to be polling.
-_graph_cache: tuple | None = None       # (schluessel, payload)
-_graph_hysteresis = Hysteresis()
-_graph_seed: str | None = None          # the session the hysteresis belongs to
-
 
 def clear_cache() -> None:
     """Clears the file-list cache and the rendered-file cache.
     (The last good stage state stays — it is the fallback, not a cache.)"""
-    global _files_cache, _vault_cache, _parts_cache, _graph_cache
-    global _graph_hysteresis, _graph_seed
+    global _files_cache, _vault_cache, _parts_cache
     with _lock:
         _files_cache = None
         _vault_cache = None
         _render_cache.clear()
         _history_cache.clear()
         _parts_cache = None
-        _graph_cache = None
-        _graph_hysteresis = Hysteresis()
-        _graph_seed = None
 
 
 # ---------------------------------------------------------------- Markdown
@@ -480,63 +450,26 @@ def find_file(name: str) -> Path | None:
     return None
 
 
-def _vault_scan() -> tuple[float, tuple]:
-    """`(timestamp, (index, edges, rel -> Path, digest))`, rescanned once
-    per VAULT_TTL.
-
-    `digest` is a sha256 over the sorted `(rel, mtime)` of every note,
-    computed ONCE per scan, here -- not once per poll. The graph tab's
-    cache key (`session_graph_payload()`) uses this digest, not the
-    timestamp above: the vault is rescanned every VAULT_TTL regardless of
-    whether anything changed, and keying on the timestamp made the graph
-    rebuild on that same 60 s clock -- which in turn advanced
-    `Hysteresis.apply()`'s grace-round countdown once a minute even with
-    a silent room, so "grace rounds" ended up measuring wall-clock
-    minutes instead of session changes. Keyed on content instead, an
-    unchanged rescan is a cache hit.
-    """
+def _vault_scan() -> tuple[float, dict]:
+    """`(timestamp, rel -> Path)`, rescanned once per VAULT_TTL."""
     global _vault_cache
     with _lock:
         if _vault_cache and time.monotonic() - _vault_cache[0] < VAULT_TTL:
             return _vault_cache
-    index = edges = None
     eintraege: dict = {}
-    digest = ""
     if VAULT != Path():
         # `Path("")` normalises to `Path(".")`, and `str(Path("."))` is
         # ".", which is truthy -- `not str(VAULT)` never fired and left
         # the read path on by default. Compare the path itself instead.
         try:
             index = scan_vault(VAULT, exclude=VAULT_EXCLUDE)
-            edges = HardEdges(index)
             eintraege = {rel: n.path for rel, n in index.notes.items()}
-            digest = hashlib.sha256("\n".join(
-                f"{rel}\t{n.mtime!r}"
-                for rel, n in sorted(index.notes.items())).encode()
-                ).hexdigest()
         except OSError:
-            index = edges = None
             eintraege = {}
-            digest = ""
-    eintrag = (time.monotonic(), (index, edges, eintraege, digest))
+    eintrag = (time.monotonic(), eintraege)
     with _lock:
         _vault_cache = eintrag
     return eintrag
-
-
-def vault_note_index() -> tuple:
-    """`(NoteIndex | None, HardEdges | None)`, from the same cached scan
-    as `vault_index()`. Both None without a vault root."""
-    index, edges, _, _ = _vault_scan()[1]
-    return index, edges
-
-
-def vault_scan_digest() -> str:
-    """The vault scan's content digest (see `_vault_scan`), computed once
-    per scan and reused here rather than recomputed per poll. Part of the
-    graph tab's cache key instead of the scan's timestamp -- see the
-    comment on `_vault_scan` for why the timestamp alone was wrong."""
-    return _vault_scan()[1][3]
 
 
 def vault_index() -> dict:
@@ -550,7 +483,7 @@ def vault_index() -> dict:
     cannot be a key, a `.png` is not in there, and neither is a note the
     privacy exclusion dropped.
     """
-    return _vault_scan()[1][2]
+    return _vault_scan()[1]
 
 
 def vault_file(rel: str) -> Path | None:
@@ -1543,101 +1476,19 @@ def stage_parts_cached() -> tuple[dict, str]:
     return teile, mark
 
 
-_graph_lock = threading.Lock()          # one build at a time, see below
-
-
-def _session_resolve(name: str) -> str | None:
-    """A wikilink target -> its node id (`file:<rel>` / `vault:<rel>`),
-    or None -- the `resolve` contract of `build_session_graph()`, which
-    derives the href from the id itself.
-
-    The project folder first -- the same files the stage's own wikilinks
-    open via `/file/` -- then the vault, through `NoteIndex.resolve`,
-    which answers None for a missing AND for an ambiguous name. Nothing
-    is guessed, nothing gets a node without a file behind it.
-    """
-    name = str(name or "").strip()
-    if not name:
-        return None
-    p = find_file(name)
-    if p is not None:
-        return "file:" + rel_name(p)
-    index, _ = vault_note_index()
-    note = index.resolve(name) if index is not None else None
-    if note is not None:
-        return "vault:" + note.rel
-    return None
-
-
-def _build_session_graph(hysteresis) -> dict:
-    """One build of the graph tab's payload from the files as they are."""
-    buehne = read_stage()
-    protokoll_pfad = current_protocol_file()
-    text = ""
-    if protokoll_pfad is not None:
-        try:
-            text = protokoll_pfad.read_text(encoding="utf-8", errors="replace")
-        except OSError:
-            text = ""
-    if protokoll_pfad is not None:
-        rel = rel_name(protokoll_pfad)
-        session_id = "file:" + rel
-        # The protocol's own title, from ABOVE `## Rohtranskript` only;
-        # else the session folder's name (or the flat file's stem).
-        titel = next((z[2:].strip() for z in protocol_head(text).splitlines()
-                      if z.startswith("# ") and z[2:].strip()), "")
-        label = titel or (protokoll_pfad.parent.name
-                          if protokoll_pfad.name == "protokoll.md"
-                          else protokoll_pfad.stem)
-    else:
-        session_id, label = "session", "Sitzung"
-    index, edges = vault_note_index()
-    return build_session_graph(
-        topics_from_stage(buehne, text), session_id=session_id,
-        session_label=label, resolve=_session_resolve, index=index,
-        edges=edges, hysteresis=hysteresis)
+# No nodes, no edges: the shape `stage/static/session_graph.js` already
+# handles for an empty graph, returned before the `graph` block (issue
+# #48) has ever run -- never an error, never the stage's own fallback
+# build.
+EMPTY_SESSION_GRAPH = {"seed": "", "nodes": [], "edges": [], "hidden": 0}
 
 
 def session_graph_payload() -> dict:
-    """The graph tab's payload, rebuilt only when the session or the
-    vault's content changed.
-
-    Keyed like `stage_parts_cached()` (buehne.json + running protocol)
-    plus the vault scan's content digest (`vault_scan_digest()`, NOT its
-    timestamp -- see the comment on `_vault_scan` for why: the vault is
-    rescanned every VAULT_TTL regardless of whether anything changed, and
-    a timestamp in the key made the graph rebuild -- and the hysteresis
-    advance -- on that clock instead of on an actual change). Builds are
-    serialised by their own lock: two tabs polling the same change must
-    not advance the hysteresis twice. Without a stable key (no
-    `buehne.json` on disk) every call builds, and then WITHOUT the
-    hysteresis -- a grace round per poll would be a clock, not a change.
-    When the running session (the seed) changes, the hysteresis starts
-    over: grace notes never carry from one meeting into the next.
-    """
-    global _graph_cache, _graph_hysteresis, _graph_seed
-    with _graph_lock:
-        schluessel = _stage_key()
-        if schluessel is not None:
-            schluessel = schluessel + (vault_scan_digest(),)
-            with _lock:
-                if _graph_cache is not None and _graph_cache[0] == schluessel:
-                    return _graph_cache[1]
-        # A new meeting starts with a clean grace list: the previous
-        # one's notes are not "just dropped" from this one, they were
-        # never part of it.
-        pfad = current_protocol_file()
-        saat = "file:" + rel_name(pfad) if pfad is not None else "session"
-        with _lock:
-            if saat != _graph_seed:
-                _graph_hysteresis = Hysteresis()
-                _graph_seed = saat
-        nutz = _build_session_graph(
-            _graph_hysteresis if schluessel is not None else None)
-        if schluessel is not None:
-            with _lock:
-                _graph_cache = (schluessel, nutz)
-        return nutz
+    """The graph tab's payload (ADR 0006): built by the `graph` block, not
+    here. The block's view intent is written into `buehne.json` under
+    `session_graph` by the stage surface; this just reads it back out."""
+    graph = read_stage().get("session_graph")
+    return graph if isinstance(graph, dict) else dict(EMPTY_SESSION_GRAPH)
 
 
 def render_file(p: Path, namen: set, spalte: bool = False) -> tuple[str, str]:
@@ -3337,9 +3188,8 @@ class H(BaseHTTPRequestHandler):
             ziel = json.dumps("parts?d=" + quote(rel_name(p), safe="")).encode()
             body = body.replace(b"'parts'+location.search", ziel)
             # MM-M: the graph tab's direct-open topic click lands here as
-            # `#block-<id>`. Only the RUNNING protocol's own topic nodes are
-            # published -- same identity (`rel_name`) `_build_session_graph`
-            # uses for the seed, so a jump never lands on someone else's ids.
+            # `#block-<id>`. Only the RUNNING protocol's own topic nodes
+            # are published, so a jump never lands on someone else's ids.
             protokoll_pfad = current_protocol_file()
             if protokoll_pfad is not None and rel_name(p) == rel_name(protokoll_pfad):
                 knoten = session_graph_payload().get("nodes") or []

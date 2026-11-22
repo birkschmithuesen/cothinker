@@ -32,13 +32,10 @@ from __future__ import annotations
 
 import hashlib
 import re
-import sys
-from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from graph.neighbours import Neighbour                          # noqa: E402
-from graph.ring_select import select_nodes                      # noqa: E402
-from graph.vault_notes import extract_links                     # noqa: E402
+from graph.neighbours import Neighbour
+from graph.ring_select import select_nodes
+from graph.vault_notes import extract_links
 
 TAGS = ("beschluss", "aufgabe", "frage", "idee", "recherche")
 MAX_VISIBLE = 40          # nodes drawn at once; the rest is hidden, expandable

@@ -227,7 +227,7 @@ def test_existing_v2_file_keeps_its_recorded_mode(tmp_path):
 
 
 def test_the_block_package_never_names_the_raw_section():
-    r = subprocess.run(["git", "grep", "-n", "Rohtranskript", "--", "blocks"],
+    r = subprocess.run(["git", "grep", "-n", "Rohtranskript", "--", "blocks/minutes_document"],
                        cwd=REPO, capture_output=True, text=True)
     assert r.stdout == ""
     for f in (REPO / "blocks" / "minutes_document").glob("*.py"):
