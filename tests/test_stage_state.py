@@ -17,7 +17,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from gateway.events import is_number, is_token
+from shared.events import is_number, is_token
 from gateway.stage_state import (MAX_HISTORY, MAX_PENDING, PENDING_KINDS,
                                  PENDING_TIMEOUT_S, RECEIPT_LINGER_S,
                                  TOO_SOON, TOPIC_MIN_HOLD_S, TOPIC_WINDOW_S,
