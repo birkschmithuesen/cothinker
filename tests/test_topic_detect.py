@@ -623,7 +623,7 @@ print("\ngateway/openrouter_jev.py: one POST, typed answer, no body in errors")
 
 import time as _time  # noqa: E402
 
-from gateway import openrouter_jev as boj  # noqa: E402
+from blocks.decisions_tasks_questions import openrouter_jev as boj  # noqa: E402
 
 JEV_SCHLUESSEL = "fake-or-4711"
 # Standing in for an API error `message` that quotes the request: if this
@@ -1046,7 +1046,7 @@ for was, src, stelle in JEV_SITES:
     nah = "\n".join(vorher_code.splitlines()[-5:])
     check(f"test_jev_site_marker_{_slug(was)}", f"JEV-SITE marker at: {was}",
           stelle in src and "# JEV-SITE:" in nah, nah[-200:])
-quelle_jev = (REPO / "gateway" / "openrouter_jev.py").read_text(
+quelle_jev = (REPO / "blocks" / "decisions_tasks_questions" / "openrouter_jev.py").read_text(
     encoding="utf-8")
 check("test_the_marker_counts_are_pinned_4_in_topic_detect_py_7_in_openrouter_jev", "the marker counts are pinned: 4 in topic_detect.py, 7 in "
       "openrouter_jev.py -- a new interpretation site without a marker, "
