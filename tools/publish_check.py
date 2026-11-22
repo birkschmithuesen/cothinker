@@ -43,6 +43,12 @@ CANARY = "cothinker" + "canary"
 TOKEN_RE = re.compile(r"[^a-z0-9]+")
 COMMIT_MARK = "\x01COTHINKER-COMMIT "
 
+# Raster image extensions actually tracked under docs/ in this repo (only
+# .png so far; extend if another raster type shows up there).
+RASTER_IMAGE_EXTENSIONS = (".png",)
+# A raster image's text source: same directory, same stem, one of these.
+IMAGE_SOURCE_EXTENSIONS = (".html", ".svg", ".py", ".md")
+
 
 class PatternList:
     def __init__(self, ident, literals=(), regexes=(), hmacs=None, key=None, allow=frozenset()):
@@ -152,6 +158,30 @@ def tree_lines(tree_dir):
                     yield "TREE", str(p), line
             except UnicodeDecodeError:
                 continue
+
+
+def missing_image_sources(repo):
+    """Tracked raster images under docs/ with no sibling text source.
+
+    The text-only scan over history/tree lines cannot see text baked into a
+    PNG, so a diagram's rendered raster can silently carry names its own
+    cleaned-up source no longer has. A sibling source (same directory, same
+    stem, one of IMAGE_SOURCE_EXTENSIONS) is what scan() actually reads;
+    without one there is nothing to scan for the image's content.
+    """
+    out = subprocess.run(["git", "-C", str(repo), "ls-files", "--", "docs"],
+                          capture_output=True, text=True, check=True).stdout
+    tracked = set(out.splitlines())
+    missing = []
+    for path in sorted(tracked):
+        p = pathlib.PurePosixPath(path)
+        if p.suffix.lower() not in RASTER_IMAGE_EXTENSIONS:
+            continue
+        has_source = any((p.parent / (p.stem + ext)).as_posix() in tracked
+                          for ext in IMAGE_SOURCE_EXTENSIONS)
+        if not has_source:
+            missing.append(path)
+    return missing
 
 
 def scan(source, lists):
@@ -272,9 +302,17 @@ def main(argv=None):
             path = "path#" + hashlib.sha256(path.encode()).hexdigest()[:12]
         print(f"{ident}\t{commit}\t{path}")
     rc = 1 if hits else 0
+
+    orphan_images = missing_image_sources(o.repo)
+    for path in orphan_images:
+        print(f"image-source\t-\t{path}: no sibling .html/.svg/.py/.md source, "
+              f"text baked into this image cannot be scanned")
+    if orphan_images:
+        rc = 1
+
     if not o.skip_detect_secrets and not o.tree:
         rc = max(rc, detect_secrets(o.repo))
-    print(f"{'CLEAN' if rc == 0 else 'DIRTY'}: {len(hits)} hits, {len(lists)} lists")
+    print(f"{'CLEAN' if rc == 0 else 'DIRTY'}: {len(hits) + len(orphan_images)} hits, {len(lists)} lists")
     return rc
 
 
