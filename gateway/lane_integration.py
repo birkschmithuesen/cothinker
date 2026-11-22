@@ -10,7 +10,7 @@
 It owns two `gateway.lanes.LaneQueue`s (call, coach), each wrapping its
 own `gateway.worker.WorkerClient` process and its own
 `gateway.lane_context.LaneContext` window, plus one
-`gateway.topic_hysteresis.TopicHysteresis` that turns the decider's
+`blocks.topics.hysteresis.TopicHysteresis` that turns the decider's
 noisy per-block numbers into confirmed topic changes.
 
 Kept out of `gateway/consumer.py` itself on purpose: that file is huge
@@ -55,7 +55,7 @@ from lane_context import ROLL_EVERY, WINDOW_SIZE, LaneContext  # noqa: E402
 from lanes import TIMEOUT_MARKER, Job, LaneQueue  # noqa: E402
 import stage_image  # noqa: E402
 from shared.text import derived_title, one_line  # noqa: E402
-from topic_hysteresis import MIN_TOPIC_AGE_S, THRESHOLD, TopicHysteresis  # noqa: E402
+from blocks.topics.hysteresis import MIN_TOPIC_AGE_S, THRESHOLD, TopicHysteresis  # noqa: E402
 from worker import WorkerClient  # noqa: E402
 
 # Operator's point 3 (2026-10-20): the coach's full reply is EITHER exactly
@@ -427,7 +427,7 @@ class Lanes:
         # the provisional title from the block's first line stays.
         # The factory gets the two callbacks and returns an object with
         # `request(entry_id, provisional, block, previous)` and `stop()`
-        # (gateway/topic_title.py's TopicTitler).
+        # (blocks/topics/title.py's TopicTitler).
         self.titler = (titler_factory(self._on_title, self._on_title_failed)
                        if titler_factory is not None else None)
 

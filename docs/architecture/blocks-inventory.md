@@ -47,7 +47,7 @@ tables below are built from.
 | Block | Group | Source files (lines) | Used by | Built |
 |---|---|---|---|---|
 | segment (utterance batching) | Capture | `gateway/segmenter.py` 356, `shared/wake_word.py` 67 — 423 | core | 1× |
-| topic change | Capture | `gateway/topic_detect.py` 571, `topic_hysteresis.py` 95, `topic_laya_worker.py` 138, `topic_title.py` 202 — 1006 | Reflect | 1× |
+| topic change | Capture | `blocks/topics/detect.py` 571, `hysteresis.py` 95, `laya_worker.py` 138, `title.py` 202 — 1006 | Reflect | 1× |
 | decisions / tasks / open questions | Capture | `gateway/decide.py` 569, `decider.py` 424, `openrouter_jev.py` 269, `policy.py` 668, `policy_runner.py` 567, `proposals.py` 68, `questions.py` 191 — 2756 | Reflect | 1× |
 | minutes document | Condense + write | `shared/minutes_format.py` 454, `blocks/minutes_document/__init__.py` 130, `blocks/minutes_document/minutes.py` 235 (the session host's `gateway/raw_transcript.py` writes the file) | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
@@ -144,6 +144,11 @@ blocks/timer/__init__.py                                                        
 blocks/timer/clock.py                                                            block:timer
 blocks/speaker_queue/__init__.py                                                  block:speaker-queue
 blocks/speaker_queue/queue.py                                                     block:speaker-queue
+blocks/topics/__init__.py                                                         block:topics
+blocks/topics/detect.py                                                           block:topics
+blocks/topics/hysteresis.py                                                       block:topics
+blocks/topics/laya_worker.py                                                      block:topics
+blocks/topics/title.py                                                            block:topics
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
 gateway/conflict_triage.py                                                        core:session

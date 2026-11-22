@@ -30,7 +30,7 @@ sys.path.insert(0, str(HERE.parent))
 # lane_integration still imports its siblings by bare name.
 sys.path.append(str(HERE.parent / "gateway"))
 
-from gateway import topic_title as tt  # noqa: E402
+from blocks.topics import title as tt  # noqa: E402
 from gateway.lane_integration import Lanes  # noqa: E402
 from gateway.stage_state import StageState  # noqa: E402
 

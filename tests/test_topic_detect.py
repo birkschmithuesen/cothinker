@@ -36,7 +36,7 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(REPO))
-from gateway import topic_detect as td  # noqa: E402
+from blocks.topics import detect as td  # noqa: E402
 
 _NEEDS_BENCH = ("needs the bench/ evaluation package (replay, session, loso, "
                 "detect, run), which is not part of this repository")
@@ -91,7 +91,7 @@ SAETZE = [
 ]
 
 # ================================================== 1. vectors and windows
-print("gateway/topic_detect.py: the vector helpers")
+print("blocks/topics/detect.py: the vector helpers")
 check("test_cosine_of_a_vector_with_itself_is_1", "cosine of a vector with itself is 1",
       abs(td.cosine([1.0, 2.0, 3.0], [1.0, 2.0, 3.0]) - 1.0) < 1e-12,
       str(td.cosine([1.0, 2.0, 3.0], [1.0, 2.0, 3.0])))
@@ -336,11 +336,11 @@ check("test_an_empty_key_is_refused_at_construction_time_naming_the_environment"
       "INFOMANIAK_API_KEY" in leerfehler, leerfehler)
 
 # ====================================== 3. the laya worker's protocol
-print("\ngateway/topic_laya_worker.py: one JSON line in, one JSON line out")
+print("\nblocks/topics/laya_worker.py: one JSON line in, one JSON line out")
 
 import io  # noqa: E402
 
-from gateway import topic_laya_worker as tlw  # noqa: E402
+from blocks.topics import laya_worker as tlw  # noqa: E402
 
 ZUSTAENDE: list = []
 
@@ -400,7 +400,7 @@ check("test_importing_this_module_imports_neither_torch_nor_laya_the_protocol_is
       str(sorted(m for m in sys.modules if "torch" in m or "laya" == m)))
 
 # ============================================== 4a. the drift detector
-print("\ngateway/topic_detect.py: DriftDetector -- 1 - cos against the window")
+print("\nblocks/topics/detect.py: DriftDetector -- 1 - cos against the window")
 
 VEKTOREN = {
     "gleich": [1.0, 0.0, 0.0],
@@ -471,7 +471,7 @@ check("test_a_failed_embedding_becomes_an_error_token_not_an_exception_one_bad_c
       (s5.error, s5.p) == ("ValueError", 0.0), str(s5))
 
 # ============================================== 4b. the laya detector
-print("\ngateway/topic_detect.py: LayaDetector against a FAKE worker")
+print("\nblocks/topics/detect.py: LayaDetector against a FAKE worker")
 
 import atexit  # noqa: E402
 import shutil  # noqa: E402
@@ -479,7 +479,7 @@ import subprocess as sp  # noqa: E402
 import tempfile  # noqa: E402
 
 FAKE_WORKER = '''#!/usr/bin/env python3
-"""A stand-in for gateway/topic_laya_worker.py. Same protocol, no torch."""
+"""A stand-in for blocks/topics/laya_worker.py. Same protocol, no torch."""
 import json, sys, time
 from pathlib import Path
 
@@ -601,7 +601,7 @@ check("test_the_three_pinned_constants_are_the_module_s_so_a_later_live_switch",
       == (1200, 600, 30.0),
       str((td.LAYA_VORHER_CHARS, td.LAYA_NEU_CHARS, td.LAYA_TIMEOUT_S)))
 
-print("\ngateway/topic_detect.py: laya_input() -- the one place the input "
+print("\nblocks/topics/detect.py: laya_input() -- the one place the input "
       "is cut")
 lv, ln = td.laya_input([blick(0, "A" * 700, 1000.0),
                         blick(1, "B" * 700, 1010.0)],
@@ -858,7 +858,7 @@ check("test_an_empty_key_is_refused_at_construction_time_naming_the_environment_
       "OPENROUTER_API_KEY" in jleer, jleer)
 
 # ============================================== 11. the jev detector
-print("\ngateway/topic_detect.py: JevDetector against the FAKE decisions server")
+print("\nblocks/topics/detect.py: JevDetector against the FAKE decisions server")
 
 FakeDecisions.requests.clear()
 FakeDecisions.replies.clear()
@@ -1011,7 +1011,7 @@ check("test_the_pinned_constants_are_the_module_s", "the pinned constants are th
 check("test_the_other_scores_are_unchanged_cost_usd_defaults_to_none_so_drift_and", "the other Scores are unchanged: cost_usd defaults to None, so "
       "drift and laya do not suddenly report a USD cost of 0",
       td.Score(index=0).cost_usd is None)
-quelle = (REPO / "gateway" / "topic_detect.py").read_text(encoding="utf-8")
+quelle = (REPO / "blocks" / "topics" / "detect.py").read_text(encoding="utf-8")
 import inspect  # noqa: E402
 
 JEV_SITES = [

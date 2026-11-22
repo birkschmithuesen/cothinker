@@ -3228,7 +3228,7 @@ def main() -> int:
                          "claude-haiku-4-5 call over the plan proxy, off "
                          "the hot path, 4 s budget) that replaces the "
                          "provisional first-line title in place. Off by "
-                         "default. gateway/topic_title.py.")
+                         "default. blocks/topics/title.py.")
     ap.add_argument("--speaker-split", action="store_true",
                     help="--speakers only: an utterance >= 4 s is embedded "
                          "in 1.5 s windows; a speaker change inside it "
@@ -3674,7 +3674,7 @@ def main() -> int:
         project_agenda = project_agenda_text(title, a.participants, agenda)
 
         def _titler_factory(on_title, on_fail):
-            from topic_title import TopicTitler
+            from blocks.topics.title import TopicTitler
             log("topic titles on: claude-haiku-4-5 via the plan proxy, 4 s")
             return TopicTitler(on_title, on_fail=on_fail, log=log)
 

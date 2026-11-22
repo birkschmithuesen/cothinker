@@ -13,7 +13,7 @@ cost tokens, not extra round trips).
 
 DATA ONLY. This module does not call anything and does not decide
 anything -- `gateway/decide.py` (a later card) sends `QUESTIONS` to a
-backend and turns the answers into a vector; `gateway/topic_detect.py`'s
+backend and turns the answers into a vector; `blocks/topics/detect.py`'s
 `JevDetector` is the precedent for that call shape. Keeping the set here,
 on its own, lets both the decider and the bench (`bench/run.py
 --detector decide:...`, another later card) import the SAME questions
@@ -29,7 +29,7 @@ questions actually separate anything (bench) is only comparable across
 sessions if the trace also says which exact wording was asked.
 
 IDS ARE GERMAN, deliberately: they ride along in the JSON object sent to
-the LLM backend as literal question keys (see `gateway/topic_detect.py`,
+the LLM backend as literal question keys (see `blocks/topics/detect.py`,
 `JEV_NOUL_ID = "neues_thema"`), and AGENTS.md's naming convention puts
 anything that "goes into a prompt" in German, not English. They are also
 ASCII-only tokens (`shared/events.py`'s `is_token()`): no umlaut, so a

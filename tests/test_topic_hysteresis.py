@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from gateway.topic_hysteresis import TopicHysteresis  # noqa: E402
+from blocks.topics.hysteresis import TopicHysteresis  # noqa: E402
 
 
 class Clock:
