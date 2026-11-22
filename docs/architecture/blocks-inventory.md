@@ -9,7 +9,7 @@ this file; the tables below are generated from it and add line counts.
 **Used by:** `core` = part of the single code base this repository holds
 today. `Reflect` = one of the 12 blocks confirmed by Birk for the Reflect
 template (only 8 of those 12 have code in this repository today; the other
-4 — condense, timer, speaker queue, write text — are not
+3 — condense, speaker queue, write text — are not
 yet built here). `templates` = reserved for per-instance template files;
 none exist in this repository yet. **Built** = how many separate source
 files implement the target in this repository (always `1×` here — this
@@ -56,12 +56,13 @@ tables below are built from.
 | status line | Show + share | `gateway/status_line.py` 164 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
+| timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
 
-**Reflect check:** 8 of the 12 blocks Birk confirmed for Reflect already
+**Reflect check:** 9 of the 12 blocks Birk confirmed for Reflect already
 have code in this repository — topic change, decisions / tasks / open
 questions, minutes document, mirroring / coach question, knowledge link,
-status line, session graph, speaking share. The other 4 confirmed blocks
-(capture bullets, condense, timer, speaker queue) have no code in this
+status line, session graph, speaking share, timer. The other 3 confirmed
+blocks (capture bullets, condense, speaker queue) have no code in this
 repository yet.
 
 ## STT module, surfaces, core (not blocks)
@@ -114,6 +115,7 @@ block:status-line            block — status line
 block:graph                  block — graph (session / results / term graph)
 block:write-text             block — write text (prologue, scene, script)
 block:speaking-share         block — speaking share (talk share + room talk time)
+block:timer                  block — timer (planned items, drift, projected end)
 retire                       dropped by the target (decision 25 engines)
 ```
 
@@ -126,6 +128,8 @@ surfaces/`, every `*.py` outside a `tests/` directory, at `HEAD`.
 blocks/speaking_share/__init__.py                                                 block:speaking-share
 blocks/speaking_share/room_talk_time.py                                           block:speaking-share
 blocks/speaking_share/talk_share.py                                               block:speaking-share
+blocks/timer/__init__.py                                                         block:timer
+blocks/timer/clock.py                                                            block:timer
 gateway/agent_lane.py                                                             core:agent
 gateway/conflict_triage.py                                                        core:session
 gateway/consumer.py                                                               core:session
