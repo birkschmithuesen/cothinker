@@ -1,0 +1,3 @@
+# Provenance of imported prompt, profile and catalogue files under templates/inscribe/.
+# Each entry: path (repo-relative), sha256 (hex), reviewed (bool), note (generic description of
+# anything removed into instance content). tests/test_public_text_hygiene.py enforces this file.
