@@ -123,7 +123,11 @@ def _read(path: Path) -> str:
 
 def run_consumer(tmp_path: Path, *, finals, extra_args=(),
                  timeout_s: float = 60,
-                 wait_for_worker_turns: int = 0) -> ConsumerRun:
+                 wait_for_worker_turns: int = 0,
+                 seed=None, env_extra=None) -> ConsumerRun:
+    """`seed(project)` runs before the consumer starts (files it should
+    find); `env_extra` is added to the consumer's environment (the fake
+    worker reads FAKE_WORKER_REPLY from it)."""
     finals = list(finals)
     n = 0
     while (tmp_path / f"run{n}").exists():      # repeated runs: own subdir
@@ -131,6 +135,8 @@ def run_consumer(tmp_path: Path, *, finals, extra_args=(),
     tmp_path = tmp_path / f"run{n}"
     tmp_path.mkdir()
     vault = build_vault(tmp_path)
+    if seed is not None:
+        seed(vault["project"])
     worker_log = tmp_path / "worker-turns.jsonl"
     base = {k: v for k, v in os.environ.items()
             if not k.startswith("COTHINKER_")}
@@ -139,9 +145,11 @@ def run_consumer(tmp_path: Path, *, finals, extra_args=(),
                COTHINKER_ENTITIES=str(vault["entities"]),
                COTHINKER_PROJECT_DIR=str(vault["project"]),
                FAKE_WORKER_LOG=str(worker_log),
+               FAKE_WORKER_JSON="1",
                GIT_AUTHOR_NAME="Test", GIT_AUTHOR_EMAIL="test@example.invalid",
                GIT_COMMITTER_NAME="Test",
-               GIT_COMMITTER_EMAIL="test@example.invalid")
+               GIT_COMMITTER_EMAIL="test@example.invalid",
+               **(env_extra or {}))
     log_path = tmp_path / "consumer.log"
     with fake_stt(finals) as stt_url, open(log_path, "w") as logf:
         cmd = [sys.executable, str(CONSUMER), "--stt", stt_url,

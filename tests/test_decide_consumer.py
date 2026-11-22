@@ -611,7 +611,7 @@ for line in sys.stdin:
         fh.write(json.dumps(msg.get("prompt", "")) + "\\n")
     ok = a.mode == "ok"
     send({"type": "result", "id": msg.get("id"), "ok": ok, "failed": not ok,
-          "partial": False, "final": "OK" if ok else "",
+          "partial": False, "final": '{"buehne": []}' if ok else "",
           "error": None if ok else "provider refused"})
 ''', encoding="utf-8")
 

@@ -15,6 +15,7 @@ worker (tests/fake_worker.py).
 from __future__ import annotations
 
 import atexit
+import json
 import os
 import re
 import shutil
@@ -1609,13 +1610,12 @@ def sec_06(sec_05):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        p = consumer.build_prompt(Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"),
-                                  b, st, backlog_note="", order_note="")
+        p = consumer.build_prompt(Path("/tmp/protokoll.md"), b, st, backlog_note="", order_note="")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
 
     try:
-        _chk(106, "the proposal file is named", "vorschlag.jsonl" in p)
+        _chk(106, "no proposal file is named: the agent writes no file", "vorschlag.jsonl" not in p)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -1655,7 +1655,7 @@ def sec_06(sec_05):
     # move it. It is an order like any other and runs the existing path.
     try:
         _chk(113, "a request for an earlier surface is routed to the call-out path",
-              "davor" in p and "main" in p.split("davor")[1][:200], p[-1500:])
+              "nochmal das davor" in p and "main" in p.split("nochmal das davor")[1][:200], p[-1500:])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -1748,7 +1748,7 @@ def sec_07(sec_06):
     try:
         _chk(128, "an empty state adds no heading to the prompt",
               "OFFEN AUF DER BUEHNE" not in consumer.build_prompt(
-                  Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b, st_leer))
+                  Path("/tmp/p.md"), b, st_leer))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -1822,7 +1822,7 @@ def sec_08(sec_07):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        p_quiet = consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b, st2,
+        p_quiet = consumer.build_prompt(Path("/tmp/p.md"), b, st2,
                                         backlog_note="", order_note="")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -1852,7 +1852,7 @@ def sec_08(sec_07):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        p_late = consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b, st3,
+        p_late = consumer.build_prompt(Path("/tmp/p.md"), b, st3,
                                       backlog_note="", order_note="")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -1879,7 +1879,7 @@ def sec_09(sec_08):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        p_batch = consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b, st,
+        p_batch = consumer.build_prompt(Path("/tmp/p.md"), b, st,
                                         backlog_note=consumer.BACKLOG_NOTE, order_note="")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -1892,7 +1892,7 @@ def sec_09(sec_08):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        p_order = consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b, st,
+        p_order = consumer.build_prompt(Path("/tmp/p.md"), b, st,
                                         backlog_note="", order_note=consumer.ORDER_NOTE)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -1917,8 +1917,7 @@ def sec_09(sec_08):
     # template. The transcript is a VALUE in format(), never part of it.
     try:
         p_klammern = consumer.build_prompt(
-            Path("/tmp/p.md"), Path("/tmp/v.jsonl"),
-            Block(sentences=['Er sagte {"stand": "x"} dazu.'], reason="pause"), st)
+            Path("/tmp/p.md"), Block(sentences=['Er sagte {"stand": "x"} dazu.'], reason="pause"), st)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -1936,8 +1935,8 @@ def sec_09(sec_08):
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(143, "batch run does not use the retired field names",
-              not any(n in p_batch for n in ('"spiegel"', "spiegel", '"stand"',
-                                             "`frage`")), p_batch[:200])
+              not any(n in p_batch for n in ('"spiegel"', "spiegel", '"stand"')),
+              p_batch[:200])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     return rec
@@ -1960,7 +1959,7 @@ def sec_10(sec_09):
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(145, "the counter-check no longer names a `frage` action",
-              "`frage`" not in p)
+              "`frage`" not in p.split("GEGENPRUEFEN")[1])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -2013,20 +2012,20 @@ def sec_11(sec_10):
     # this section -- never by running an agent.
     try:
         p_first = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b, st,
+            Path("/tmp/protokoll.md"), b, st,
             backlog_note="", order_note="", first_turn=True)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_later = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b, st,
+            Path("/tmp/protokoll.md"), b, st,
             backlog_note="", order_note="", first_turn=False)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(152, "first_turn defaults to True (every untouched caller keeps working)",
               consumer.build_prompt(
-                  Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b, st,
+                  Path("/tmp/protokoll.md"), b, st,
                   backlog_note="", order_note="")
               == p_first)
     except Exception:  # noqa: BLE001
@@ -2882,7 +2881,7 @@ def sec_22(sec_21):
     # both used to die on the value sitting in the state.
     try:
         _chk_ne(220, "a later prompt is built from the poisoned state",
-                           consumer.build_prompt, Path("/tmp/p.md"), gift_datei,
+                           consumer.build_prompt, Path("/tmp/p.md"),
                            block("Weiter geht es."), st_gift)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -3032,7 +3031,7 @@ def sec_24(sec_23):
 
 @pytest.fixture(scope="module")
 def sec_25(sec_24):
-    """Scenario: the prompt names what has to go under `## Offene Fragen`"""
+    """Scenario: what fell off the stage is not the agent's to file"""
     global _REC
     _REC = rec = _Recorder()
     global p_park, st_park, text
@@ -3040,7 +3039,7 @@ def sec_25(sec_24):
 
     # ============================== I3: nothing falls off the stage unrecorded
     try:
-        print("\nthe prompt names what has to go under `## Offene Fragen`")
+        print("\nwhat fell off the stage is not the agent's to file")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -3053,35 +3052,21 @@ def sec_25(sec_24):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        p_park = consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"),
-                                       block("Weiter im Text."), st_park)
+        p_park = consumer.build_prompt(Path("/tmp/p.md"), block("Weiter im Text."), st_park)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(227, "the parked entry is handed to the agent",
-              "**Termin** Montag gegen Dienstag" in p_park, p_park[-400:])
+        _chk(227, "the parked entry is not handed to the agent: the host files it",
+              "**Termin** Montag gegen Dienstag" not in p_park, p_park[-400:])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(228, "it is named as still to be recorded",
-              "NOCH NICHT IM PROTOKOLL" in p_park and "Offene Fragen" in p_park,
-              p_park[-400:])
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(229, "the prompt supplement uses the prompt's ASCII transliteration",
-              "Buehne" in p_park.split("NOCH NICHT IM PROTOKOLL")[1][:200],
-              p_park[-400:])
+        _chk(228, "the prompt has no part for what is still to be recorded",
+              "NOCH NICHT IM PROTOKOLL" not in p_park, p_park[-400:])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
         st_park.mark_recorded(st_park.unrecorded())
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(230, "once a run was told, the next prompt is quiet again",
-              "NOCH NICHT IM PROTOKOLL" not in consumer.build_prompt(
-                  Path("/tmp/p.md"), Path("/tmp/v.jsonl"), block("Weiter."), st_park))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     return rec
@@ -3595,7 +3580,7 @@ def send(obj):
 send({"type": "ready", "session_id": a.session_id})
 first = True
 turn_no = 0
-vorschlaege_pfad = None
+protokoll_pfad = None
 for line in sys.stdin:
     line = line.strip()
     if not line:
@@ -3608,46 +3593,45 @@ for line in sys.stdin:
         continue
     turn_no += 1
     time.sleep(a.delay)
-    treffer = re.search(r"^VORSCHLAEGE: (.+)$", msg.get("prompt") or "",
+    treffer = re.search(r"^PROTOKOLL:\\s+(.+)$", msg.get("prompt") or "",
                         re.MULTILINE)
     if treffer:
         # B5: this line is only in the FULL prompt (turn 1). A real
         # agent has the path from the conversation history after that;
         # this fake worker mimics the same thing with a variable instead
         # of re-parsing a line that later turns deliberately omit.
-        vorschlaege_pfad = treffer.group(1).strip()
-    if vorschlaege_pfad:
+        protokoll_pfad = treffer.group(1).strip()
+    if protokoll_pfad:
         # B5: log every prompt this fake worker actually received, so
         # the test can assert turn 1 carries the full contract and
         # turn 2 does not -- exactly what a real worker session sees.
-        log_pfad = vorschlaege_pfad.rsplit(".", 1)[0] + ".prompts.log"
+        log_pfad = protokoll_pfad.rsplit("/", 1)[0] + "/vorschlag.prompts.log"
         with open(log_pfad, "a", encoding="utf-8") as lg:
             lg.write(f"===TURN {turn_no}===\\n" + (msg.get("prompt") or "")
                      + "\\n===END===\\n")
-    if first and vorschlaege_pfad:
+    # The agent edits no file: it answers with ONE fenced JSON reply. The
+    # decision lands before any topic (implicit `Beginn` block), then an
+    # accepted topic opens `### HH:MM Budget und Fristen` and the `aufgaben`
+    # item lands in it. `--restart`: the second run on the same, already
+    # existing file answers with one more `verlauf` item.
+    antwort = {"buehne": [{"action": "none"}]}
+    if first and protokoll_pfad:
         first = False
-        # The decision lands before any topic (implicit `Beginn` block),
-        # then an accepted topic opens `### HH:MM Budget und Fristen` and
-        # the tagged entry lands in it. `--restart`: the second run on the
-        # same, already existing v2 file appends one more entry.
         if a.restart:
-            aktionen = ({"action": "tag_entry", "tag": "notiz",
-                         "text": "nach dem Neustart weiter"},)
+            antwort = {"verlauf": ["nach dem Neustart weiter"]}
         else:
-            aktionen = (
-                {"action": "mirror", "text": "Robo hat das Budget verstanden."},
-                {"action": "decision", "time": "19:43",
-                 "text": "zwoelftausend Euro stehen"},
-                {"action": "topic", "title": "Budget und Fristen",
-                 "markdown": "## Budget und Fristen"},
-                {"action": "tag_entry", "tag": "aufgabe",
-                 "text": "Antrag bis sechsten Oktober"})
-        with open(vorschlaege_pfad, "a", encoding="utf-8") as fh:
-            for aktion in aktionen:
-                fh.write(json.dumps(aktion, ensure_ascii=False) + "\\n")
-            fh.flush()
+            antwort = {
+                "aufgaben": ["Antrag bis sechsten Oktober"],
+                "buehne": [
+                    {"action": "mirror", "text": "Robo hat das Budget verstanden."},
+                    {"action": "decision", "time": "19:43",
+                     "text": "zwoelftausend Euro stehen"},
+                    {"action": "topic", "title": "Budget und Fristen",
+                     "markdown": "## Budget und Fristen"}]}
     send({"type": "result", "id": msg.get("id"), "ok": True, "failed": False,
-          "partial": False, "final": "OK \\u2014 mitgeschrieben", "error": None})
+          "partial": False,
+          "final": "```json\\n" + json.dumps(antwort, ensure_ascii=False) + "\\n```",
+          "error": None})
 '''
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -4050,7 +4034,7 @@ for line in sys.stdin:
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(290, "the accepted topic opened `### HH:MM Titel`, the tag_entry landed in it",
+        _chk(290, "the accepted topic opened `### HH:MM Titel`, the aufgaben item landed in it",
               _block is not None, _live[:2000])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -4152,7 +4136,7 @@ def sec_31(sec_30):
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(293, "the restart continues the file (appending, format 2)",
-              "appending to:" in ausgabe_r and "protocol format: 2" in ausgabe_r,
+              "appending to:" in ausgabe_r and "continued in format 2" not in ausgabe_r,
               ausgabe_r[-600:])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -5533,9 +5517,9 @@ def sec_43(sec_40):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(399, "the v2 prompt does not ask the agent to file them",
+        _chk(399, "the prompt does not ask the agent to file them",
               "NOCH NICHT IM PROTOKOLL" not in consumer.open_state_block(
-                  st_park_v2 := StageState(), include_unrecorded=False))
+                  st_park_v2 := StageState()))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5543,32 +5527,18 @@ def sec_43(sec_40):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(400, "open_state_block(include_unrecorded=False) omits the part",
-              "NOCH NICHT" not in consumer.open_state_block(st_park_v2,
-                                                            include_unrecorded=False)
-              and "NOCH NICHT" in consumer.open_state_block(st_park_v2))
+        _chk(400, "open_state_block omits what is parked, the host files it",
+              "NOCH NICHT" not in consumer.open_state_block(st_park_v2))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        p_v1 = consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"),
-                                     block("Weiter."), st_park_v2)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(401, "build_prompt(fmt=1) is unchanged",
-              p_v1 == consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"),
-                                            block("Weiter."), st_park_v2, fmt=1)
-              and "NOCH NICHT IM PROTOKOLL" in p_v1)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(402, "build_prompt(fmt=2) omits it, first and later turns",
+        _chk(402, "build_prompt omits it, first and later turns",
               "NOCH NICHT" not in consumer.build_prompt(
-                  Path("/tmp/p.md"), Path("/tmp/v.jsonl"), block("Weiter."),
-                  st_park_v2, fmt=2)
+                  Path("/tmp/p.md"), block("Weiter."),
+                  st_park_v2)
               and "NOCH NICHT" not in consumer.build_prompt(
-                  Path("/tmp/p.md"), Path("/tmp/v.jsonl"), block("Weiter."),
-                  st_park_v2, fmt=2, first_turn=False))
+                  Path("/tmp/p.md"), block("Weiter."),
+                  st_park_v2, first_turn=False))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5576,7 +5546,7 @@ def sec_43(sec_40):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(403, "under v1 nothing is filed by the consumer",
+        _chk(403, "a writer without a protocol files nothing",
               w_u1.file_unrecorded(st_park_v2.unrecorded()) == [])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -5615,29 +5585,33 @@ def sec_45(sec_43):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        p2 = consumer.build_prompt(Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"),
-                                   b_p2, st_p2, fmt=2,
+        p2 = consumer.build_prompt(Path("/tmp/protokoll.md"), b_p2, st_p2,
                                    file_names=["kostenplan", "leitfaden-2026"])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(410, "v2 first turn is AGENT_PROMPT_V2, not the v1 text",
-              "Du bist Robo" in p2 and p2 != consumer.build_prompt(
-                  Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_p2, st_p2))
+        _chk(410, "the first turn is AGENT_PROMPT, the JSON-reply instruction",
+              "Du bist Robo" in p2 and "GENAU EINEM JSON-Objekt" in p2
+              and p2 == consumer.build_prompt(
+                  Path("/tmp/protokoll.md"), b_p2, st_p2,
+                  file_names=["kostenplan", "leitfaden-2026"]))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(411, "it offers the tag_entry action", '"action":"tag_entry"' in p2, p2[:400])
+        _chk(411, "it asks for the five keys of the reply",
+              all(f'"{key}"' in p2 for key in ("verlauf", "entscheidungen", "aufgaben",
+                                               "offene_fragen", "buehne")), p2[:400])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(412, "it names all six tags", all(t in p2 for t in _pd.TAGS))
+        _chk(412, "it names the tag each list is filed under",
+              all(t in p2 for t in ("notiz", "beschluss", "aufgabe", "frage")))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(413, "each tag has a meaning line",
-              all(re.search(rf"^\s*-?\s*`{t}`", p2, re.M) for t in _pd.TAGS),
-              str([t for t in _pd.TAGS if not re.search(rf"^\s*-?\s*`{t}`", p2, re.M)]))
+        _chk(413, "each list has a meaning line",
+              all(re.search(rf"^\s*-?\s*`{t}`", p2, re.M)
+                  for t in ("verlauf", "entscheidungen", "aufgaben", "offene_fragen")))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5647,17 +5621,18 @@ def sec_45(sec_43):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(415, "the protocol is read-only for the agent", "Das Protokoll liest du NUR" in p2)
+        _chk(415, "the protocol is read-only for the agent",
+              "Du schreibst weder das Protokoll" in p2 and "liest es NUR" in " ".join(p2.split()))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(416, "only the proposal file is written",
-              "VORSCHLAEGE: /tmp/vorschlag.jsonl" in p2 and "PROTOKOLL:  /tmp/protokoll.md" in p2)
+        _chk(416, "no file is written: the protocol is named, no proposal file",
+              "VORSCHLAEGE" not in p2 and "PROTOKOLL:  /tmp/protokoll.md" in p2)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(417, "decisions go through `decision` only, never also as tag_entry",
-              "nie zusaetzlich als `tag_entry`" in p2)
+        _chk(417, "a decision sent twice is filed once, and the prompt says so",
+              "traegt er ihn trotzdem nur einmal ein" in p2)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5675,23 +5650,18 @@ def sec_45(sec_43):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(420, "the v1 prompt does not carry the v2 graph/topic order rule",
-              "ersetzt `topic` nie" not in consumer.AGENT_PROMPT)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
         _chk(421, "the decision_breach notice points at the overview",
               "Ueberblick unter Beschluesse" in p2)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(422, "at most ONE question, the rest as tag_entry frage",
-              "jede weitere als `tag_entry` mit Tag `frage`" in p2)
+        _chk(422, "at most ONE question, the rest under offene_fragen",
+              "jede weitere unter `offene_fragen`" in p2)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(423, "done work becomes a notiz entry starting **erledigt**",
-              "**erledigt**" in p2 and "`notiz`" in p2.split("**erledigt**")[0][-200:])
+        _chk(423, "done work becomes a verlauf item starting **erledigt**",
+              "**erledigt**" in p2 and "`verlauf`" in p2.split("**erledigt**")[0][-200:])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5713,8 +5683,7 @@ def sec_45(sec_43):
         _chk(427, "the rules from the real meeting survive",
               all(s in p2 for s in ("ANBAUEN STATT UMBAUEN", "FRAGEN NUR, WENN RATEN SCHADET",
                                     "AUCH OHNE WECKWORT", "GEGENPRUEFEN",
-                                    "sagst du das in `mirror`", "Chat", "Telegram",
-                                    '"OK — ')))
+                                    "sagst du das in `mirror`", "Chat", "Telegram")))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5741,14 +5710,12 @@ def sec_45(sec_43):
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(432, "braces in file names survive the template",
-              "a{b}c" in consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"),
-                                               b_p2, st_p2, fmt=2, file_names=["a{b}c"]))
+              "a{b}c" in consumer.build_prompt(Path("/tmp/p.md"), b_p2, st_p2, file_names=["a{b}c"]))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(433, "no file names -> the list says so",
-              "(keine)" in consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"),
-                                                 b_p2, st_p2, fmt=2))
+              "(keine)" in consumer.build_prompt(Path("/tmp/p.md"), b_p2, st_p2))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5756,8 +5723,7 @@ def sec_45(sec_43):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        p_viele = consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"),
-                                        b_p2, st_p2, fmt=2, file_names=viele)
+        p_viele = consumer.build_prompt(Path("/tmp/p.md"), b_p2, st_p2, file_names=viele)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5768,7 +5734,7 @@ def sec_45(sec_43):
     try:
         _chk(435, "a name that cannot be a link is not offered",
               "zwei\nzeilen" not in consumer.build_prompt(
-                  Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b_p2, st_p2, fmt=2,
+                  Path("/tmp/p.md"), b_p2, st_p2,
                   file_names=["zwei\nzeilen", "ok"]))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -5786,24 +5752,20 @@ def sec_46(sec_45):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(436, "ORDER_NOTE_V2 names no v1 section",
-              not any(s in consumer.ORDER_NOTE_V2 for s in V1_SECTIONS))
+        _chk(436, "ORDER_NOTE names no old section",
+              not any(s in consumer.ORDER_NOTE for s in V1_SECTIONS))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
         _chk(437, "it keeps the triad and the quote rule",
-              all(s in consumer.ORDER_NOTE_V2 for s in ("AUFTRAG", "EINHEIT",
+              all(s in consumer.ORDER_NOTE for s in ("AUFTRAG", "EINHEIT",
                                                         "BESCHLUSSLAGE", "quote",
                                                         "KOPIERVORGANG")))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(438, "it routes the result to a tag_entry", "tag_entry" in consumer.ORDER_NOTE_V2)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(439, "the v1 order note is untouched", "## Entscheidungen" in consumer.ORDER_NOTE
-              and "## Aufgaben" in consumer.ORDER_NOTE)
+        _chk(438, "it routes the result into the reply's lists",
+              "`verlauf`" in consumer.ORDER_NOTE and "`aufgaben`" in consumer.ORDER_NOTE)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     return rec
@@ -5825,17 +5787,17 @@ def sec_47(sec_46):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        d1_ = consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b_p2, st_d,
+        d1_ = consumer.build_prompt(Path("/tmp/p.md"), b_p2, st_d,
                                     first_turn=False)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        d2_ = consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b_p2, st_d,
-                                    first_turn=False, fmt=2, file_names=["x"])
+        d2_ = consumer.build_prompt(Path("/tmp/p.md"), b_p2, st_d,
+                                    first_turn=False, file_names=["x"])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(440, "v1 and v2 later turns are the same DELTA_PROMPT",
+        _chk(440, "later turns are DELTA_PROMPT, whatever the file names",
               d1_ == d2_ == consumer.DELTA_PROMPT.format(
                   situation="", open_state="", thread="", block=b_p2.text), repr(d2_[:200]))
     except Exception:  # noqa: BLE001
@@ -5855,45 +5817,37 @@ def sec_48(sec_47):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        p_v1a = consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b_p2, st_p2)
+        p_v1a = consumer.build_prompt(Path("/tmp/p.md"), b_p2, st_p2)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(441, "fmt=1 ignores file_names", p_v1a == consumer.build_prompt(
-            Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b_p2, st_p2, fmt=1,
-            file_names=["kostenplan"]))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(442, "fmt=1 first turn is exactly AGENT_PROMPT.format(...) (byte for byte)",
+        _chk(442, "first turn is exactly AGENT_PROMPT.format(...) (byte for byte)",
               p_v1a == consumer.AGENT_PROMPT.format(
-                  path=Path("/tmp/p.md"), proposals=Path("/tmp/v.jsonl"),
+                  path=Path("/tmp/p.md"), files=consumer.prompt_file_list(None),
                   block=b_p2.text, folder=Path("/tmp"),
                   situation=st_p2.follow_up_note(),
                   open_state=consumer.open_state_block(st_p2)))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(443, "the v1 order run is AGENT_PROMPT with ORDER_NOTE in the situation",
-              consumer.build_prompt(Path("/tmp/p.md"), Path("/tmp/v.jsonl"), b_p2, st_p2,
+        _chk(443, "an order run is AGENT_PROMPT with ORDER_NOTE in the situation",
+              consumer.build_prompt(Path("/tmp/p.md"), b_p2, st_p2,
                                     order_note=consumer.ORDER_NOTE)
               == consumer.AGENT_PROMPT.format(
-                  path=Path("/tmp/p.md"), proposals=Path("/tmp/v.jsonl"),
+                  path=Path("/tmp/p.md"), files=consumer.prompt_file_list(None),
                   block=b_p2.text, folder=Path("/tmp"),
                   situation=consumer.ORDER_NOTE + st_p2.follow_up_note(),
                   open_state=consumer.open_state_block(st_p2)))
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(444, "a wake-word turn gets ORDER_NOTE_V2 in v2, ORDER_NOTE in v1, none without",
-              consumer.order_note_for(2, True) == consumer.ORDER_NOTE_V2
-              and consumer.order_note_for(1, True) == consumer.ORDER_NOTE
-              and consumer.order_note_for(2, False) == ""
-              and consumer.order_note_for(1, False) == "")
+        _chk(444, "a wake-word turn gets ORDER_NOTE, none without",
+              consumer.order_note_for(True) == consumer.ORDER_NOTE
+              and consumer.order_note_for(False) == "")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(445, "the v2 link rule also allows the file just made on request",
+        _chk(445, "the link rule also allows the file just made on request",
               "auf\n   Zuruf angelegt oder geaendert" in p2
               or "auf Zuruf angelegt oder geaendert" in p2)
     except Exception:  # noqa: BLE001
@@ -5903,24 +5857,18 @@ def sec_48(sec_47):
               "ausser ein Auftrag der Runde verlangt ausdruecklich" in p2)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(447, "fmt=1 still is AGENT_PROMPT with its sections",
-              "## Verlauf" in p_v1a and "## Entscheidungen" in p_v1a
-              and "tag_entry" not in p_v1a)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
     return rec
 
 
 @pytest.fixture(scope="module")
 def sec_49(sec_48):
-    """Scenario: v2 -> v1 mid-run: the turn falls back to the v1 prompt, logged once"""
+    """Scenario: a file rewritten in the old format mid-run is refused, not touched"""
     global _REC
     _REC = rec = _Recorder()
-    global d_fb, fb_log, fb_log2, p_fb, prot_fb, st_fb, w_fb
+    global d_fb, p_fb, prot_fb, st_fb, w_fb
 
     try:
-        print("\nv2 -> v1 mid-run: the turn falls back to the v1 prompt, logged once")
+        print("\na file rewritten in the old format mid-run is refused, not touched")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -5936,15 +5884,6 @@ def sec_49(sec_48):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        fb_log = []
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(448, "a live v2 protocol gives fmt 2",
-              consumer.turn_protocol_format(w_fb, fb_log.append) == (2, False))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
         p_fb.write_text(consumer.HEADER.format(**_HEAD), encoding="utf-8")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -5953,7 +5892,7 @@ def sec_49(sec_48):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(449, "the next write notices the file is v1 now",
+        _chk(449, "a file rewritten in the old format mid-run is refused, not touched",
               prot_fb.add_entry("notiz", "x").reason == "not v2" and not prot_fb.is_v2)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -5961,44 +5900,18 @@ def sec_49(sec_48):
         k.log = alt_log
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
-    try:
-        fb_log2 = []
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(450, "the turn falls back to fmt 1 and says it switched",
-              consumer.turn_protocol_format(w_fb, lambda *a: fb_log2.append(a)) == (1, True))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(451, "the writer no longer treats the file as v2", w_fb.protocol is None)
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(452, "the next turn stays v1 without a second log line",
-              consumer.turn_protocol_format(w_fb, lambda *a: fb_log2.append(a)) == (1, False)
-              and len(fb_log2) == 1, str(fb_log2))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(453, "a v1 run from the start is fmt 1, no switch",
-              consumer.turn_protocol_format(v2_schreiber("wfb1", None)[0],
-                                            fb_log.append) == (1, False)
-              and fb_log == [])
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
     return rec
 
 
 @pytest.fixture(scope="module")
 def sec_50(sec_49):
-    """Scenario: v2 turn preparation never raises into the turn"""
+    """Scenario: turn preparation never raises into the turn"""
     global _REC
     _REC = rec = _Recorder()
     global _kaputt, d_pr, e, erg_pr, n, names_pr, pr_log, proj, prot_pr, st_pr, w_pr
 
     try:
-        print("\nv2 turn preparation never raises into the turn")
+        print("\nturn preparation never raises into the turn")
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6027,7 +5940,7 @@ def sec_50(sec_49):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        names_pr = consumer.prepare_v2_turn(w_pr, st_pr, proj, [], lambda *a: None)
+        names_pr = consumer.prepare_turn(w_pr, st_pr, proj, [], lambda *a: None)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6056,7 +5969,7 @@ def sec_50(sec_49):
         rec.error += traceback.format_exc()[-1200:]
     try:
         try:
-            erg_pr = consumer.prepare_v2_turn(w_pr, st_pr, _v2 / "gibtsnicht", [{"x": 1}],
+            erg_pr = consumer.prepare_turn(w_pr, st_pr, _v2 / "gibtsnicht", [{"x": 1}],
                                               lambda *a: pr_log.append(a))
         except Exception as e:  # noqa: BLE001
             erg_pr = e
@@ -6360,7 +6273,7 @@ def sec_56(sec_54):
     """Scenario: level 2: its own question is not the agent's to resolve"""
     global _REC
     _REC = rec = _Recorder()
-    global _args, _eigene_zeile, _erster, _fmt, _kw, _mit, _nur, _ohne, _p_pol, _q_pol, _quelle, _st_nur, _st_pol
+    global _args, _eigene_zeile, _erster, _kw, _mit, _nur, _ohne, _p_pol, _q_pol, _quelle, _st_nur, _st_pol
 
     try:
         print("\nlevel 2: its own question is not the agent's to resolve")
@@ -6441,19 +6354,17 @@ def sec_56(sec_54):
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        for _fmt in (1, 2):
-            for _erster in (True, False):
-                _args = (Path("/tmp/p.md"), Path("/tmp/v.jsonl"),
-                         block("Wir reden über den Termin."), _st_pol)
-                _kw = dict(fmt=_fmt, first_turn=_erster, file_names=["a.md"])
-                _chk(490, f"build_prompt(fmt={_fmt}, first_turn={_erster}) with an "
-                      "empty policy_ask_id is byte-identical",
-                      k.build_prompt(*_args, policy_ask_id="", **_kw)
-                      == k.build_prompt(*_args, **_kw))
-                _p_pol = k.build_prompt(*_args, policy_ask_id=_q_pol, **_kw)
-                _chk(491, f"build_prompt(fmt={_fmt}, first_turn={_erster}) passes the "
-                      "id on", _eigene_zeile in _p_pol
-                      and "Eigenes Dokument" not in _p_pol)
+        for _erster in (True, False):
+            _args = (Path("/tmp/p.md"), block("Wir reden über den Termin."), _st_pol)
+            _kw = dict(first_turn=_erster, file_names=["a.md"])
+            _chk(490, f"build_prompt(first_turn={_erster}) with an "
+                  "empty policy_ask_id is byte-identical",
+                  k.build_prompt(*_args, policy_ask_id="", **_kw)
+                  == k.build_prompt(*_args, **_kw))
+            _p_pol = k.build_prompt(*_args, policy_ask_id=_q_pol, **_kw)
+            _chk(491, f"build_prompt(first_turn={_erster}) passes the "
+                  "id on", _eigene_zeile in _p_pol
+                  and "Eigenes Dokument" not in _p_pol)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
@@ -6497,20 +6408,20 @@ def sec_57(sec_56):
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_tc_first = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_tc, st_tc,
+            Path("/tmp/protokoll.md"), b_tc, st_tc,
             backlog_note="", order_note="", first_turn=True)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_tc_delta = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_tc, st_tc,
+            Path("/tmp/protokoll.md"), b_tc, st_tc,
             backlog_note="", order_note="", first_turn=False)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
-        _chk(493, "default first-turn rendering is byte-identical to f1bf253 (pinned sha256)",
+        _chk(493, "default first-turn rendering is pinned (sha256 of the JSON-reply prompt)",
               hashlib.sha256(p_tc_first.encode("utf-8")).hexdigest()
-              == "505143b00375974fa10b10b9355e6c0491648501c6c8e51808f31815db368813",
+              == "0bac075a5e9e0e70974df0022dde57ca8c1d0b93f680ed15e7d91a4b772fa61e",
               hashlib.sha256(p_tc_first.encode("utf-8")).hexdigest())
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -6537,7 +6448,7 @@ def sec_58(sec_57):
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_tc_on = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_tc, st_tc,
+            Path("/tmp/protokoll.md"), b_tc, st_tc,
             backlog_note="", order_note="", first_turn=True, topic_criterion=True)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -6608,7 +6519,7 @@ def sec_59(sec_58):
             _chk(502, "mutation fixture actually dropped the counter-rule line",
                   consumer.TOPIC_CRITERION != _tc_original)
             p_no_counter = consumer.build_prompt(
-                Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_tc, st_tc,
+                Path("/tmp/protokoll.md"), b_tc, st_tc,
                 backlog_note="", order_note="", first_turn=True, topic_criterion=True)
             _chk(503, "mutation: dropping the counter-rule line fails the counter-rule assert",
                   "KEIN Wechsel ist" not in p_no_counter)
@@ -6627,7 +6538,7 @@ def sec_59(sec_58):
             _chk(505, "mutation fixture actually dropped marker (c)",
                   consumer.TOPIC_CRITERION != _tc_original)
             p_no_c = consumer.build_prompt(
-                Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_tc, st_tc,
+                Path("/tmp/protokoll.md"), b_tc, st_tc,
                 backlog_note="", order_note="", first_turn=True, topic_criterion=True)
             _chk(506, "mutation: dropping marker (c) fails the marker-(c) assert",
                   '"kommen wir zu"' not in p_no_c)
@@ -6658,7 +6569,7 @@ def sec_60(sec_59):
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_tc_delta_on = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_tc, st_tc,
+            Path("/tmp/protokoll.md"), b_tc, st_tc,
             backlog_note="", order_note="", first_turn=False, topic_criterion=True)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -6704,7 +6615,7 @@ def sec_61(sec_60):
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_kanari = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_kanari, st_tc,
+            Path("/tmp/protokoll.md"), b_kanari, st_tc,
             backlog_note="", order_note="", first_turn=True, topic_criterion=True)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -6755,13 +6666,13 @@ def sec_62(sec_61):
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_th_first = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_th, st_th,
+            Path("/tmp/protokoll.md"), b_th, st_th,
             backlog_note="", order_note="", first_turn=True)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_th_delta = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_th, st_th,
+            Path("/tmp/protokoll.md"), b_th, st_th,
             backlog_note="", order_note="", first_turn=False)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -6769,7 +6680,7 @@ def sec_62(sec_61):
         _chk(515, "default (thread=None) first-turn rendering still matches the "
               "topic_criterion pin",
               hashlib.sha256(p_th_first.encode("utf-8")).hexdigest()
-              == "505143b00375974fa10b10b9355e6c0491648501c6c8e51808f31815db368813",
+              == "0bac075a5e9e0e70974df0022dde57ca8c1d0b93f680ed15e7d91a4b772fa61e",
               hashlib.sha256(p_th_first.encode("utf-8")).hexdigest())
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -6876,7 +6787,7 @@ def sec_64(sec_63):
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_faden = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_faden, st_faden,
+            Path("/tmp/protokoll.md"), b_faden, st_faden,
             backlog_note="", order_note="", first_turn=False,
             thread=["- 10:05 erstes Thema", "- 10:10 zweites Thema"])
     except Exception:  # noqa: BLE001
@@ -6910,7 +6821,7 @@ def sec_64(sec_63):
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_faden_first = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_faden, st_faden,
+            Path("/tmp/protokoll.md"), b_faden, st_faden,
             backlog_note="", order_note="", first_turn=True,
             thread=["- 10:05 erstes Thema"])
     except Exception:  # noqa: BLE001
@@ -6940,7 +6851,7 @@ def sec_65(sec_64):
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_faden_leer = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_faden, st_leer_th,
+            Path("/tmp/protokoll.md"), b_faden, st_leer_th,
             backlog_note="", order_note="", first_turn=False, thread=[])
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -7004,7 +6915,7 @@ def sec_67(sec_66):
             _chk(534, "mutation fixture actually dropped the thread placeholder",
                   consumer.DELTA_PROMPT != _orig_delta_prompt)
             p_mut = consumer.build_prompt(
-                Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_faden, st_faden,
+                Path("/tmp/protokoll.md"), b_faden, st_faden,
                 backlog_note="", order_note="", first_turn=False,
                 thread=["- 10:05 erstes Thema"])
             _chk(535, "mutation: dropping the placeholder fails the headline-line assert",
@@ -7058,7 +6969,7 @@ def sec_68(sec_67):
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_growth = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_faden, st_growth,
+            Path("/tmp/protokoll.md"), b_faden, st_growth,
             backlog_note="", order_note="", first_turn=False, thread=_fixed_bullets)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
@@ -7105,7 +7016,7 @@ def sec_69(sec_68):
         rec.error += traceback.format_exc()[-1200:]
     try:
         p_th_kanari = consumer.build_prompt(
-            Path("/tmp/protokoll.md"), Path("/tmp/vorschlag.jsonl"), b_th_kanari, st_th,
+            Path("/tmp/protokoll.md"), b_th_kanari, st_th,
             backlog_note="", order_note="", first_turn=False,
             thread=[f"- 10:00 ueber die {KANARI_TH[0]}"])
     except Exception:  # noqa: BLE001
@@ -7610,7 +7521,7 @@ def test_05_batching_and_backlog(sec_05, site, occ):
 
 
 @pytest.mark.parametrize("site, occ", [
-    pytest.param(106, None, id='the proposal file is named'),
+    pytest.param(106, None, id='no proposal file is named: the agent writes no file'),
     pytest.param(107, None, id='buehne.json is NOT written by the agent any more'),
     pytest.param(108, None, id='the actions are listed'),
     pytest.param(109, None, id='the quote requirement is explicit'),
@@ -7847,10 +7758,8 @@ def test_24_a_main_area_is_only_replaced_with_a_quote_that_was(sec_24, site, occ
 
 
 @pytest.mark.parametrize("site, occ", [
-    pytest.param(227, None, id='the parked entry is handed to the agent'),
-    pytest.param(228, None, id='it is named as still to be recorded'),
-    pytest.param(229, None, id="the prompt supplement uses the prompt's ASCII transliteration"),
-    pytest.param(230, None, id='once a run was told, the next prompt is quiet again'),
+    pytest.param(227, None, id='the parked entry is not handed to the agent: the host files it'),
+    pytest.param(228, None, id='the prompt has no part for what is still to be recorded'),
 ])
 def test_25_the_prompt_names_what_has_to_go_under_offene_frage(sec_25, site, occ):
     _assert_site(sec_25, site, occ)
@@ -7939,7 +7848,7 @@ def test_29_a_restart_takes_the_running_meeting_s_stage_back_o(sec_29, site, occ
     pytest.param(287, None, id='the raw transcript belongs to the consumer alone'),
     pytest.param(288, None, id='a fresh meeting writes protocol v2'),
     pytest.param(289, None, id='the accepted decision was filed by the consumer as beschluss'),
-    pytest.param(290, None, id='the accepted topic opened `### HH:MM Titel`, the tag_entry landed in it'),
+    pytest.param(290, None, id='the accepted topic opened `### HH:MM Titel`, the aufgaben item landed in it'),
     pytest.param(291, None, id='topic block and entry sit between ## Themen and ## Rohtranskript'),
     pytest.param(292, None, id='## Rohtranskript is intact: one heading, every sentence, in order'),
 ])
@@ -8076,10 +7985,9 @@ def test_40_v1_a_tag_entry_is_refused_the_file_is_not_touched(sec_40, site, occ)
     pytest.param(397, None, id='an expired question is filed as frage'),
     pytest.param(398, None, id='and both are marked recorded'),
     pytest.param(399, None, id='the v2 prompt does not ask the agent to file them'),
-    pytest.param(400, None, id='open_state_block(include_unrecorded=False) omits the part'),
-    pytest.param(401, None, id='build_prompt(fmt=1) is unchanged'),
-    pytest.param(402, None, id='build_prompt(fmt=2) omits it, first and later turns'),
-    pytest.param(403, None, id='under v1 nothing is filed by the consumer'),
+    pytest.param(400, None, id='open_state_block omits what is parked, the host files it'),
+    pytest.param(402, None, id='build_prompt omits it, first and later turns'),
+    pytest.param(403, None, id='a writer without a protocol files nothing'),
 ])
 def test_43_v2_what_fell_off_the_stage_is_filed_by_the_consume(sec_43, site, occ):
     _assert_site(sec_43, site, occ)
@@ -8088,20 +7996,19 @@ def test_43_v2_what_fell_off_the_stage_is_filed_by_the_consume(sec_43, site, occ
 
 
 @pytest.mark.parametrize("site, occ", [
-    pytest.param(410, None, id='v2 first turn is AGENT_PROMPT_V2, not the v1 text'),
-    pytest.param(411, None, id='it offers the tag_entry action'),
-    pytest.param(412, None, id='it names all six tags'),
-    pytest.param(413, None, id='each tag has a meaning line'),
+    pytest.param(410, None, id='the first turn is AGENT_PROMPT, the JSON-reply instruction'),
+    pytest.param(411, None, id='it asks for the five keys of the reply'),
+    pytest.param(412, None, id='it names the tag each list is filed under'),
+    pytest.param(413, None, id='each list has a meaning line'),
     pytest.param(414, None, id='no v1 section is a write target any more'),
     pytest.param(415, None, id='the protocol is read-only for the agent'),
-    pytest.param(416, None, id='only the proposal file is written'),
-    pytest.param(417, None, id='decisions go through `decision` only, never also as tag_entry'),
+    pytest.param(416, None, id='no file is written: the protocol is named, no proposal file'),
+    pytest.param(417, None, id='a decision sent twice is filed once, and the prompt says so'),
     pytest.param(418, None, id='a topic opens the new topic block'),
     pytest.param(419, None, id='graph never replaces topic: on a topic change, topic goes FIRST'),
-    pytest.param(420, None, id='the v1 prompt does not carry the v2 graph/topic order rule'),
     pytest.param(421, None, id='the decision_breach notice points at the overview'),
-    pytest.param(422, None, id='at most ONE question, the rest as tag_entry frage'),
-    pytest.param(423, None, id='done work becomes a notiz entry starting **erledigt**'),
+    pytest.param(422, None, id='at most ONE question, the rest under offene_fragen'),
+    pytest.param(423, None, id='done work becomes a verlauf item starting **erledigt**'),
     pytest.param(424, None, id='nothing new = only the none line'),
     pytest.param(425, None, id='the file list is there'),
     pytest.param(426, None, id='the wikilink rule names only listed files'),
@@ -8120,42 +8027,34 @@ def test_45_v2_prompt_the_agent_proposes_tagged_entries_the_pr(sec_45, site, occ
 
 
 @pytest.mark.parametrize("site, occ", [
-    pytest.param(436, None, id='ORDER_NOTE_V2 names no v1 section'),
+    pytest.param(436, None, id='ORDER_NOTE names no old section'),
     pytest.param(437, None, id='it keeps the triad and the quote rule'),
-    pytest.param(438, None, id='it routes the result to a tag_entry'),
-    pytest.param(439, None, id='the v1 order note is untouched'),
+    pytest.param(438, None, id="it routes the result into the reply's lists"),
 ])
 def test_46_v2_order_note_the_triad_without_v1_sections(sec_46, site, occ):
     _assert_site(sec_46, site, occ)
 
 
 @pytest.mark.parametrize("site, occ", [
-    pytest.param(440, None, id='v1 and v2 later turns are the same DELTA_PROMPT'),
+    pytest.param(440, None, id='later turns are DELTA_PROMPT, whatever the file names'),
 ])
 def test_47_later_turns_delta_prompt_shared_by_both_formats(sec_47, site, occ):
     _assert_site(sec_47, site, occ)
 
 
 @pytest.mark.parametrize("site, occ", [
-    pytest.param(441, None, id='fmt=1 ignores file_names'),
-    pytest.param(442, None, id='fmt=1 first turn is exactly AGENT_PROMPT.format(...) (byte for byte)'),
-    pytest.param(443, None, id='the v1 order run is AGENT_PROMPT with ORDER_NOTE in the situation'),
-    pytest.param(444, None, id='a wake-word turn gets ORDER_NOTE_V2 in v2, ORDER_NOTE in v1, none without'),
-    pytest.param(445, None, id='the v2 link rule also allows the file just made on request'),
+    pytest.param(442, None, id='first turn is exactly AGENT_PROMPT.format(...) (byte for byte)'),
+    pytest.param(443, None, id='an order run is AGENT_PROMPT with ORDER_NOTE in the situation'),
+    pytest.param(444, None, id='a wake-word turn gets ORDER_NOTE, none without'),
+    pytest.param(445, None, id='the link rule also allows the file just made on request'),
     pytest.param(446, None, id='writing a project file only on an explicit order, never the protocol'),
-    pytest.param(447, None, id='fmt=1 still is AGENT_PROMPT with its sections'),
 ])
 def test_48_v1_prompt_unchanged(sec_48, site, occ):
     _assert_site(sec_48, site, occ)
 
 
 @pytest.mark.parametrize("site, occ", [
-    pytest.param(448, None, id='a live v2 protocol gives fmt 2'),
-    pytest.param(449, None, id='the next write notices the file is v1 now'),
-    pytest.param(450, None, id='the turn falls back to fmt 1 and says it switched'),
-    pytest.param(451, None, id='the writer no longer treats the file as v2'),
-    pytest.param(452, None, id='the next turn stays v1 without a second log line'),
-    pytest.param(453, None, id='a v1 run from the start is fmt 1, no switch'),
+    pytest.param(449, None, id='a file rewritten in the old format mid-run is refused, not touched'),
 ])
 def test_49_v2_v1_mid_run_the_turn_falls_back_to_the_v1_prompt(sec_49, site, occ):
     _assert_site(sec_49, site, occ)
@@ -8207,14 +8106,10 @@ def test_54_level_2_off_the_writer_files_exactly_what_it_filed(sec_54, site, occ
     pytest.param(487, None, id="the policy question alone: no 'nur du kannst das aufloesen' heading"),
     pytest.param(488, None, id='an id that is not open changes nothing'),
     pytest.param(489, None, id='an empty id is byte for byte the block without it'),
-    pytest.param(490, 0, id='build_prompt(fmt=1, first_turn=True) with an empty policy_ask_id is byte-identical'),
-    pytest.param(490, 1, id='build_prompt(fmt=1, first_turn=False) with an empty policy_ask_id is byte-identical'),
-    pytest.param(490, 2, id='build_prompt(fmt=2, first_turn=True) with an empty policy_ask_id is byte-identical'),
-    pytest.param(490, 3, id='build_prompt(fmt=2, first_turn=False) with an empty policy_ask_id is byte-identical'),
-    pytest.param(491, 0, id='build_prompt(fmt=1, first_turn=True) passes the id on'),
-    pytest.param(491, 1, id='build_prompt(fmt=1, first_turn=False) passes the id on'),
-    pytest.param(491, 2, id='build_prompt(fmt=2, first_turn=True) passes the id on'),
-    pytest.param(491, 3, id='build_prompt(fmt=2, first_turn=False) passes the id on'),
+    pytest.param(490, 0, id='build_prompt(first_turn=True) with an empty policy_ask_id is byte-identical'),
+    pytest.param(490, 1, id='build_prompt(first_turn=False) with an empty policy_ask_id is byte-identical'),
+    pytest.param(491, 0, id='build_prompt(first_turn=True) passes the id on'),
+    pytest.param(491, 1, id='build_prompt(first_turn=False) passes the id on'),
     pytest.param(492, None, id="run_turn hands the runner's open ask to build_prompt"),
 ])
 def test_56_level_2_its_own_question_is_not_the_agent_s_to_res(sec_56, site, occ):
@@ -8222,7 +8117,7 @@ def test_56_level_2_its_own_question_is_not_the_agent_s_to_res(sec_56, site, occ
 
 
 @pytest.mark.parametrize("site, occ", [
-    pytest.param(493, None, id='default first-turn rendering is byte-identical to f1bf253 (pinned sha256)'),
+    pytest.param(493, None, id='default first-turn rendering is pinned (sha256 of the JSON-reply prompt)'),
     pytest.param(494, None, id='default delta rendering is byte-identical to f1bf253 (pinned sha256)'),
 ])
 def test_57_topic_criterion_c2_measure_1_default_off_byte_iden(sec_57, site, occ):
@@ -8402,6 +8297,148 @@ def test_74_protocol_lane_gate_unhashable_non_string_action_do(sec_74, site, occ
     _assert_site(sec_74, site, occ)
 
 
+
+
+# --------------------------------------------------------------------------
+# The main turn is a JSON reply (issue #49): host side of capture-bullets.
+# Plain tests, no scenario fixture: each one runs the real consumer against
+# the fake worker's JSON mode (tests/fake_worker.py) or calls a pure helper.
+# --------------------------------------------------------------------------
+def _v1_minutes(raw_lines=()):
+    """A minutes file of the old format, as the agent used to keep it."""
+    text = k.HEADER.format(title="Alt", entity="example", day="2026-11-22",
+                           participants="", pslug="demo", start="09:00")
+    text = text.replace("## Verlauf\n", "## Verlauf\n\n- 09:05 Der alte Stand.\n")
+    return text + "".join(f"- **09:01** *left:* {z}\n" for z in raw_lines)
+
+
+def test_old_format_file_is_continued_below_a_dated_marker():
+    old = _v1_minutes(["Alte Zeile eins.", "Alte Zeile zwei."])
+    new = k.continue_in_format_2(old, "2026-11-22 10:15")
+    head, raw = old.split("## Rohtranskript", 1)
+    assert new.startswith(head)                       # the old text is never rewritten
+    assert new.endswith("## Rohtranskript" + raw)     # nor is the raw section
+    marker = "<!-- format 2 from 2026-11-22 10:15 -->"
+    assert new.count(marker) == 1
+    assert (new.index("## Verlauf") < new.index(marker) < new.index("## Überblick")
+            < new.index("## Themen") < new.index("## Rohtranskript"))
+    assert k.is_v2_text(new)
+    assert k.continue_in_format_2(new, "2026-11-22 11:00") == new   # idempotent
+
+
+def test_old_format_file_without_a_raw_section_gets_one():
+    old = "# Notizen\n\n## Verlauf\n\n- 09:05 Etwas.\n"
+    new = k.continue_in_format_2(old, "2026-11-22 10:15")
+    assert new.startswith(old) and k.is_v2_text(new)
+    assert new.rstrip().endswith("## Rohtranskript")
+
+
+def test_a_current_format_file_is_left_alone(tmp_path):
+    path = tmp_path / "protokoll.md"
+    path.write_text(k.protocol_header(
+        title="T", entity="e", day="2026-11-22", pslug="p", participants="",
+        start="09:00"), encoding="utf-8")
+    before = path.read_text(encoding="utf-8")
+    assert k.continue_protocol(path, datetime.now()) is False
+    assert path.read_text(encoding="utf-8") == before
+
+
+def _session_files(run, pattern):
+    return sorted(run.session_dir.glob(pattern)) if run.session_dir else []
+
+
+def test_start_continues_an_old_format_file_in_format_2(tmp_path):
+    from consumer_harness import run_consumer
+    day = datetime.now().date().isoformat()
+    old = _v1_minutes(["Alte Zeile eins."])
+
+    def seed(project):
+        folder = project / "sessions" / f"{day}-{k.slugify('Smoke Test', 'demo')}"
+        folder.mkdir(parents=True)
+        (folder / "protokoll.md").write_text(old, encoding="utf-8")
+
+    reply = '```json\n{"verlauf": ["Neuer Stand im Format 2."]}\n```'
+    run = run_consumer(tmp_path, finals=["Der neue Satz kommt jetzt."],
+                       wait_for_worker_turns=1, seed=seed,
+                       env_extra={"FAKE_WORKER_REPLY": reply})
+    assert run.returncode == 0 and not run.timed_out, run.log
+    assert "continued in format 2" in run.log
+    text = run.protocol_text
+    head = old.split("## Rohtranskript", 1)[0]
+    assert text.startswith(head)
+    assert re.search(r"^<!-- format 2 from \d{4}-\d\d-\d\d \d\d:\d\d -->$", text, re.M)
+    assert "Alte Zeile eins." in text and "Der neue Satz kommt jetzt." in text
+    themen = text[text.index("## Themen"):text.index("## Rohtranskript")]
+    assert "[notiz] Neuer Stand im Format 2." in themen
+
+
+def test_reply_items_are_filed_by_the_host(tmp_path):
+    from consumer_harness import run_consumer
+    reply = '```json\n' + json.dumps({
+        "verlauf": ["Der Stand."], "entscheidungen": [{"text": "Wir bauen es.", "topic_id": "t1"}],
+        "aufgaben": ["Mara schreibt den Antrag."], "offene_fragen": ["Wer zahlt?"],
+    }, ensure_ascii=False) + '\n```'
+    run = run_consumer(tmp_path, finals=["Ein Satz fuer den Termin."],
+                       wait_for_worker_turns=1, env_extra={"FAKE_WORKER_REPLY": reply})
+    assert run.returncode == 0 and not run.timed_out, run.log
+    for line in ("[notiz] Der Stand.", "[beschluss] Wir bauen es.",
+                 "[aufgabe] Mara schreibt den Antrag.", "[frage] Wer zahlt?"):
+        assert line in run.protocol_text, run.protocol_text
+
+
+def test_buehne_items_reach_the_stage_through_the_host(tmp_path):
+    from consumer_harness import run_consumer
+    action = {"action": "mirror", "text": "Robo hat den Plan verstanden."}
+    reply = '```json\n' + json.dumps({"buehne": [action]}) + '\n```'
+    run = run_consumer(tmp_path, finals=["Ein Satz fuer den Termin."],
+                       wait_for_worker_turns=1, env_extra={"FAKE_WORKER_REPLY": reply})
+    assert run.returncode == 0 and not run.timed_out, run.log
+    # The fake worker writes no file: the line in the proposal file is the host's.
+    [proposals] = _session_files(run, "vorschlag*.jsonl")
+    lines = [json.loads(z) for z in proposals.read_text(encoding="utf-8").splitlines()]
+    assert action in lines
+    assert (run.stage_json or {}).get("mirror") == action["text"]
+
+
+def test_the_capture_block_writes_no_file():
+    """The session host stays the only writer of the proposal file and of
+    buehne.json: the capture block has no way to write anything."""
+    root = Path(__file__).resolve().parents[1] / "blocks" / "capture_bullets"
+    src = "".join(f.read_text(encoding="utf-8") for f in root.glob("*.py"))
+    for needle in ("open(", "write_text", "atomic_write", "artefact(", "os.replace"):
+        assert needle not in src, needle
+
+
+def test_an_unreadable_reply_fails_the_turn_and_keeps_the_text(tmp_path):
+    from consumer_harness import run_consumer
+    raw = "Das ist leider kein JSON, sondern Plauderei."
+    run = run_consumer(tmp_path, finals=["Ein Satz fuer den Termin."],
+                       wait_for_worker_turns=1, env_extra={"FAKE_WORKER_REPLY": raw})
+    assert run.returncode == 0 and not run.timed_out, run.log
+    assert "run failed: reply not readable" in run.log, run.log
+    [kept] = _session_files(run, "reply-failures-*.jsonl")
+    rows = [json.loads(z) for z in kept.read_text(encoding="utf-8").splitlines()]
+    # The failed block is carried over and may run again at shutdown: every
+    # kept row is the raw reply, at least one exists.
+    assert rows and {r["raw"] for r in rows} == {raw}
+    [events] = _session_files(run, "stage-events*.jsonl")
+    names = [json.loads(z)["event"] for z in events.read_text(encoding="utf-8").splitlines()]
+    assert "reply_unreadable" in names
+    finished = [json.loads(z) for z in events.read_text(encoding="utf-8").splitlines()
+                if json.loads(z)["event"] == "run_finished"]
+    assert finished and finished[0]["ok"] is False
+    assert raw not in events.read_text(encoding="utf-8")   # the structural trace holds no speech
+    assert "Plauderei" not in run.protocol_text            # and the minutes got nothing
+
+
+def test_a_reply_with_a_failure_marker_is_a_failed_turn(tmp_path):
+    from consumer_harness import run_consumer
+    run = run_consumer(tmp_path, finals=["Ein Satz fuer den Termin."],
+                       wait_for_worker_turns=1,
+                       env_extra={"FAKE_WORKER_REPLY": '{"verlauf": ["x"]} API call failed'})
+    assert run.returncode == 0 and not run.timed_out, run.log
+    assert "run failed" in run.log
+    assert "[notiz] x" not in run.protocol_text
 
 
 def _scenarios_with_expected_failures():

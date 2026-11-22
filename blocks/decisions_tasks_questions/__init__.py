@@ -101,8 +101,8 @@ def page_call_out_note(page, level2: bool) -> str:
     """The prompt note of a Zuruf turn whose page already exists (German,
     ASCII like the rest of the prompt). "" without a page.
 
-    The block carries the wake word, so the turn also gets ORDER_NOTE_V2
-    ("Fuehre ihn AUS ... tag_entry notiz erledigt [[dateiname]]") -- read
+    The block carries the wake word, so the turn also gets ORDER_NOTE
+    ("Fuehre ihn AUS ... `verlauf` **erledigt** [[dateiname]]") -- read
     alone, that makes the agent create a second page and file a second
     entry. This note says the order is already done. With level 2 the
     fill order (`ORDER_TEXTS["document"]`) rides along in the same turn,
@@ -116,7 +116,7 @@ def page_call_out_note(page, level2: bool) -> str:
             f"ist schon angelegt, der Verweis [[{pfad.stem}]] steht schon im "
             "Protokoll. Das geht dem DIREKTEN AUFTRAG oben vor: lege fuer "
             "diesen Zuruf KEINE weitere Datei und KEINEN Protokolleintrag "
-            "an (auch keinen `tag_entry` mit **erledigt**).")
+            "an (auch keinen Eintrag mit **erledigt**).")
     if not level2:
         text += (" Ergaenze die Seite unterhalb ihrer ersten Zeilen (die "
                  "bleiben stehen) um 3-7 Stichpunkte zum Thema, in eigenen "
@@ -153,7 +153,7 @@ class DecisionsBlock:
         self._project_dir = Path(".")
         self._clock: Callable = datetime.now
         self._wants_page: Callable = lambda text: False
-        self._order_note_for: Callable = lambda fmt, wake_word: ""
+        self._order_note_for: Callable = lambda wake_word: ""
 
     # ------------------------------------------------ block contract
     def start(self, ctx, config: Mapping[str, object]) -> None:
@@ -239,13 +239,13 @@ class DecisionsBlock:
     def stage_context(self, state) -> dict:
         return _stage_context(state)
 
-    def turn_orders(self, fmt: int, segment) -> tuple:
+    def turn_orders(self, segment) -> tuple:
         """What one turn adds to `order_note`, and the spoken text: the Zuruf
         page first (so level 2's fill order rides along with THIS turn),
         then level 2's orders, then the note that the Zuruf's page already
         exists. Without level 2: ("", segment.text) plus the page note."""
         seite = self._page_call_out(segment)
-        extra_note, gesprochen = self._policy_turn(fmt, segment)
+        extra_note, gesprochen = self._policy_turn(segment)
         return (extra_note + page_call_out_note(seite, self._runner is not None),
                 gesprochen)
 
@@ -341,7 +341,7 @@ class DecisionsBlock:
             out.append(CoreEvent("block_output", payload))
 
     # ------------------------------------------------ the turn's share
-    def _policy_turn(self, fmt: int, b) -> tuple:
+    def _policy_turn(self, b) -> tuple:
         """Level 2's share of one turn: (extra order note, spoken).
 
         Takes the orders the policy decided since the last turn -- they ride
@@ -358,7 +358,7 @@ class DecisionsBlock:
         auftraege = self._runner.take_turn()
         extra_note = auftraege.note
         if auftraege.wake and not b.wake_word:
-            extra_note += self._order_note_for(fmt, True)
+            extra_note += self._order_note_for(True)
         spoken = b.text + (" " + auftraege.spoken if auftraege.spoken else "")
         return extra_note, spoken
 

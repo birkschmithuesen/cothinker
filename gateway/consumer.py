@@ -70,6 +70,7 @@ from shared.minutes_format import (DEFAULT_MODE, MODES, TAGS, Entry,  # noqa: E4
                           project_md_names, read_mode, render_view, splice,
                           topic_line, with_marker)
 from shared.minutes_format import is_v2 as is_v2_text  # noqa: E402
+from shared.minutes_format import _ROH_LINE_RE  # noqa: E402
 from stage_state import PARKED, StageState, scrub  # noqa: E402
 from stage_state import (AgendaRuntime, agenda_payload,  # noqa: E402
                          current_item_from_ticks, detect_agenda_command,
@@ -149,8 +150,10 @@ im Zweifel nachfragen, nicht uebernehmen.
 # Protocol format v2 (docs/entwurf-meeting-modi.md §1-2): topic blocks with
 # tagged entries under `## Themen`, and a derived view (`## Überblick`)
 # that only the consumer writes, re-rendered on every entry. New protocols
-# are created in this shape; an existing file keeps whatever it is -- a v1
-# file of the same day continues as v1, no migration. The view section is
+# are created in this shape; a file of the same day that is not in this
+# shape (the old format, where the agent kept `## Verlauf` and friends) is
+# continued in it below a dated marker line, see `continue_in_format_2`.
+# The old text is never rewritten. The view section is
 # exactly `render_view([], "sitzung")`; other modes get theirs spliced in
 # by `protocol_header()`.
 HEADER_V2 = """---
@@ -275,145 +278,6 @@ def protocol_header(*, title: str, entity: str, day: str, pslug: str,
     return splice(text, view=render_view([], mode), append="")
 
 
-AGENT_PROMPT = """Du bist Robo, der Mitdenker in einem laufenden Termin. Die
-Runde liest deine Ausgabe live mit, waehrend sie weiterspricht.
-
-PROTOKOLL:  {path}
-VORSCHLAEGE: {proposals}
-PROJEKTORDNER: {folder}
-{situation}{open_state}
-Neu gesprochen seit deiner letzten Runde:
----
-{block}
----
-
-HINTERGRUND: Im Projektordner liegen die Unterlagen zu diesem Termin —
-Vorbereitung, Leitfaden, frueheres Protokoll, Notizen. Brauchst du fuer eine
-Frage aus der Runde den Sachstand (ein Name, eine Zahl, was frueher schon
-beschlossen wurde), lies dort gezielt die passende Datei. Sonst nicht: die
-Runde wartet auf dich, und ein Zug dauert ohnehin 40-180 Sekunden. Erst lesen,
-wenn der Abschnitt es verlangt, und dann nur das eine Dokument — nicht den
-Ordner durchforsten. Der Termin hat Vorrang vor der Vollstaendigkeit.
-
-Du liest dort NUR. Geschrieben wird ausschliesslich in die beiden oben
-genannten Dateien: alles andere im Ordner gehoert dem Konsumenten und dem
-Sync-Dienst, und ein zweiter Schreiber erzeugt Konfliktkopien.
-
-WAS DU LIEST: im Protokoll nur die Abschnitte OBERHALB von `## Rohtranskript`.
-Das Rohtranskript brauchst du nicht — es waechst den ganzen Termin, und die
-Runde wartet auf dich.
-
-WAS DU SCHREIBST — diese zwei Dinge, sonst nichts:
-
-1. PROTOKOLL pflegen:
-   - `## Verlauf`: HAENGE 1-3 Stichpunkte mit Uhrzeit an. Vorhandene Zeilen
-     bleiben stehen, wie sie stehen.
-   - `## Entscheidungen`, `## Aufgaben` (wer/was/bis wann), `## Offene Fragen`:
-     nur eintragen, was wirklich gefallen ist. Nichts erfinden. Zahlen,
-     Betraege, Fristen, Namen und Zusagen woertlich; Unsicheres aus der
-     Spracherkennung mit "(unbestaetigt)".
-   - Erledigtes markierst du an Ort und Stelle (**erledigt**, mit Verweis auf
-     die geaenderte Datei). Du loeschst nichts.
-   - `## Rohtranskript` NICHT anfassen — dort schreibt allein der Konsument.
-
-2. BUEHNE: du haengst Zeilen an `{proposals}` an — eine Zeile, ein JSON-Objekt,
-   UTF-8. Du schreibst die Buehne NICHT selbst; das tut der Konsument. Er
-   vergibt auch die Kennungen. Moegliche Zeilen:
-
-   {{"action":"mirror","text":"<EINE Zeile, dritte Person: was Robo verstanden
-        hat und woran er gerade arbeitet>"}}
-   {{"action":"headline","text":"<worueber gerade gesprochen wird, 3-6 Woerter>"}}
-   {{"action":"decision","time":"HH:MM","text":"<kurz: was beschlossen oder
-        zugesagt wurde>"}}
-   {{"action":"notice","kind":"value_conflict","text":"<**Bezeichnung** Wert A
-        gegen Wert B — welcher gilt?>"}}
-   {{"action":"notice","kind":"decision_breach","text":"<**Beschluss** ... steht
-        unter Entscheidungen, fehlt hier>"}}
-   {{"action":"question","text":"<laut in drei Worten beantwortbar>"}}
-   {{"action":"resolve","id":"<Kennung>","text":"<wie es geklaert wurde>"}}
-   {{"action":"main","quote":"<der Auftrag WOERTLICH, so wie er gefallen ist>",
-        "markdown":"<was gezeigt werden soll>"}}
-   {{"action":"topic","title":"<das neue Thema, EINE Zeile>",
-        "markdown":"<was dazu gezeigt werden soll>"}}
-   {{"action":"graph","title":"<das Thema, EINE Zeile>",
-        "seed":"<optional: Titel der Notiz, die der Saatknoten ist>"}}
-   {{"action":"links","items":[{{"file":"<dateiname-ohne-endung, nur Dateien,
-        die es wirklich gibt>","label":"<kurz>"}}]}}
-   {{"action":"none"}} — die Zeile fuer "dieser Abschnitt bringt nichts Neues";
-        dann schreibst du auch sonst nichts.
-
-   Was wohin gehoert:
-   - `decision` NUR fuer Entscheidungen und Zusagen. Nicht fuer Themen, nicht
-     fuer Beobachtungen, nicht fuer Ideen, die gerade erst entstehen.
-   - `notice` NUR fuer die zwei Faelle oben. Es gibt keinen dritten Grund.
-     Zwei Meldungen stehen hoechstens gleichzeitig; alles weitere gehoert
-     unter `## Offene Fragen`.
-   - `main` NUR, wenn die Runde dich darum gebeten hat — dann ist `quote`
-     Pflicht: der Auftrag woertlich aus dem Abschnitt. Ohne `quote` wird die
-     Zeile verworfen und die Flaeche bleibt, wie sie ist. Ohne Auftrag nimmst
-     du nie `main` — dafuer gibt es `topic`. Sie zeigt das Ergebnis, um das gebeten
-     wurde — hoechstens 15 Zeilen, kein Archiv und kein Volltext; was
-     darueber steht, wird eingeklappt.
-   - `topic`, wenn die Runde erkennbar zu einem ANDEREN Thema uebergegangen
-     ist. Dafuer brauchst du keinen Auftrag und kein Zitat: eine Flaeche, die
-     beim alten Thema haengt, behauptet etwas Falsches und stoert. Kurz halten,
-     `title` ist eine Zeile und steht spaeter als Marke im Verlauf. Wechselt
-     nur das Thema: `topic`. Wurde dir etwas zugerufen: `main`. Zu dichte
-     Wechsel lehnt der Konsument ab — das ist kein Fehler, sondern der Takt;
-     schick denselben Wechsel nicht noch einmal.
-   - `graph`, wenn ein NEUES Thema eroeffnet wird und das Netz der Notizen
-     dazu helfen kann. Du nennst nur das Thema — der Konsument sucht die
-     passende Notiz oder legt sie an und baut das Bild. Du schickst keine
-     Knoten und keine Pfade mit. Findet er den Namen mehrfach, lehnt er ab;
-     dann nimm einen genaueren Titel. Zu dichte Wechsel lehnt er ebenfalls
-     ab — das ist der Takt, kein Fehler.
-   - Bittet die Runde, etwas FRUEHERES nochmal zu sehen ("nochmal das davor",
-     "zeig wieder die Kosten"), ist das ein Auftrag wie jeder andere: `main`
-     mit dem Zuruf woertlich in `quote` und dem frueheren Stand in `markdown`.
-     Die Buehne blaettert nicht fuer dich — im Verlauf blaettert die Runde
-     selbst, an der Buehne.
-   - `resolve`, sobald die Runde eine Meldung oder Frage beantwortet hat.
-     Steht oben etwas Offenes, pruefe zuerst, ob dieser Abschnitt es klaert.
-
-DREI REGELN AUS EINEM ECHTEN TERMIN — sie gelten fuer JEDE Datei:
-
-ANBAUEN STATT UMBAUEN. Die schlimmste Stoerung des ausgewerteten Termins war
-keine falsche Aussage, sondern eine Umsortierung, waehrend die Runde mitlas
-("Es wurde umsortiert. Also wir muessen jetzt ein bisschen mitdenken."). Du
-fuegst Zeilen hinzu. Sortieren, streichen oder Vorhandenes umformulieren nur,
-wenn genau das zugerufen wurde — und dann mit einer Zeile darueber, was sich
-bewegt hat.
-
-NICHTS NEUES = NICHTS SCHREIBEN. Bringt der Abschnitt keine Erkenntnis
-(Tonprobe, Technikgerede, Small Talk), laesst du beide Dateien unveraendert.
-Ein Lauf ohne Aenderung ist ein guter Lauf.
-
-FRAGEN NUR, WENN RATEN SCHADET: zu bestaetigende Entscheidung, unklarer
-Eigenname. Eine widersprechende Zahl ist keine Frage, sondern eine `notice`
-der Art `value_conflict`. Laut in drei Worten beantwortbar ("5. oder
-6. Oktober?"). Hoechstens EINE; jede weitere unter `## Offene Fragen`.
-
-AUCH OHNE WECKWORT KANN DER ABSCHNITT EIN AUFTRAG SEIN. Die Spracherkennung
-verstuemmelt das Weckwort ("Oboe", "Opa", "Robert") — im ausgewerteten Termin
-in drei von fuenf Faellen. Steht im Abschnitt eine Anrede an dich ODER ein
-Imperativ in der zweiten Person (mach, zeig, schreib, erstelle, berechne,
-sortier, ergaenze, recherchier, schick, streich, update), dann fuehre ihn aus,
-statt ihn nur zu protokollieren. Kannst oder darfst du ihn nicht ausfuehren
-(Chat und Telegram sind ausgeschlossen), sagst du das in `mirror` und unter
-`## Aufgaben`. Ein Auftrag, den du still als "offen" ablegst, ist verloren.
-
-GEGENPRUEFEN, bevor du fertig bist:
-   - Widerspricht eine Zahl, ein Datum oder eine Frist aus diesem Abschnitt
-     einer frueheren im Protokoll? Dann als `notice` der Art `value_conflict`,
-     mit beiden Werten.
-   - Habe ich nur angebaut und nichts umgestellt?
-
-Schreibe NICHT in den Chat und schicke KEINE Telegram-Nachricht — die Dateien
-sind die Ausgabe. Lege keine Dokumente an, um die nicht gebeten wurde: im
-ausgewerteten Termin entstanden 28 Themenblaetter, drei trugen den Termin.
-Antworte am Ende mit einer Zeile: "OK — <was du getan hast>".
-"""
-
 # C2 measure 1 (docs/superpowers/plans/2026-09-26-topic-prompt-c2.md, D4):
 # the criterion behind the `topic` bullet above -- WHEN a topic change is
 # a topic change. Default-OFF, spliced in by build_prompt(...,
@@ -435,40 +299,6 @@ TOPIC_CRITERION = """     WORAN du einen Wechsel erkennst — mindestens eins da
      Abrechnung dabei?" (eine Vertiefung).
 """
 
-ORDER_NOTE = """
-🔴 DIREKTER AUFTRAG: Der Abschnitt enthaelt eine Ansprache mit dem Weckwort.
-Fuehre ihn AUS, bevor du protokollierst — auch wenn dafuer eine andere Datei im
-Projektordner geaendert werden muss. Danach der Dreisatz, sichtbar im Ergebnis:
-  1. AUFTRAG — zitiere ihn woertlich. Ist jede darin genannte Groesse
-     abgebildet? Einzeln abhaken.
-  2. EINHEIT — in welcher Einheit war das Ergebnis gefordert (Aufwand,
-     Personenmonate, Euro, Stueck)? Steht es in genau dieser? Sagt der Auftrag
-     "Aufwand", ist Euro falsch, auch wenn Euro nuetzlicher wirkt.
-  3. BESCHLUSSLAGE — welche Eintraege unter `## Entscheidungen` beruehren das
-     Ergebnis, und wo sind sie eingeflossen?
-Halte Ergebnis und Pfad auf der Buehne (`main` — mit dem Auftrag woertlich in
-`quote`) und unter `## Aufgaben` fest. Ein Ergebnis ohne diesen Dreisatz gilt
-als nicht geliefert.
-
-🔴🔴 `quote` IST EIN KOPIERVORGANG, KEINE FORMULIERUNGSAUFGABE.
-Der Wert von `quote` wird maschinell im Transkript gesucht (Zeichen fuer
-Zeichen, nur Gross/Kleinschreibung und Zeilenumbrueche sind egal). Findet die
-Pruefung ihn nicht WOERTLICH, wird dein ganzer Vorschlag verworfen — die
-Buehne bleibt leer, und niemand sagt dir warum.
-
-Deshalb, ohne Ausnahme:
-  • Nimm eine Zeichenkette, die GENAU SO im Abschnitt oben steht. Kopiere sie.
-  • Fuelllaute, Versprecher, Wiederholungen, abgebrochene Saetze BLEIBEN DRIN.
-    "ähm", "äh", "also" gehoeren dazu, wenn sie dastehen.
-  • Kuerze NICHT, glaette NICHT, korrigiere NICHT, fasse NICHT zusammen.
-  • Ein Teilsatz reicht voellig — lieber sechs woertliche Woerter als ein
-    schoener Satz, den niemand so gesagt hat.
-  • Im Zweifel: die kuerzeste eindeutige Passage kopieren.
-
-FALSCH: "Wir wollten als Naechstes den Textentwurf ansehen"  (geglaettet)
-RICHTIG: "uns den Textentwurf"                                (wortwoertlich)
-"""
-
 BACKLOG_NOTE = """
 ⏩ RUECKSTAND: Dieser Abschnitt fasst mehrere Sprechabschnitte zusammen — du
 bist hinterher, die Runde ist weiter. Arbeite grob und schnell: EIN Stichpunkt
@@ -477,51 +307,79 @@ Gesprochenen aus, nicht am Anfang. Lieber knapp und aktuell als vollstaendig
 und veraltet.
 """
 
-# Protocol v2 (topic blocks with tagged entries, shared/minutes_format.py).
+# A minutes file of the current day that is not in the current format (the
+# old one: the agent kept `## Verlauf`, `## Entscheidungen`, ... itself) is
+# continued, not migrated: its text stays byte for byte, and what follows is
+# the current format below this marker line. `{stamp}` is "YYYY-MM-DD HH:MM".
+FORMAT_2_MARKER = "<!-- format 2 from {stamp} -->"
+
+
+def continue_in_format_2(text: str, stamp: str, mode: str = DEFAULT_MODE) -> str:
+    """`text` with the current format continued below a dated marker line.
+
+    A text that already is in the current format comes back unchanged. For
+    any other text everything in front of its `## Rohtranskript` (or the
+    whole text, when it has none) stays as it is; the marker line, an empty
+    `## Überblick` view of `mode` and an empty `## Themen` follow it, then
+    the raw section, byte for byte. Only additions: nothing already in the
+    file is rewritten.
+    """
+    if is_v2_text(text):
+        return text
+    raw_at = _ROH_LINE_RE.search(text)
+    head, raw = ((text[:raw_at.start()], text[raw_at.start():]) if raw_at
+                 else (text, "## Rohtranskript\n"))
+    if head and not head.endswith("\n\n"):
+        head += "\n" if head.endswith("\n") else "\n\n"
+    new = (head + FORMAT_2_MARKER.format(stamp=stamp)
+           + "\n\n## Überblick\n\n## Themen\n\n" + raw)
+    return splice(new, view=render_view([], mode), append="")
+
+
+def continue_protocol(path: Path, now: datetime, mode: str = DEFAULT_MODE) -> bool:
+    """Continue the minutes file at `path` in the current format when it is
+    not in it (`continue_in_format_2`). True when the file was changed.
+    Raises `OSError` when it cannot be read or written -- the caller decides."""
+    with open(path, encoding="utf-8", newline="", errors="surrogateescape") as f:
+        text = f.read()
+    new = continue_in_format_2(text, f"{now:%Y-%m-%d %H:%M}", mode)
+    if new == text:
+        return False
+    atomic_write_text(path, new)
+    return True
+
+
+# The main turn (issue #49, ADR 0005): the agent RETURNS its content as one
+# fenced JSON reply, it edits no file. The session host owns every file:
+# the `capture-bullets` block parses the reply (`agent_reply` event), the
+# host files the minutes entries into `protokoll.md` (through the
+# minutes-document block) and appends the stage proposals to the proposal
+# file, from which it alone decides what reaches `buehne.json`.
 #
-# In v2 the consumer is the only writer of protokoll.md, so the agent's
-# whole output is proposal lines -- the protocol is read-only for it.
-#
-# DESIGN DECISION -- how the agent hands over a tag:
-#
-# `tag_entry` is a NEW, generic action instead of a `tag` field on the
-# existing actions. The existing actions are surface actions: each one is
-# checked, capped and braked by `StageState.apply()` and changes what the
-# room sees. Most protocol entries (a task, an idea, a note) have no
-# surface at all, so a `tag` field would need a carrier action that shows
-# something -- or a surface action that is accepted "only for its field",
-# which is exactly the kind of half-rejected proposal the trace cannot
-# describe cleanly. One generic action keeps the two paths apart: stage
-# actions go through `StageState`, `tag_entry` goes straight to
-# `MinutesPort.add_entry()` (handled in `StageWriter.ingest()` before
-# `apply()`), and a v1 run refuses it with one reason (`v1_protocol`).
+# DESIGN DECISION -- the reply's shape. Minutes sections are lists of
+# one-line items (a string, or an object with `text` and an optional
+# `topic_id`); `buehne` items are the proposal lines of the stage actions
+# (`StageState.apply()`), unchanged, so the stage's checks, caps and brakes
+# stay where they were. A `tag_entry` action stays possible INSIDE `buehne`
+# for one reason only: an order of the level-2 policy asks for it and
+# carries its order id.
 #
 # `decision` doubles as `beschluss`: an accepted decision is shown on the
-# stage (the excerpt) AND filed by the consumer as a `beschluss` entry --
-# one proposal, two places, no duplicate. The prompt therefore forbids a
-# second `tag_entry beschluss` for the same decision; a separate one
-# would put every decision into the overview twice. A decision the stage
-# REFUSES (cap, duplicate) is not filed either: the protocol and the
-# stage cannot disagree about what was decided.
+# stage AND filed by the consumer as a `beschluss` entry. The minutes
+# document refuses a `beschluss` whose text it already holds, so a decision
+# sent both as `entscheidungen` item and as `decision` action is filed once.
 #
-# `topic` stays the one trigger for a new topic block (the same accepted
-# action that changes the stage), and its `title` becomes the block's
-# heading -- the prompt says so, so the agent writes titles that work
-# as headings.
+# `topic` stays the one trigger for a new topic block, and its `title`
+# becomes the block's heading. The host applies the stage proposals BEFORE
+# it files the minutes items, so items of the same reply land in the new
+# block.
 #
-# Everything else in v1's AGENT_PROMPT that still applies is kept word for
-# word (stage actions, the three rules from a real meeting, orders
-# without the wake word, the counter-check, no chat, no unrequested
-# documents, the closing "OK" line). Every reference to a v1 section
-# (`## Entscheidungen`, `## Aufgaben`, `## Offene Fragen`, `## Verlauf`)
-# is replaced by the tag that now carries it. ASCII transliteration like
-# the v1 prompt; only the literal headings are spelled as they stand in
-# the file (`## Überblick`), so the agent can find them.
-AGENT_PROMPT_V2 = """Du bist Robo, der Mitdenker in einem laufenden Termin. Die
+# ASCII transliteration like every prompt here; only the literal headings
+# are spelled as they stand in the file (`## Überblick`).
+AGENT_PROMPT = """Du bist Robo, der Mitdenker in einem laufenden Termin. Die
 Runde liest deine Ausgabe live mit, waehrend sie weiterspricht.
 
 PROTOKOLL:  {path}
-VORSCHLAEGE: {proposals}
 PROJEKTORDNER: {folder}
 {situation}{open_state}
 Neu gesprochen seit deiner letzten Runde:
@@ -538,47 +396,40 @@ wenn der Abschnitt es verlangt, und dann nur das eine Dokument — nicht den
 Ordner durchforsten. Der Termin hat Vorrang vor der Vollstaendigkeit.
 
 Du liest dort NUR — ausser ein Auftrag der Runde verlangt ausdruecklich, eine
-Datei dort anzulegen oder zu aendern (nie das Protokoll). Sonst wird
-ausschliesslich in die oben genannte Datei VORSCHLAEGE geschrieben: alles
-andere im Ordner gehoert dem Konsumenten und dem
-Sync-Dienst, und ein zweiter Schreiber erzeugt Konfliktkopien.
+Datei dort anzulegen oder zu aendern (nie das Protokoll). Alles andere im
+Ordner gehoert dem Konsumenten und dem Sync-Dienst, und ein zweiter Schreiber
+erzeugt Konfliktkopien.
 
-DAS PROTOKOLL FUEHRT DER KONSUMENT. Das Protokoll liest du NUR — du schreibst
-keine einzige Zeile hinein. Der Konsument traegt ein, was du vorschlaegst:
-oben die Sicht `## Überblick` (Beschluesse, Aufgaben, Offene Fragen — die
-rechnet er bei jedem Eintrag neu aus), darunter `## Themen` mit einem Block je
-Thema (`### HH:MM Titel`) und den Eintraegen darin (`- HH:MM [tag] Text`).
+DEINE ANTWORT IST DER INHALT. Du schreibst weder das Protokoll noch die Buehne
+noch eine Vorschlagsdatei. Du antwortest mit GENAU EINEM JSON-Objekt in einem
+Codeblock (```json ... ```), sonst mit nichts. Der Konsument liest es, traegt
+die Eintraege ins Protokoll ein, vergibt die Kennungen und entscheidet, was auf
+die Buehne kommt. Oben im Protokoll steht die Sicht `## Überblick` (Beschluesse,
+Aufgaben, Offene Fragen), darunter `## Themen` mit einem Block je Thema
+(`### HH:MM Titel`) und den Eintraegen darin (`- HH:MM [tag] Text`) — du liest
+es NUR, und nur was OBERHALB von `## Rohtranskript` steht. Das Rohtranskript
+brauchst du nicht: es waechst den ganzen Termin.
 
-WAS DU LIEST: im Protokoll nur, was OBERHALB von `## Rohtranskript` steht —
-dort siehst du auch, was seit deiner letzten Runde eingetragen wurde. Das
-Rohtranskript brauchst du nicht — es waechst den ganzen Termin, und die
-Runde wartet auf dich.
+{{"verlauf": [...], "entscheidungen": [...], "aufgaben": [...],
+ "offene_fragen": [...], "buehne": [...]}}
 
-WAS DU SCHREIBST: nur Zeilen, die du an `{proposals}` anhaengst — eine Zeile,
-ein JSON-Objekt, UTF-8. Weder Buehne noch Protokoll schreibst du selbst;
-beides tut der Konsument. Er vergibt auch die Kennungen.
-
-1. PROTOKOLL: fasse das Neue als 1-3 Eintraege mit Tag. Ein Eintrag ist EINE
-   Zeile und landet im aktuellen Themenblock:
-
-   {{"action":"tag_entry","tag":"<beschluss|aufgabe|frage|idee|recherche|notiz>",
-        "text":"<eine Zeile>"}}
-
-   Die Tags:
-   - `beschluss`: was entschieden oder zugesagt wurde. Kommt NUR ueber
-     `decision` ins Protokoll (siehe unten), nie als `tag_entry`.
-   - `aufgabe`: wer macht was bis wann.
-   - `frage`: was offen ist und von der Runde noch geklaert werden muss.
-   - `idee`: ein Vorschlag, der im Raum steht, aber nicht entschieden ist.
-   - `recherche`: was nachgeschlagen oder geprueft werden soll — oder was du
-     nachgeschlagen hast, mit der Quelle.
-   - `notiz`: ein Stand, eine Zahl, eine Erkenntnis, die festgehalten gehoert.
+1. PROTOKOLL: `verlauf`, `entscheidungen`, `aufgaben` und `offene_fragen` sind
+   Listen. Ein Eintrag ist EINE Zeile: ein Text oder ein Objekt
+   {{"text": "<eine Zeile>", "topic_id": "<optional>"}}. Fasse das Neue in
+   hoechstens 1-3 Eintraegen je Liste. Eine Liste ohne Neues bleibt leer oder
+   fehlt.
+   - `verlauf`: ein Stand, eine Zahl, eine Erkenntnis, die festgehalten
+     gehoert (landet als `notiz`).
+   - `entscheidungen`: was entschieden oder zugesagt wurde (`beschluss`).
+   - `aufgaben`: wer macht was bis wann (`aufgabe`).
+   - `offene_fragen`: was offen ist und von der Runde noch geklaert werden
+     muss (`frage`).
 
    Nur eintragen, was wirklich gefallen ist. Nichts erfinden. Zahlen,
    Betraege, Fristen, Namen und Zusagen woertlich; Unsicheres aus der
    Spracherkennung mit "(unbestaetigt)". Eintraege werden nur angehaengt:
-   Erledigtes schreibst du nicht um, sondern meldest es als neuen Eintrag
-   mit Tag `notiz`, der mit **erledigt** beginnt und die geaenderte Datei als
+   Erledigtes schreibst du nicht um, sondern meldest es als neuen Eintrag in
+   `verlauf`, der mit **erledigt** beginnt und die geaenderte Datei als
    [[dateiname]] nennt. Du loeschst nichts.
 
    VERLINKEN: Nennt ein Eintrag einen Baustein, eine Zahl oder eine Aufgabe,
@@ -590,7 +441,8 @@ beides tut der Konsument. Er vergibt auch die Kennungen.
    DATEIEN IM PROJEKTORDNER:
 {files}
 
-2. BUEHNE: Moegliche Zeilen:
+2. BUEHNE: `buehne` ist eine Liste von Objekten, hoechstens eines je Zeile
+   dieser Art:
 
    {{"action":"mirror","text":"<EINE Zeile, dritte Person: was Robo verstanden
         hat und woran er gerade arbeitet>"}}
@@ -611,18 +463,18 @@ beides tut der Konsument. Er vergibt auch die Kennungen.
         "seed":"<optional: Titel der Notiz, die der Saatknoten ist>"}}
    {{"action":"links","items":[{{"file":"<dateiname-ohne-endung, nur Dateien,
         die es wirklich gibt>","label":"<kurz>"}}]}}
-   {{"action":"none"}} — die Zeile fuer "dieser Abschnitt bringt nichts Neues";
-        dann schreibst du auch sonst nichts.
+   {{"action":"none"}} — "dieser Abschnitt bringt nichts Neues"; dann sind
+        auch alle anderen Listen leer.
 
    Was wohin gehoert:
    - `decision` NUR fuer Entscheidungen und Zusagen. Nicht fuer Themen, nicht
      fuer Beobachtungen, nicht fuer Ideen, die gerade erst entstehen. Eine
      `decision` steht auf der Buehne UND als `beschluss` im Protokoll — den
-     Eintrag macht der Konsument daraus. Schick denselben Beschluss
-     nie zusaetzlich als `tag_entry`.
+     Eintrag macht der Konsument daraus. Schickst du denselben Beschluss
+     auch unter `entscheidungen`, traegt er ihn trotzdem nur einmal ein.
    - `notice` NUR fuer die zwei Faelle oben. Es gibt keinen dritten Grund.
-     Zwei Meldungen stehen hoechstens gleichzeitig; alles weitere als
-     `tag_entry` mit Tag `frage`.
+     Zwei Meldungen stehen hoechstens gleichzeitig; alles weitere unter
+     `offene_fragen`.
    - `main` NUR, wenn die Runde dich darum gebeten hat — dann ist `quote`
      Pflicht: der Auftrag woertlich aus dem Abschnitt. Ohne `quote` wird die
      Zeile verworfen und die Flaeche bleibt, wie sie ist. Ohne Auftrag nimmst
@@ -634,12 +486,12 @@ beides tut der Konsument. Er vergibt auch die Kennungen.
      beim alten Thema haengt, behauptet etwas Falsches und stoert. Kurz halten,
      `title` ist eine Zeile: ein angenommenes `topic` eroeffnet im Protokoll
      den neuen Themenblock, und `title` ist seine Ueberschrift. Einen
-     Themenblock gibt es nur so. Gehoeren Eintraege dieses Abschnitts schon
-     zum neuen Thema, schick die `topic`-Zeile vor ihnen. Wechselt nur das
-     Thema: `topic`. Wurde dir etwas zugerufen: `main`. Zu dichte Wechsel
-     lehnt der Konsument ab — das ist kein Fehler, sondern der Takt; die
-     Eintraege landen dann im bisherigen Block. Schick denselben Wechsel
-     nicht noch einmal.
+     Themenblock gibt es nur so. Die Eintraege derselben Antwort landen schon
+     im neuen Block. Wechselt nur das Thema: `topic`. Wurde dir etwas
+     zugerufen: `main`. Zu dichte Wechsel lehnt der Konsument ab — das ist
+     kein Fehler, sondern der Takt; die Eintraege landen dann im bisherigen
+     Block. Dazu:
+     schick denselben Wechsel nicht noch einmal.
    - `graph`, wenn ein NEUES Thema eroeffnet wird und das Netz der Notizen
      dazu helfen kann. Du nennst nur das Thema — der Konsument sucht die
      passende Notiz oder legt sie an und baut das Bild. Du schickst keine
@@ -656,26 +508,28 @@ beides tut der Konsument. Er vergibt auch die Kennungen.
      selbst, an der Buehne.
    - `resolve`, sobald die Runde eine Meldung oder Frage beantwortet hat.
      Steht oben etwas Offenes, pruefe zuerst, ob dieser Abschnitt es klaert.
+   - Verlangt ein Auftrag oben ausdruecklich eine `tag_entry`-Aktion, steht
+     sie samt Kennung des Auftrags in `buehne`.
 
 DREI REGELN AUS EINEM ECHTEN TERMIN — sie gelten fuer JEDE Datei:
 
 ANBAUEN STATT UMBAUEN. Die schlimmste Stoerung des ausgewerteten Termins war
 keine falsche Aussage, sondern eine Umsortierung, waehrend die Runde mitlas
 ("Es wurde umsortiert. Also wir muessen jetzt ein bisschen mitdenken."). Du
-fuegst Zeilen hinzu — im Protokoll tut das ohnehin der Konsument fuer dich.
+fuegst hinzu — im Protokoll tut das ohnehin der Konsument fuer dich.
 In einer Datei, die du auf Zuruf aenderst, gilt dasselbe: Sortieren,
 streichen oder Vorhandenes umformulieren nur, wenn genau das zugerufen wurde
 — und dann mit einer Zeile darueber, was sich bewegt hat.
 
-NICHTS NEUES = NICHTS SCHREIBEN. Bringt der Abschnitt keine Erkenntnis
-(Tonprobe, Technikgerede, Small Talk), haengst du nur die eine Zeile
-{{"action":"none"}} an und sonst nichts. Ein Lauf ohne Eintrag ist ein guter
-Lauf.
+NICHTS NEUES = NICHTS EINTRAGEN. Bringt der Abschnitt keine Erkenntnis
+(Tonprobe, Technikgerede, Small Talk), antwortest du mit
+{{"buehne": [{{"action":"none"}}]}} und sonst nichts. Ein Lauf ohne Eintrag
+ist ein guter Lauf.
 
 FRAGEN NUR, WENN RATEN SCHADET: zu bestaetigende Entscheidung, unklarer
 Eigenname. Eine widersprechende Zahl ist keine Frage, sondern eine `notice`
 der Art `value_conflict`. Laut in drei Worten beantwortbar ("5. oder
-6. Oktober?"). Hoechstens EINE; jede weitere als `tag_entry` mit Tag `frage`.
+6. Oktober?"). Hoechstens EINE; jede weitere unter `offene_fragen`.
 
 AUCH OHNE WECKWORT KANN DER ABSCHNITT EIN AUFTRAG SEIN. Die Spracherkennung
 verstuemmelt das Weckwort ("Oboe", "Opa", "Robert") — im ausgewerteten Termin
@@ -683,30 +537,28 @@ in drei von fuenf Faellen. Steht im Abschnitt eine Anrede an dich ODER ein
 Imperativ in der zweiten Person (mach, zeig, schreib, erstelle, berechne,
 sortier, ergaenze, recherchier, schick, streich, update), dann fuehre ihn aus,
 statt ihn nur zu protokollieren. Kannst oder darfst du ihn nicht ausfuehren
-(Chat und Telegram sind ausgeschlossen), sagst du das in `mirror` und als
-`tag_entry` mit Tag `aufgabe`. Ein Auftrag, den du still als "offen" ablegst,
-ist verloren.
+(Chat und Telegram sind ausgeschlossen), sagst du das in `mirror` und unter
+`aufgaben`. Ein Auftrag, den du still als "offen" ablegst, ist verloren.
 
 GEGENPRUEFEN, bevor du fertig bist:
    - Widerspricht eine Zahl, ein Datum oder eine Frist aus diesem Abschnitt
      einer frueheren im Protokoll? Dann als `notice` der Art `value_conflict`,
      mit beiden Werten.
-   - Habe ich nur angebaut und nichts umgestellt — und jeden Beschluss nur
-     einmal geschickt, als `decision`?
+   - Habe ich nur angebaut und nichts umgestellt?
+   - Ist meine Antwort EIN gueltiges JSON-Objekt, ohne Text davor oder
+     danach? Eine Antwort, die der Konsument nicht lesen kann, zaehlt als
+     nicht geliefert.
 
-Schreibe NICHT in den Chat und schicke KEINE Telegram-Nachricht — die Dateien
-sind die Ausgabe. Lege keine Dokumente an, um die nicht gebeten wurde: im
+Schreibe NICHT in den Chat und schicke KEINE Telegram-Nachricht — deine Antwort
+ist die Ausgabe. Lege keine Dokumente an, um die nicht gebeten wurde: im
 ausgewerteten Termin entstanden 28 Themenblaetter, drei trugen den Termin.
-Antworte am Ende mit einer Zeile: "OK — <was du getan hast>".
 """
 
-# The v2 counterpart of ORDER_NOTE: the same triad and the same quote
-# rule word for word, with the result routed to a `tag_entry` instead of
-# `## Aufgaben` and the decisions read from the overview instead of
-# `## Entscheidungen`. `run_turn` picks it for wake-word blocks in v2.
-ORDER_NOTE_V2 = """
+# The order note of a wake-word turn: the triad and the quote rule, with the
+# result routed into the reply's lists (`run_turn` adds it to the situation).
+ORDER_NOTE = """
 🔴 DIREKTER AUFTRAG: Der Abschnitt enthaelt eine Ansprache mit dem Weckwort.
-Fuehre ihn AUS, bevor du Eintraege vorschlaegst — auch wenn dafuer eine andere
+Fuehre ihn AUS, bevor du Eintraege lieferst — auch wenn dafuer eine andere
 Datei im Projektordner geaendert werden muss (nie das Protokoll: das fuehrt
 der Konsument). Danach der Dreisatz, sichtbar im Ergebnis:
   1. AUFTRAG — zitiere ihn woertlich. Ist jede darin genannte Groesse
@@ -717,10 +569,10 @@ der Konsument). Danach der Dreisatz, sichtbar im Ergebnis:
   3. BESCHLUSSLAGE — welche Beschluesse (im Protokoll oben im Ueberblick unter
      Beschluesse) beruehren das Ergebnis, und wo sind sie eingeflossen?
 Halte Ergebnis und Pfad auf der Buehne (`main` — mit dem Auftrag woertlich in
-`quote`) und als `tag_entry` fest: Tag `notiz`, beginnend mit **erledigt**,
-mit der geaenderten Datei als [[dateiname]] — oder Tag `aufgabe`, wenn noch
-etwas offen bleibt. Ein Ergebnis ohne diesen Dreisatz gilt als nicht
-geliefert.
+`quote`) und in der Antwort fest: ein Eintrag unter `verlauf`, beginnend mit
+**erledigt**, mit der geaenderten Datei als [[dateiname]] — oder unter
+`aufgaben`, wenn noch etwas offen bleibt. Ein Ergebnis ohne diesen Dreisatz
+gilt als nicht geliefert.
 
 🔴🔴 `quote` IST EIN KOPIERVORGANG, KEINE FORMULIERUNGSAUFGABE.
 Der Wert von `quote` wird maschinell im Transkript gesucht (Zeichen fuer
@@ -1514,23 +1366,16 @@ POLICY_ASK_LINE = ("  ? {id} — Robo-Rueckfrage: wertet Robo selbst aus -- "
                    "nicht aufloesen, nicht ausfuehren.")
 
 
-def open_state_block(state, include_unrecorded: bool = True, *,
-                     policy_ask_id: str = "") -> str:
-    """The open entries, with their identities, for the prompt -- plus
-    what fell off the stage and still has to be written down.
+def open_state_block(state, *, policy_ask_id: str = "") -> str:
+    """The open entries, with their identities, for the prompt.
 
     The consumer owns the identities; the agent only ever references them.
     Whether a language model reproduces a stable id over four hours is not
     answered by the evidence, and this design does not bet on it.
 
-    The second part is what makes the stage's own claim true. The dimmed
-    parked line says "Rest steht unter Offene Fragen" and the expired
-    question says the same, and nobody was putting either there: the
-    parked text was read by no one and the entry vanished after six
-    seconds. The agent owns the protocol, so the consumer tells it what to
-    file -- in the block of open entries it already receives, marked as
-    still to be recorded. ASCII transliteration, like the rest of the
-    prompt.
+    What fell off the stage (parked notices, expired questions) is not
+    listed: the host files it into the minutes itself
+    (`prepare_turn`). ASCII transliteration, like the rest of the prompt.
 
     `policy_ask_id` names level 2's own open question (MM-B). It sits in
     the ordinary question slot, but it is Robo's to evaluate: listed as
@@ -1550,13 +1395,6 @@ def open_state_block(state, include_unrecorded: bool = True, *,
     if eigene:
         block += ("" if lines else "\n") + \
             POLICY_ASK_LINE.format(id=policy_ask_id) + "\n"
-    filed = ["  - " + ("abgelaufen: " if e.get("kind") == "expired"
-                       else "geparkt: ") + str(e.get("text", ""))
-             for e in state.unrecorded()] if include_unrecorded else []
-    if filed:
-        block += ("\nNOCH NICHT IM PROTOKOLL (kein Platz auf der Buehne "
-                  "gewesen — trag das unter `## Offene Fragen` ein):\n"
-                  + "\n".join(filed) + "\n")
     return block
 
 
@@ -1602,35 +1440,9 @@ def enrollment_mirror(control: str | None, enrolled: str | None,
     return None
 
 
-def order_note_for(fmt: int, wake_word: bool) -> str:
-    """The order note of a turn: none without the wake word, else the
-    note of the turn's protocol format (v2 names no v1 section)."""
-    if not wake_word:
-        return ""
-    return ORDER_NOTE_V2 if fmt == 2 else ORDER_NOTE
-
-
-def turn_protocol_format(writer, log) -> tuple[int, bool]:
-    """The protocol format of the NEXT turn: (fmt, switched).
-
-    v2 only while `writer.protocol` is set AND the file is still v2.
-    The minutes block flips `is_v2` off when it finds the file is no
-    longer v2 (someone rewrote it as v1 mid-run). From then on the file
-    is the agent's again, the v1 way: the writer lets go of it (a
-    `tag_entry` is refused as `v1_protocol`, a decision is no longer
-    mirrored), the prompt is v1 and carries the unrecorded entries again.
-    `switched` is True exactly once, on the turn that notices -- the
-    caller logs nothing else and sends the full v1 prompt, because the
-    worker's history holds only the v2 instruction.
-    """
-    prot = writer.protocol
-    if prot is None:
-        return 1, False
-    if prot.is_v2:
-        return 2, False
-    writer.protocol = None
-    log("protocol is no longer v2 -- falling back to the v1 prompt")
-    return 1, True
+def order_note_for(wake_word: bool) -> str:
+    """The order note of a turn: none without the wake word."""
+    return ORDER_NOTE if wake_word else ""
 
 
 def refresh_link_names(writer, folder, log) -> list[str]:
@@ -1648,8 +1460,8 @@ def refresh_link_names(writer, folder, log) -> list[str]:
     return names
 
 
-def prepare_v2_turn(writer, state, folder, unrecorded, log) -> list[str]:
-    """What a v2 turn does before its prompt is built. Never raises.
+def prepare_turn(writer, state, folder, unrecorded, log) -> list[str]:
+    """What a turn does before its prompt is built. Never raises.
 
     Refreshes the file names for the wikilink check and the prompt, and
     files what fell off the stage (`unrecorded`) as `frage` entries --
@@ -1666,10 +1478,10 @@ def prepare_v2_turn(writer, state, folder, unrecorded, log) -> list[str]:
     return names[:PROMPT_FILE_LIMIT]
 
 
-def build_prompt(protocol_path, proposal_path, block, state,
+def build_prompt(protocol_path, block, state,
                  backlog_note: str = "", order_note: str = "",
                  project_dir=None, first_turn: bool = True,
-                 fmt: int = 1, file_names=None, topic_criterion: bool = False,
+                 file_names=None, topic_criterion: bool = False,
                  thread: list | None = None,
                  *, policy_ask_id: str = "") -> str:
     """The prompt for one run.
@@ -1693,7 +1505,7 @@ def build_prompt(protocol_path, proposal_path, block, state,
 
     B5: the worker holds a running session (gateway/worker.py, one
     process, turns as JSON lines) -- the instruction, the paths and the
-    proposal format only have to go out ONCE. `first_turn=True` (the
+    reply format only have to go out ONCE. `first_turn=True` (the
     default, and everything that calls this without the flag) still
     builds the full AGENT_PROMPT. Every later turn in the SAME session
     gets only what actually changed: the spoken block, the situational
@@ -1704,20 +1516,16 @@ def build_prompt(protocol_path, proposal_path, block, state,
     FULL conversation history to every call; this function only stops
     minting new copies of the static part.
 
-    `fmt` is the protocol format. `fmt=1` (the default) is byte for byte
-    the v1 prompt; `file_names` is ignored there. With 2 the first turn is
-    AGENT_PROMPT_V2 with the project's file names (at most
-    PROMPT_FILE_LIMIT) for the wikilink rule, and the open-state block
-    leaves out what the consumer files itself. Later turns are
-    DELTA_PROMPT in both formats. The order note is the caller's choice
-    (`run_turn` passes ORDER_NOTE_V2 in v2).
+    The first turn is AGENT_PROMPT (the JSON-reply instruction) with the
+    project's file names (at most PROMPT_FILE_LIMIT) for the wikilink rule;
+    later turns are DELTA_PROMPT. The order note is the caller's choice
+    (`run_turn` passes `order_note_for(wake_word)`).
 
     `policy_ask_id`: the stage id of level 2's own open question
     (`DecisionsBlock.open_ask_id()`), passed on to `open_state_block`. ""
     (the default, and every caller without `--policy`) changes nothing.
     """
-    open_state = open_state_block(state, include_unrecorded=(fmt != 2),
-                                  policy_ask_id=policy_ask_id)
+    open_state = open_state_block(state, policy_ask_id=policy_ask_id)
     if not first_turn:
         thread_block = ""
         if thread is not None:
@@ -1734,9 +1542,7 @@ def build_prompt(protocol_path, proposal_path, block, state,
             situation=backlog_note + order_note + state.follow_up_note(),
             open_state=open_state,
             thread=thread_block)
-    template, extra = AGENT_PROMPT, {}
-    if fmt == 2:
-        template, extra = AGENT_PROMPT_V2, {"files": prompt_file_list(file_names)}
+    template = AGENT_PROMPT
     if topic_criterion:
         if template.count(TOPIC_CRITERION_ANCHOR) != 1:
             # Fail loudly (D4/Task 1): a silent no-op here would ship a
@@ -1747,8 +1553,8 @@ def build_prompt(protocol_path, proposal_path, block, state,
         template = template.replace(
             TOPIC_CRITERION_ANCHOR, TOPIC_CRITERION_ANCHOR + TOPIC_CRITERION)
     return template.format(
-        **extra,
-        path=protocol_path, proposals=proposal_path, block=block.text,
+        files=prompt_file_list(file_names),
+        path=protocol_path, block=block.text,
         # The folder, so the agent can look up the meeting's own background
         # material (Leitfaden, earlier protocol, notes) when a section
         # actually demands it. Derived from the protocol path when nothing
@@ -1760,6 +1566,110 @@ def build_prompt(protocol_path, proposal_path, block, state,
                     else Path(protocol_path).parent),
         situation=backlog_note + order_note + state.follow_up_note(),
         open_state=open_state)
+
+
+# ============================================================ the reply
+# The main turn's reply reaches the host as an `agent_reply` event; the
+# `capture-bullets` block parses it and answers with `block_output` events.
+# These pieces are the host's side of that: it collects the outputs, files
+# the minutes items through the minutes-document block, appends the stage
+# proposals to the proposal file (the host alone writes it and, through
+# `StageWriter.ingest`, the stage file) and keeps an unreadable reply.
+CAPTURE_BLOCK_ID = "capture-bullets"
+# The reply's minutes lists and the tag each item is filed under.
+BULLET_TAGS = {"verlauf": "notiz", "entscheidungen": "beschluss",
+               "aufgaben": "aufgabe", "offene_fragen": "frage"}
+
+
+@dataclass
+class TurnReply:
+    """What one `agent_reply` event came to: the minutes items and the stage
+    actions in the order the agent gave them, or the failure payload."""
+    bullets: list
+    proposals: list
+    failure: dict | None = None
+
+
+class ReplyIntake:
+    """Dispatches a reply and collects the capture block's outputs.
+
+    One agent thread dispatches turns, one at a time; the host's output
+    listener runs on that thread during `dispatch`.
+    """
+
+    def __init__(self, blocks: SessionBlocks) -> None:
+        self.blocks = blocks
+        self._seen: list[dict] = []
+        blocks.on_output(self._on_output)
+
+    def _on_output(self, payload) -> None:
+        if hasattr(payload, "get") and payload.get("from") == CAPTURE_BLOCK_ID:
+            self._seen.append(dict(payload))
+
+    def read(self, text: str, turn: int) -> TurnReply:
+        self._seen = []
+        self.blocks.dispatch("agent_reply", {"text": text, "turn": turn})
+        seen, self._seen = self._seen, []
+        reply = TurnReply([], [])
+        for out in seen:
+            kind = out.get("kind")
+            if kind == "parse_failed":
+                reply.failure = out
+            elif kind == "bullet":
+                reply.bullets.append(out)
+            elif kind == "stage_proposal" and isinstance(out.get("action"), dict):
+                reply.proposals.append(out["action"])
+        if reply.failure is not None:      # a failed reply files nothing
+            reply.bullets, reply.proposals = [], []
+        return reply
+
+
+def append_proposals(path: Path, actions: list[dict]) -> int:
+    """Append the reply's stage actions to the proposal file, one JSON
+    object per line, in ONE write. Returns how many lines were written;
+    raises `OSError` when the file cannot be written."""
+    lines = [json.dumps(a, ensure_ascii=False) + "\n" for a in actions]
+    if lines:
+        with open(path, "a", encoding="utf-8") as f:
+            f.write("".join(lines))
+    return len(lines)
+
+
+def file_bullets(writer, bullets: list[dict], log=log) -> int:
+    """File the reply's minutes items through the writer (and so through
+    the minutes-document block). Returns how many are in the minutes
+    afterwards -- a duplicate counts, it is there already. A refused item
+    is logged and traced; it costs that item only."""
+    filed = 0
+    for out in bullets:
+        tag = BULLET_TAGS.get(out.get("section"))
+        if tag is None:
+            continue
+        reason = writer.file_entry(tag, out.get("text"))
+        if reason in ("", "duplicate"):
+            filed += 1
+            continue
+        log("entry not filed:", reason)
+        writer.trace("entry_failed", kind=tag, reason=reason.replace(" ", "_"))
+    return filed
+
+
+def keep_failed_reply(path: Path, failure: dict, trace, log=log) -> None:
+    """A reply that did not parse: the structural trace gets the numbers
+    and a token (it holds no speech, by design), the raw text goes to
+    `path`, one JSON object per line. Never raises."""
+    reason = "failure_marker" if failure.get("failed") else "no_json"
+    raw = failure.get("raw")
+    raw = raw if isinstance(raw, str) else ""
+    try:
+        trace.record("reply_unreadable", reason=reason, chars=len(raw))
+        row = {"at": datetime.now().astimezone().isoformat(timespec="seconds"),
+               "turn": failure.get("turn"), "reason": failure.get("reason"),
+               "raw": raw}
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(row, ensure_ascii=False) + "\n")
+    except Exception as e:                # noqa: BLE001 -- never cost the turn
+        log("failed reply not kept:", repr(e))
 
 
 # =================================================================== queue
@@ -2265,9 +2175,9 @@ class StageWriter:
         self._graph_session: Path | None = None
         self._graph_datum = ""
         self._graph_teilnehmende = ""
-        # Protocol v2: the protocol the consumer files entries into itself.
-        # None means v1 -- the agent maintains the protocol, and a
-        # `tag_entry` proposal is refused. `link_names` is the set of
+        # The protocol the consumer files entries into itself (`main()`
+        # sets it at start-up). None means there is none -- a `tag_entry`
+        # proposal is refused. `link_names` is the set of
         # project file stems every entry's wikilinks are checked against,
         # refreshed by `run_turn` at the start of a turn and again right
         # before its proposals are read; None means "no check".
@@ -2535,14 +2445,13 @@ class StageWriter:
         return pfad
 
     def file_unrecorded(self, entries: list[dict]) -> list[dict]:
-        """v2: file what fell off the stage as `frage` entries.
+        """File what fell off the stage as `frage` entries.
 
         Parked notices and expired questions (`StageState.unrecorded()`).
-        In v1 the agent is told to put them under `## Offene Fragen`; in
-        v2 the consumer owns the protocol and does it itself, with the
-        same wording the v1 prompt uses. Returns the entries that actually
-        landed -- exactly those, and only those, may be marked recorded.
-        Under v1 nothing is filed and the list is empty.
+        The consumer owns the protocol and does it itself. Returns the
+        entries that actually landed -- exactly those, and only those, may
+        be marked recorded. Without a protocol nothing is filed and the
+        list is empty.
         """
         if self.protocol is None:
             return []
@@ -3136,14 +3045,21 @@ def main() -> int:
     sync_window = SyncWindow(run_dir, log=log)
     sync_window.acquire()
     if not path.exists():
-        # New protocols are v2 (topic blocks, tagged entries, derived
-        # view). An existing file -- v1 included -- is continued as it is.
+        # New protocols are in the current format (topic blocks, tagged
+        # entries, derived view).
         atomic_write_text(path, protocol_header(
             title=title, entity=entity, day=day, pslug=pslug,
             participants=", ".join(p.strip() for p in a.participants.split(",") if p.strip()),
             start=datetime.now().strftime("%H:%M"), mode=a.mode, agenda=agenda))
         log("created:", path)
     else:
+        # An existing file of the old format is continued in the current
+        # one below a dated marker line, never rewritten.
+        try:
+            if continue_protocol(path, datetime.now(), a.mode):
+                log("old-format protocol continued in format 2:", path)
+        except (OSError, ValueError) as e:
+            log("protocol not continued in format 2:", repr(e))
         log("appending to:", path)
 
     # The stage: the consumer holds the state and is its only writer. The
@@ -3448,10 +3364,9 @@ def main() -> int:
     # Looking only next to the protocol would have made the warning
     # blind to exactly the case AGENTS.md documents.
     conflict_dirs = [run_dir] if orte["flat"] else [run_dir, folder]
-    # v2: the consumer files the protocol's entries itself. v1: the agent
-    # does, and the writer refuses `tag_entry`.
-    writer.protocol = minutes_doc if minutes_doc.is_v2 else None
-    log("protocol format:", 2 if minutes_doc.is_v2 else 1)
+    # The consumer files the protocol's entries itself (format 1 removed,
+    # issue #49): v2 protocol is the only path now.
+    writer.protocol = minutes_doc
     # The decisions-tasks-questions block owns the level-1 decider (OFF
     # unless COTHINKER_DECIDER is set -- no surprise network call in a
     # running meeting; a backend that cannot be built is one log line) and,
@@ -3582,11 +3497,11 @@ def main() -> int:
     # process always gets a fresh `session_id` (make_session_id uses
     # `datetime.now()`), so a restart -- crash recovery included --
     # naturally starts a new worker session and needs the full prompt
-    # again. Never reset back to True while this process lives -- with
-    # ONE exception: the v2 -> v1 fallback (`turn_protocol_format`
-    # reports `switched`) resets it once, because the history then holds
-    # only the v2 instruction and the agent needs the full v1 one.
+    # again. Never reset back to True while this process lives.
     first_turn = [True]
+    turn_no = [0]
+    replies = ReplyIntake(session_blocks)
+    failed_replies_path = orte["events"].parent / f"reply-failures-{day}.jsonl"
 
     stopp = threading.Event()
     # A turn is in flight. The queue cannot answer this: next_batch() pops
@@ -3660,21 +3575,12 @@ def main() -> int:
         # expired questions. Read BEFORE the prompt is built, so only what
         # this run was really told about is ticked off afterwards.
         unrecorded = state.unrecorded()
-        # v2 only while the file still IS v2 (turn_protocol_format). If it
-        # stopped being v2 mid-run, this turn and every later one are v1:
-        # unrecorded entries go back into the prompt, the v1 texts go out,
-        # and -- once -- the FULL v1 prompt, because the worker's history
-        # only knows the v2 instruction that forbids writing the protocol.
-        fmt, switched = turn_protocol_format(writer, log)
-        if switched:
-            first_turn[0] = True
-        file_names: list[str] = []
-        if fmt == 2:
-            # v2: the consumer owns the protocol, so it files these itself
-            # -- now, independent of how the run goes -- and marks exactly
-            # those that landed. The prompt no longer mentions them.
-            file_names = prepare_v2_turn(writer, state, folder, unrecorded, log)
-            unrecorded = []
+        # The consumer owns the protocol, so it files what fell off the
+        # stage itself -- now, independent of how the run goes -- and marks
+        # exactly those that landed. The prompt does not mention them.
+        file_names = prepare_turn(writer, state, folder, unrecorded, log)
+        unrecorded = []
+        turn_no[0] += 1
         # A merged block (backlog) and a carry-over need different
         # instructions than a normal section: the agent should know it is
         # behind and orient itself on what was said LAST.
@@ -3714,14 +3620,14 @@ def main() -> int:
             # MM-G D7: "Robo, leg dafuer eine Seite an" creates the topic
             # page BEFORE turn_orders, so level 2's fill order rides
             # along with this very turn.
-            extra_note, gesprochen = decisions.turn_orders(fmt, b)
+            extra_note, gesprochen = decisions.turn_orders(b)
             prompt = build_prompt(
-                minutes_file.path, proposals_path, b, state,
+                minutes_file.path, b, state,
                 backlog_note=(BACKLOG_NOTE if b.reason in ("batch", "carry")
                               else ""),
-                order_note=order_note_for(fmt, b.wake_word) + extra_note,
+                order_note=order_note_for(b.wake_word) + extra_note,
                 project_dir=folder, first_turn=dieser_turn_ist_erster,
-                fmt=fmt, file_names=file_names,
+                file_names=file_names,
                 # Level 2's own open question is Robo's to evaluate: the
                 # agent sees it marked as such, not as one to resolve.
                 policy_ask_id=decisions.open_ask_id())
@@ -3733,6 +3639,7 @@ def main() -> int:
                 result = worker.run(prompt, timeout=TURN_TIMEOUT_S)
             duration = time.monotonic() - t0
             gelungen = bool(result["ok"])
+            reply = TurnReply([], [])
             if gelungen:
                 # The worker actually sent this prompt and Hermes wrote it
                 # into the conversation history (worker.py: `send()` after
@@ -3743,6 +3650,18 @@ def main() -> int:
                 # conservative choice is to send the full prompt again
                 # until one run is confirmed to have gone through.
                 first_turn[0] = False
+                if not a.dry_agent:
+                    reply = replies.read(result.get("final") or "", turn_no[0])
+                if reply.failure is not None:
+                    # The agent's answer is not the JSON reply: the turn
+                    # counts as failed (the block is carried to the next
+                    # run), the text is kept.
+                    keep_failed_reply(failed_replies_path, reply.failure,
+                                      trace, log)
+                    gelungen = False
+                    result = {**result, "ok": False,
+                              "error": "reply not readable: "
+                              + str(reply.failure.get("reason"))}
             if result["ok"]:
                 # Cleared BEFORE reading the proposals, not after: a line
                 # this very run wrote unreadably has to survive to the
@@ -3764,11 +3683,19 @@ def main() -> int:
                 # entry links to, and the set from the start of the turn
                 # would strip that link as dead.
                 refresh_link_names(writer, folder, log)
+            # The reply's stage actions go into the proposal file -- the
+            # host writes it, the agent never does -- and are applied
+            # first: a `topic` opens the block the reply's items belong to.
+            try:
+                append_proposals(proposals_path, reply.proposals)
+            except OSError as e:
+                log("stage proposals not written:", repr(e))
             # A wake order's evidence is the block it was decided on, which
             # may have been said before this turn's own block.
             discarded = writer.ingest(proposals_path, spoken=gesprochen)
             if discarded:
                 log(f"  {discarded} unreadable proposal lines discarded")
+            file_bullets(writer, reply.bullets, log)
             veraendert = writer.applied > vorher_angewandt
             trace.record_all(state.tick())
             # The middle of the three call-out outcomes section 7 asks for.
