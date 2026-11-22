@@ -79,8 +79,8 @@ class Env:
                 title="Synthetischer Termin", entity="probe",
                 day="2026-09-26", pslug="probe", participants="A, B",
                 start="10:00", mode=mode), encoding="utf-8")
-            self.writer.protocol = consumer.Protocol(self.protocol_path,
-                                                     self.tmp, mode=mode)
+            self.writer.protocol = consumer.open_minutes(self.protocol_path,
+                                                          mode=mode, session_dir=self.tmp)
         self.script: dict = {}       # question id -> raw backend answer
         self.raise_on = None         # (question id, exception)
         self.calls: list = []        # question ids per decide_fn call
