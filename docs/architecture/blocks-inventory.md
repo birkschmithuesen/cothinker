@@ -180,7 +180,6 @@ shared/surface.py                                                               
 shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py               block:write-text
 shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py                block:write-text
 shared/speechmatics.py                                                           stt:engine-speechmatics
-shared/surface.py                                                                 core:module
 shared/text.py                                                                    surface:stage
 shared/utterance.py                                                              stt:engine-speechmatics
 shared/wake_word.py                                                               block:segment
