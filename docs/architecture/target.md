@@ -318,6 +318,19 @@ class Block(Protocol):
   the session folder (single writer per file).
 - Inventory of blocks and their sources: [blocks-inventory.md](blocks-inventory.md).
 
+**Block tools.** A started block may return a list of `ToolSpec`s from an
+optional `tools()` method; `fn` is bound to the started instance. The block
+host collects them once, after `start()`, rejecting bad or duplicate tool
+names right there rather than at call time. From then on the host lists
+them, checks a call's arguments against the tool's JSON schema, calls the
+bound function, and keeps a short log of calls (with the result, for
+read-only tools). A successful call on a non-read-only tool also dispatches
+a `block_output` event, so other blocks see the write the same way they see
+any other block's output. A tool that raises never propagates: the host
+logs it and returns an `{"ok": false, "error": "tool_failed: <Type>"}`
+envelope instead. The MCP bridge the agent talks to exposes exactly this
+list — nothing a block didn't declare.
+
 ## 6. Templates (ADR 0009)
 
 A method is a template: blocks + phases + rules, no code of its own.
