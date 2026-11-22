@@ -7,9 +7,10 @@
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
 """The STT API (`docs/architecture/target.md` §2.1, ADR 0003/0004): one
 event type that *is* the `/events` wire, behind one API with two
-transports. This module holds the event type and the SSE transport; the
-in-process transport (audio pushed by the caller) follows in a later
-change.
+transports. This module holds the event type, the SSE transport, the
+transcript-stage and audio-session protocols and `open_stt()`; the
+in-process transport (audio pushed by the caller) lives in
+`shared/stt_inprocess.py`.
 
 `TranscriptEvent` is additive-only on the wire: a field is never renamed
 or removed, `from_wire()` is lenient about what it finds, and `to_wire()`
@@ -20,7 +21,7 @@ from __future__ import annotations
 import json
 import urllib.request
 from dataclasses import dataclass, field, replace as _dc_replace
-from typing import Iterable, Iterator, Protocol
+from typing import Callable, Iterable, Iterator, Mapping, Protocol, Sequence
 
 # The named wire keys. `channel` carries the backend's audio channel id as
 # a string (e.g. "0") on the wire today, even though it is eventually a
@@ -93,11 +94,70 @@ class SttSource(Protocol):
     def close(self) -> None: ...
 
 
+class TranscriptStage(Protocol):
+    """A caller-supplied processing step applied to every event."""
+
+    name: str
+
+    def feed(self, ev: TranscriptEvent) -> Iterable[TranscriptEvent]: ...
+
+
+class SttAudioSession(SttSource, Protocol):
+    """The in-process transport: the caller pushes audio, reads events."""
+
+    state: str  # "connecting" | "ok" | "degraded" | "closed"
+
+    def send_pcm(self, pcm16k: bytes) -> None:
+        """s16le mono 16 kHz. Never blocks; the order is the call order."""
+
+    def flush(self, timeout_s: float = 2.0) -> list[TranscriptEvent]:
+        """Force-flushes every open utterance and returns the resulting
+        finals (after the stages); they are NOT delivered through
+        `events()` again."""
+
+
+_stage_errors_logged: set = set()
+
+
+def run_stages(stages: Sequence[TranscriptStage], ev: TranscriptEvent,
+               log: Callable[[str], None]) -> list[TranscriptEvent]:
+    """Feeds `ev` through each stage in order (fan-out allowed). A stage that
+    raises is logged once per (stage, exception type) and the event goes on
+    unchanged."""
+    events = [ev]
+    for stage in stages:
+        out: list[TranscriptEvent] = []
+        for e in events:
+            try:
+                out.extend(stage.feed(e))
+            except Exception as exc:       # noqa: BLE001
+                key = (getattr(stage, "name", repr(stage)), type(exc).__name__)
+                if key not in _stage_errors_logged:
+                    _stage_errors_logged.add(key)
+                    log(f"stt: stage {key[0]!r} failed: {key[1]}")
+                out.append(e)
+        events = out
+    return events
+
+
 @dataclass(frozen=True)
 class SttConfig:
     transport: str
     url: str
     read_timeout_s: float = 300.0
+    # In-process transport only (ignored by "sse").
+    engine: str = "speechmatics-eu"        # the only in-process engine
+    language: str = "de"
+    speakers: tuple[Mapping[str, object], ...] | None = None
+    max_speakers: int | None = None
+    max_delay_s: float = 1.0
+    eou_silence_s: float = 0.5
+    prefer_current_speaker: bool = False
+    additional_vocab: tuple[Mapping[str, object], ...] | None = None
+    engine_url: str | None = None
+    recognizer_id: str = "inprocess"
+    stages: tuple[TranscriptStage, ...] = ()
+    api_key: str | None = field(default=None, repr=False)
 
 
 # ==================================================================== SSE
