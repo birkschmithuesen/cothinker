@@ -102,7 +102,11 @@ from graph.graph_build import GraphSource            # noqa: E402
 from graph.seed_note import find_or_create_seed      # noqa: E402
 from graph.vault_notes import DEFAULT_EXCLUDE        # noqa: E402
 from blocks.knowledge_link import KnowledgeLinkBlock  # noqa: E402
-from gateway.block_host_wiring import build_session_blocks, feed_utterance  # noqa: E402
+from gateway.block_host_wiring import (SessionBlocks, build_session_blocks,  # noqa: E402
+                                       feed_utterance)
+from gateway.raw_transcript import MinutesFile  # noqa: E402
+from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
+from blocks.minutes_document import minutes as minutes_block  # noqa: E402
 from gateway.legacy_stage_sink import make_sink      # noqa: E402
 
 ENTITIES = Path(os.environ.get(
@@ -1671,6 +1675,153 @@ class Protocol:
         faden = self._git_faden
         if faden is not None:
             faden.join(timeout)
+
+
+class MinutesPort:
+    """The session host's adapter to the minutes-document block.
+
+    What `Protocol` was for the rest of the host: `add_entry`, `open_topic`,
+    `current_topic*`, `is_v2`, `mode`. The block renders the sections; this
+    class sends it events and carries its rendered head into the file through
+    `MinutesFile.write_sections` -- the host stays the file's only writer.
+
+    The block host dispatches synchronously on the caller's thread, so the
+    block's result (`last_result()`) and the `_tl.write_failed` flag set by
+    `_on_output` belong to the thread that is inside `_send`.
+
+    Every call holds `file.lock` across the dispatch (the same span
+    `Protocol._rewrite` held); `write_sections` re-enters it. The lock order
+    stays file.lock -> StageWriter._lock (via report).
+    """
+
+    def __init__(self, file: MinutesFile, blocks: SessionBlocks, *,
+                 session_dir: Path, mode: str = DEFAULT_MODE,
+                 block_id: str = "minutes-document", log=log):
+        self.file = file
+        self.blocks = blocks
+        self.session_dir = Path(session_dir)
+        self.block_id = block_id
+        self._log = log
+        self._tl = threading.local()
+        blocks.on_output(self._on_output)
+        with file.lock:
+            blocks.dispatch("block_output", {"minutes_open": {
+                "path": str(file.path), "mode": mode}})
+
+    # --------------------------------------------------------- properties
+    @property
+    def path(self) -> Path:
+        return self.file.path
+
+    @property
+    def lock(self):
+        return self.file.lock
+
+    def _block(self):
+        return self.blocks.get(self.block_id)
+
+    @property
+    def is_v2(self) -> bool:
+        b = self._block()
+        return bool(b.is_v2) if b is not None else False
+
+    @property
+    def mode(self) -> str:
+        b = self._block()
+        return b.mode if b is not None else DEFAULT_MODE
+
+    # -------------------------------------------------------------- calls
+    def append_raw(self, text, speaker=None) -> bool:
+        """Host-only convenience: the raw line, never through a block."""
+        return self.file.append_raw(text, speaker)
+
+    def current_topic(self) -> tuple[str, str]:
+        """(key, title) of the last topic block; ("", "") if none. Never raises."""
+        try:
+            b = self._block()
+            if b is None:
+                return "", ""
+            with self.file.lock:
+                return b.current_topic()
+        except Exception as e:            # noqa: BLE001 -- see the docstring
+            self._log("protocol not read:", repr(e))
+            return "", ""
+
+    def current_topic_title(self) -> str:
+        return self.current_topic()[1]
+
+    def add_entry(self, tag, text, *, stamp=None,
+                  names: Iterable[str] | None = None) -> "minutes_block.EntryResult":
+        """Never raises; see `blocks.minutes_document.minutes.EntryResult`."""
+        return self._send("entry", {
+            "tag": tag, "text": text, "stamp": stamp,
+            "names": None if names is None else list(names)
+            if not isinstance(names, (str, bytes)) else names})
+
+    def open_topic(self, title, stamp=None) -> bool:
+        return self._send("topic", {"title": title, "stamp": stamp}).reason == ""
+
+    def _send(self, key: str, body: dict) -> "minutes_block.EntryResult":
+        res = minutes_block.EntryResult("not written")
+        with self.file.lock:
+            self._tl.write_failed = False
+            try:
+                self.blocks.dispatch("block_output", {key: body})
+                b = self._block()
+                got = b.last_result() if b is not None else None
+                res = got or minutes_block.EntryResult("not written")
+            except Exception as e:        # noqa: BLE001 -- never raise
+                self._log("protocol not written:", repr(e))
+            if res.reason == "" and getattr(self._tl, "write_failed", False):
+                res = minutes_block.EntryResult(
+                    "not written", res.links_seen, res.links_dead)
+        ok = {"": True, "not written": False}.get(res.reason)
+        if ok is not None:
+            try:
+                self.file.report(ok)
+            except Exception as e:        # noqa: BLE001 -- never fail a write
+                self._log("protocol report failed:", repr(e))
+        return res
+
+    def _on_output(self, payload) -> None:
+        """Splice the block's rendered head into the file, then drop the artefact."""
+        try:
+            changed = payload.get("minutes_changed") if hasattr(payload, "get") else None
+            if not changed:
+                return
+            art = (self.session_dir / "artefacts" / self.block_id
+                   / str(changed.get("name", "protokoll.md")))
+            try:
+                with open(art, encoding="utf-8", newline="",
+                          errors="surrogateescape") as f:
+                    text = f.read()
+                self.file.write_sections(text)
+            except Exception as e:        # noqa: BLE001 -- see below
+                self._log("protocol not written:", repr(e))
+                self._tl.write_failed = True
+                return
+            try:
+                art.unlink()
+            except OSError:
+                pass
+        except Exception as e:            # noqa: BLE001 -- listeners never raise
+            self._log("minutes output not handled:", repr(e))
+            self._tl.write_failed = True
+
+
+def open_minutes(path: Path, *, mode: str = DEFAULT_MODE,
+                 report: Callable[[bool], None] | None = None,
+                 session_dir: Path | None = None,
+                 log=lambda *a: None) -> MinutesPort:
+    """A MinutesPort over a private block host holding only the minutes
+    block. For tests and helpers; `main()` builds its own."""
+    path = Path(path)
+    file = MinutesFile(path, threading.RLock(), report)
+    sdir = Path(session_dir) if session_dir is not None else path.parent
+    blocks = build_session_blocks(
+        session_dir=sdir, sink=lambda i: None, log=log,
+        registry={"minutes-document": MinutesDocumentBlock})
+    return MinutesPort(file, blocks, session_dir=sdir, mode=mode)
 
 
 # ============================================================ prefilter
