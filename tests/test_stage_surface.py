@@ -21,10 +21,24 @@ class FakeWriter:
         self.statuses = []
         self.announced = []
         self.writes = 0
+        self._warning = ""
 
     def announce(self, kind, label):
         self.announced.append((kind, label))
         return self.state.announce(kind, label)
+
+    def settle(self, pending_id, outcome):
+        return self.state.settle(pending_id, outcome)
+
+    def warn(self, text):
+        self._warning = text
+
+    def clear_warning(self, only=""):
+        if not only or self._warning == only:
+            self._warning = ""
+
+    def warning(self):
+        return self._warning
 
     def set_status(self, state, *, at="", count=0, failed=None):
         self.statuses.append((state, at))
@@ -52,62 +66,134 @@ def fingerprint(state):
 
 
 def test_topic_rule_confirmed_and_provisional():
+    """The call lane -- not this row -- is the only writer of topic
+    history entries (issue #39): a provisional `topic:` intent only
+    rewrites the stage file; a confirmed one swaps the provisional title
+    of `replaces` in place, as the call lane's titler callback used to."""
     surface, state, writer, _ = make()
+    state.confirmed_topic("Budget", "Budget")           # as the call lane does
     surface.render([intent("topic:t1", "status",
                            {"title": "Budget", "since": 1.0, "provisional": True})])
-    assert state.headline == "Budget"
-    surface.render([intent("topic:t2", "status",
-                           {"title": "Roadmap", "since": 2.0, "provisional": False})])
+    assert state.main.title == "Budget" and writer.writes == 1
+    surface.render([intent("topic:t1", "status",
+                           {"title": "Roadmap", "since": 2.0, "provisional": False,
+                            "replaces": "Budget"})])
     assert state.main.title == "Roadmap"
     assert writer.writes == 2
 
 
 def test_pending_rule_announces_then_settles():
+    """The decisions-tasks-questions block's `IntentWriter`: `announce`,
+    `settle` and `warn` become `pending:<n>` intents with an `op`; a
+    settle re-emits the SAME intent id as its announce."""
     surface, state, writer, _ = make()
     announce = intent("pending:1", "status",
-                      {"pending_kind": "decision", "label": "Beschluss", "settled": False})
+                      {"op": "announce", "kind": "decision", "label": "Beschluss"})
     surface.render([announce])
     assert [p.label for p in state.pending] == ["Beschluss"]
     assert writer.announced == [("decision", "Beschluss")]   # via the writer path
     surface.render([announce])                       # unchanged: not announced twice
     assert len(state.pending) == 1
-    # Relabelled while unsettled: one entry, the old one does not linger.
     surface.render([intent("pending:1", "status",
-                           {"pending_kind": "decision", "label": "Beschluss Budget",
-                            "settled": False})])
-    assert [p.label for p in state.pending] == ["Beschluss Budget"]
-    surface.render([intent("pending:1", "status",
-                           {"pending_kind": "decision", "label": "Beschluss",
-                            "settled": True})])
+                           {"op": "settle", "kind": "decision", "label": "Beschluss",
+                            "outcome": "arrived"})])
     assert state.pending == []
 
 
+def test_pending_rule_warn():
+    surface, _, writer, _ = make()
+    surface.render([intent("pending:2", "status", {"op": "warn", "text": "Achtung"})])
+    assert writer.warning() == "Achtung"
+
+
 def test_status_rule_sets_operating_line():
+    """The intent never carries a clock value (issue #41): the "zuletzt
+    {at}" timestamp is stamped from this call's own clock, not the
+    status-line block's; `detail` carries `count`/`failed`."""
     surface, _, writer, _ = make()
     assert surface.name == "stage" and list(surface.actions()) == []
     assert surface.kinds == {"prompt", "status", "artefact", "graph", "timer",
                              "queue", "share"}
     surface.render([intent("status:line", "status",
-                           {"state": "working", "detail": ""})])
-    assert writer.statuses == [("working", "")]
-    # The consumer's publisher defers to a current intent, and stops
-    # deferring once it has left the board.
-    assert surface.status_line() == {"state": "working", "detail": ""}
-    surface.render([])
-    assert surface.status_line() is None
+                           {"state": "working", "detail": {"count": 3, "failed": False}})])
+    assert len(writer.statuses) == 1
+    state, at = writer.statuses[0]
+    assert state == "working" and at != ""
 
 
 def test_links_rule_sets_links():
     surface, state, _, _ = make()
-    surface.render([intent("links:t1", "artefact", {"links": ["notes/a.md"]})])
-    assert state.content()["links"] == [{"file": "notes/a.md", "label": "notes/a.md"}]
+    surface.render([intent("links:t1", "artefact",
+                           {"links": ["notes/Alpha.md", "Beta.md"]})])
+    assert state.content()["links"] == [
+        {"file": "notes/Alpha.md", "label": "Alpha"},
+        {"file": "Beta.md", "label": "Beta"},
+    ]
 
 
-def test_mirror_rule_sets_mirror():
-    surface, state, _, _ = make()
+def test_mirror_rule_files_reply_into_topic_history(tmp_path):
+    surface, state, writer, _ = make()
+    state.confirmed_topic("Budget", "Es geht um Geld")
+    entry = state.main.id
     surface.render([intent("mirror:1", "prompt",
-                           {"text": "Wer fehlt noch?", "kind": "coach"})])
-    assert state.content()["mirror"] == "Wer fehlt noch?"
+                           {"text": "Robo (Coach): x", "contribution": "reply",
+                            "topic_id": entry, "addition": "Spiegel: x"})])
+    assert "Spiegel: x" in state.history[0].markdown
+    assert state.mirror != "Robo (Coach): x" and writer.writes == 1
+
+
+def test_mirror_rule_falls_back_to_jsonl_when_entry_is_gone(tmp_path):
+    path = tmp_path / "coach-history.jsonl"
+    state = StageState()
+    writer = FakeWriter(state)
+    logs = []
+    surface = StageSurface(writer, state, logs.append, coach_history_path=path)
+    rec = {"at": "t", "stale": False, "ok": True, "final": "Spiegel: x",
+          "topic_started_at": 1.0}
+    surface.render([intent("mirror:1", "prompt",
+                           {"text": "x", "contribution": "reply", "topic_id": "gone",
+                            "addition": "Spiegel: x", "record": rec})])
+    assert json.loads(path.read_text(encoding="utf-8")) == rec
+    assert writer.writes == 0
+
+
+def test_mirror_rule_records_a_failure_in_the_jsonl(tmp_path):
+    path = tmp_path / "coach-history.jsonl"
+    state = StageState()
+    writer = FakeWriter(state)
+    logs = []
+    surface = StageSurface(writer, state, logs.append, coach_history_path=path)
+    rec = {"at": "t", "stale": False, "ok": False, "final": "",
+          "topic_started_at": 1.0}
+    surface.render([intent("mirror:1", "prompt",
+                           {"text": "", "contribution": "failure", "record": rec})])
+    assert json.loads(path.read_text(encoding="utf-8")) == rec
+    assert writer.writes == 0
+
+
+def test_mirror_rule_raises_the_nachtrag_notice_and_clears_it():
+    surface, state, writer, _ = make()
+    state.confirmed_topic("Eins", "x")
+    entry = state.main.id
+    surface.render([intent("mirror:1", "prompt",
+                           {"text": "x", "contribution": "Nachtrag", "topic_id": entry,
+                            "addition": "**Nachtrag 10:00:** y", "notice": True})])
+    assert "Nachtrag" in writer.warning() and "Eins" in writer.warning()
+    surface.render([intent("mirror:2", "prompt", {"text": "", "contribution": "clear"})])
+    assert writer.warning() == ""
+
+
+def test_mirror_rule_never_clobbers_an_unrelated_warning():
+    surface, state, writer, _ = make()
+    writer.warn("Achtung: Konflikt")
+    state.confirmed_topic("Eins", "x")
+    surface.render([intent("mirror:1", "prompt",
+                           {"text": "x", "contribution": "Nachtrag",
+                            "topic_id": state.main.id,
+                            "addition": "**Nachtrag 10:00:** y", "notice": True})])
+    assert writer.warning() == "Achtung: Konflikt"
+    surface.render([intent("mirror:2", "prompt", {"text": "", "contribution": "clear"})])
+    assert writer.warning() == "Achtung: Konflikt"
 
 
 def test_condense_rule_is_log_only():
@@ -175,8 +261,8 @@ def test_fingerprint_ignores_clock():
                                           "anchor_at": 0.0,
                                           "planned_cumulative_min": [1.0]}),
         intent("status:line", "status", {"state": "listening", "detail": ""}),
-        intent("pending:1", "status", {"pending_kind": "decision",
-                                       "label": "Beschluss", "settled": False}),
+        intent("pending:1", "status", {"op": "announce", "kind": "decision",
+                                       "label": "Beschluss"}),
     ):
         board.put(i)
     surface.render(board.current())

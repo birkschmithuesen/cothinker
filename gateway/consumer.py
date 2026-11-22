@@ -3358,14 +3358,21 @@ def main() -> int:
     # (ADR 0006, issue #46) onto this same StageWriter -- the consumer
     # stays the only writer of buehne.json. The call lane sees the coach's
     # mirror lines through the same board.
-    stage_surface = StageSurface(writer, state, log)
+    stage_surface = StageSurface(writer, state, log,
+                                 coach_history_path=run_dir / "coach-history.jsonl")
     session_blocks_cell: list = []
 
     def block_sink(intent) -> None:
         # The snapshot, not just `intent`: render() needs the whole board
-        # to notice what has left it since the last call.
+        # to notice what has left it since the last call. `intent` itself
+        # is added back in when missing: a settle's own intent expires at
+        # once (IntentWriter.settle, blocks/decisions_tasks_questions), so
+        # by the time `current()` runs it may already be gone from the
+        # board -- the row that applies it must still see it this once.
         if session_blocks_cell:
-            stage_surface.render(session_blocks_cell[0].intents.current())
+            current = {i.id: i for i in session_blocks_cell[0].intents.current()}
+            current.setdefault(intent.id, intent)
+            stage_surface.render(list(current.values()))
         if lanes is not None:
             lanes.observe_intent(intent)
 
@@ -3574,8 +3581,6 @@ def main() -> int:
         lost from the raw transcript.
         """
         try:
-            if stage_surface.status_line() is not None:
-                return                  # a current status:line intent wins
             waiting = 0 if a.no_agent else queue.backlog()
             session_blocks.dispatch("tick", {
                 "components": {
