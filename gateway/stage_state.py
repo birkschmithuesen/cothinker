@@ -397,6 +397,15 @@ class StageState:
         # `agenda.md` and a small state file of its own, so it survives a
         # restart on its own terms (see `AgendaController` there).
         self.agenda: dict | None = None
+        # Optional stage regions rendered by `gateway/stage_surface.py`
+        # from the `queue`, `share` and `graph` view intents. None means
+        # the key is left out of `content()` altogether, so a session
+        # without those blocks writes the same file as before (the
+        # version stays, see SCHEMA_VERSION). Absolute data only: no
+        # ticking value may sit in here (the fingerprint).
+        self.queue: dict | None = None
+        self.share: dict | None = None
+        self.session_graph: dict | None = None
 
     # ------------------------------------------------------------ helpers
     @property
@@ -1108,6 +1117,16 @@ class StageState:
 
     def _content(self) -> dict:
         main = self.main
+        content = self._base_content(main)
+        # Only ADDED, and only when a surface rendered them: key absent
+        # means "section hidden" for the page.
+        for key, value in (("queue", self.queue), ("share", self.share),
+                           ("session_graph", self.session_graph)):
+            if value is not None:
+                content[key] = value
+        return content
+
+    def _base_content(self, main: Main) -> dict:
         return {
             "version": SCHEMA_VERSION,
             "updated": self._label(),
