@@ -51,7 +51,7 @@ tables below are built from.
 | decisions / tasks / open questions | Capture | `blocks/decisions_tasks_questions/{decide,decider,openrouter_jev,policy,policy_runner,questions}.py` — 2688 (`gateway/proposals.py` 68 stays in the session host) | Reflect | 1× |
 | minutes document | Condense + write | `shared/minutes_format.py` 454, `blocks/minutes_document/__init__.py` 130, `blocks/minutes_document/minutes.py` 235 (the session host's `gateway/raw_transcript.py` writes the file) | Reflect | 1× |
 | write text | Condense + write | `shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py` 84, `pick_questions.py` 37 — 121 | core | 1× |
-| mirroring / coach question | Agent behaviour | `gateway/lane_context.py` 130, `lane_integration.py` 1067 — 1197 (scheduling in `lanes.py`/`agent_lane.py` belongs to the Agent API) | Reflect | 1× |
+| mirroring / coach question | Agent behaviour | `blocks/mirroring_coach/context.py` 130, `coach.py` 588 (the call lane in `gateway/call_lane.py` and scheduling in `lanes.py`/`agent_lane.py` belong to the Agent API) — 718 | Reflect | 1× |
 | knowledge link (vault) | Agent behaviour | `blocks/knowledge_link/__init__.py` 123, `blocks/knowledge_link/wiki.py` 408, `shared/wiki_names.py` 49 (`graph/*.py`, the vault-note library, is a core library: `core:session`) | Reflect | 1× |
 | status line | Show + share | `blocks/status_line/__init__.py` 143, `group.py` 57, `line.py` 24 — 224 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
@@ -162,8 +162,7 @@ shared/events.py                                                                
 gateway/infomaniak_chat.py                                                        core:llm
 gateway/infomaniak_embed.py                                                       core:llm
 gateway/infomaniak_limiter.py                                                     core:llm
-gateway/lane_context.py                                                           block:mirroring-coach
-gateway/lane_integration.py                                                       block:mirroring-coach
+gateway/call_lane.py                                                              core:agent
 gateway/lanes.py                                                                  core:agent
 gateway/legacy_stage_sink.py                                                      core:session
 blocks/decisions_tasks_questions/openrouter_jev.py                                block:decisions-tasks-questions
@@ -187,6 +186,9 @@ gateway/thought_end.py                                                          
 gateway/thought_end_laya_worker.py                                                stt:thought-end
 gateway/thought_end_live.py                                                       stt:thought-end
 gateway/timing.py                                                                 core:session
+blocks/mirroring_coach/__init__.py                                                block:mirroring-coach
+blocks/mirroring_coach/coach.py                                                   block:mirroring-coach
+blocks/mirroring_coach/context.py                                                 block:mirroring-coach
 blocks/knowledge_link/__init__.py                                                 block:knowledge-link
 blocks/knowledge_link/wiki.py                                                     block:knowledge-link
 gateway/worker.py                                                                 core:agent
@@ -201,6 +203,7 @@ shared/__init__.py                                                              
 shared/agent.py                                                                   core:agent
 shared/blocks.py                                                                  core:session
 shared/instance.py                                                                core:instance
+shared/lane_port.py                                                               core:agent
 shared/language_guard.py                                                          core:llm   
 shared/llm.py                                                                     core:llm   
 shared/modules.py                                                                 core:module

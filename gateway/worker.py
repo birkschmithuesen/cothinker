@@ -383,7 +383,7 @@ def _main() -> int:                       # pragma: no cover - needs Hermes
     ap.add_argument("--no-history", action="store_true",
                     help="never read the per-session SessionDB conversation "
                          "back: a lane worker's prompt "
-                         "(gateway/lane_context.py's build_prompt()) already "
+                         "(blocks/mirroring_coach/context.py's build_prompt()) already "
                          "carries the full bounded window + Stand summary "
                          "every turn, so replaying the ever-growing stored "
                          "conversation on top of it would defeat the whole "

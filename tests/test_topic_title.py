@@ -4,7 +4,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""topic_title + its wiring in lane_integration, with a fake model (no
+"""topic_title + its wiring in the call lane, with a fake model (no
 network), and StageState.retitle().
 
 Ported from a script-style test: one pytest function per former check, same
@@ -29,12 +29,12 @@ import pytest
 
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE.parent))
-# lane_integration still imports its siblings by bare name.
+# call_lane still imports its siblings by bare name.
 sys.path.append(str(HERE.parent / "gateway"))
 
 from blocks.topics import title as tt  # noqa: E402
 from blocks.topics import TopicsBlock  # noqa: E402
-from gateway.lane_integration import Lanes  # noqa: E402
+from gateway.call_lane import CallLane  # noqa: E402
 from gateway.legacy_stage_sink import make_sink  # noqa: E402
 from gateway.stage_state import StageState  # noqa: E402
 from shared.blocks import BlockContext, BlockHost  # noqa: E402
@@ -154,7 +154,7 @@ check("test_content_exports_the_new_title", "content() exports the new title",
       st.content()["history"])
 
 
-print("\nTopics block (titles = true) -> host -> sink / Lanes.on_topic wiring")
+print("\nTopics block (titles = true) -> host -> sink / CallLane.on_topic wiring")
 
 
 class Clock:
@@ -185,7 +185,7 @@ class Writer:
 
 class Rig:
     """The real topic path: TopicsBlock in a BlockHost; its intents go
-    through the legacy stage sink, its `topic` output to Lanes.on_topic."""
+    through the legacy stage sink, its `topic` output to CallLane.on_topic."""
 
     def __init__(self, titler_factory, tag):
         import tempfile
@@ -194,10 +194,11 @@ class Rig:
         self.writer = Writer(self.state)
         self.lane_logs: list = []
         self.intents: list = []
-        self.lanes = Lanes(
-            call_command=[sys.executable, FAKE], coach_command=[sys.executable, FAKE],
-            call_session_id=f"tt-call-{tag}", coach_session_id=f"tt-coach-{tag}",
+        self.announced: list = []
+        self.lanes = CallLane(
+            call_command=[sys.executable, FAKE], call_session_id=f"tt-call-{tag}",
             project_agenda="P", state=self.state, writer=self.writer, now=self.clock,
+            dispatch=lambda kind, payload: self.announced.append((kind, payload)) or 0,
             log=lambda *a: self.lane_logs.append(" ".join(map(str, a))))
         sink = make_sink(self.writer, lambda s: None)
         rig = self
@@ -214,7 +215,8 @@ class Rig:
                 pass
 
             def on_event(inner, ev):
-                if ev.kind == "block_output" and "topic" in ev.payload:
+                if (ev.kind == "block_output" and "topic" in ev.payload
+                        and ev.payload.get("from") != "session-host"):
                     rig.lanes.on_topic(ev.payload["topic"])
                 return ()
 
@@ -314,23 +316,23 @@ stop_lanes(rig)
 
 
 def test_confirmed_return_reaches_the_coach_without_a_history_row():
-    """Regression (issue #39): a confirmed return resets the coach's
-    per-topic state through Lanes.on_topic, as before the move, and adds
-    no history entry and no topic view intent."""
+    """Regression (issue #39): a confirmed return reaches the blocks (the
+    mirroring coach resets its per-topic state on it) through
+    CallLane.on_topic, and adds no history entry and no topic view intent."""
     rig, state, writer, clock, lane_logs = make(None, "ret")
     clock.t += 95
     rig.decide(0.9, "Erster Satz hier")
     n_hist, n_intents = len(state.history), len(rig.intents)
-    rig.lanes._coach_eligible = True
-    rig.lanes._coach_contributed = True
+    announced_before = len(rig.announced)
     clock.t += 95
     rig.host.dispatch(CoreEvent("block_output", {"decider_result": {
         "neues_thema": 0.0, "rueckkehr_thema": 0.95,
         "block": "Zurueck zum Anfang", "previous": ""}}))
     assert "topic: return" in lane_logs
-    assert rig.lanes._coach_eligible is False
-    assert rig.lanes._coach_contributed is False
-    assert rig.lanes._coach_topic_started_at == clock.t
+    assert rig.announced[announced_before:] == [("block_output", {
+        "from": "session-host",
+        "topic": {"id": "", "title": "Thema", "returned": True,
+                  "coach_eligible": False}})]
     assert len(state.history) == n_hist
     assert len(rig.intents) == n_intents
     stop_lanes(rig)
@@ -432,7 +434,7 @@ def test_model_failure_keeps_the_provisional_title():
     "characterization finding: the archive's Lanes passes "
     "set_headline=(self.titler is None) so that the headline is the "
     "provisional title when no titler runs; this repository's "
-    "lane_integration.py lacks that and leaves the headline empty"))
+    "call_lane.py lacks that and leaves the headline empty"))
 def test_switch_off_no_titler_the_headline_is_the_provisional_title():
     _verify("test_switch_off_no_titler_the_headline_is_the_provisional_title")
 

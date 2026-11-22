@@ -93,7 +93,7 @@ from thought_end_live import (DEFAULT_THRESHOLD as THOUGHT_END_THRESHOLD,  # noq
                               FINISH_TIMEOUT_S as THOUGHT_END_FINISH_TIMEOUT_S,
                               ThoughtEndLane, default_laya_argv)
 from worker import WorkerClient  # noqa: E402
-import lane_integration as lane_integration_mod  # noqa: E402
+import call_lane as call_lane_mod  # noqa: E402
 import stage_image as stage_image_mod  # noqa: E402
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -102,7 +102,8 @@ from graph.seed_note import find_or_create_seed      # noqa: E402
 from graph.vault_notes import DEFAULT_EXCLUDE        # noqa: E402
 from blocks.knowledge_link import KnowledgeLinkBlock  # noqa: E402
 from gateway.block_host_wiring import (SessionBlocks, build_session_blocks,  # noqa: E402
-                                       feed_utterance)
+                                       coach_block_config, feed_utterance,
+                                       make_agent_for)
 from gateway.raw_transcript import MinutesFile  # noqa: E402
 from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
 from blocks.minutes_document import minutes as minutes_block  # noqa: E402
@@ -226,7 +227,7 @@ def project_agenda_text(title: str, participants: str, agenda: list[str],
     `enrolled_names` replaces the bare `--participants` list with the
     speaker-enrollment subsystem's resolved names once the intro round
     ends -- the one deliberate, accepted change this prefix may make
-    mid-meeting (gateway.lane_integration.Lanes.update_stable_prefix()).
+    mid-meeting (gateway.call_lane.CallLane.update_stable_prefix()).
     """
     names = (", ".join(enrolled_names) if enrolled_names else participants)
     lines = [f"Projekt: {title}"]
@@ -2119,11 +2120,11 @@ def worker_interpreter() -> str:
 def default_lane_command(*, python_exe: str, worker_py: Path, model: str,
                          provider: str, hermes_home: Path) -> list:
     """The argv `--lanes` builds for a lane worker when neither
-    `--lane-call-worker-command` nor `--lane-coach-worker-command`
-    overrides it.
+    `--lane-call-worker-command` nor the mirroring-coach block's
+    `lane_coach_worker_command` config key overrides it.
 
     Always carries `--no-history`: a lane's prompt
-    (`gateway/lane_context.py`'s `build_prompt()`) already carries the
+    (`blocks/mirroring_coach/context.py`'s `build_prompt()`) already carries the
     full bounded window + Stand summary every turn, so letting
     `gateway/worker.py` ALSO replay the ever-growing per-session
     SessionDB conversation on top of it would defeat the whole point of
@@ -2139,66 +2140,59 @@ def default_lane_command(*, python_exe: str, worker_py: Path, model: str,
 
 
 def build_lanes(a, log: Callable[..., None], *, call_command: list,
-                coach_command: list, session_id: str, project_agenda: str,
-                state, writer, folder: Path, path: Path, run_dir: Path):
-    """The meeting's `lane_integration.Lanes`, including the agent-seam
-    wiring for `COTHINKER_AGENT=api`.
+                session_id: str, project_agenda: str,
+                state, writer, folder: Path, path: Path,
+                seam=None):
+    """The meeting's `call_lane.CallLane` (the coach lane is the
+    `mirroring-coach` block; its agent comes from
+    `block_host_wiring.make_agent_for`), including the agent-seam wiring for
+    `COTHINKER_AGENT=api` (`seam` is `agent_seam(log)`, computed once by the
+    caller) -- the call lane stays on the worker unless
+    `COTHINKER_AGENT_CALL=api` too.
 
-    Extracted out of `main()` so the path from
-    `COTHINKER_AGENT=api` through `agent_lane.coach_soul_briefing()` to the
-    `coach_briefing` this function passes into `Lanes(...)` is covered by a
-    test that does not need a full `main()` run --
-    tests/test_lane_briefing_wiring.py calls this function directly.
+    Extracted out of `main()` so it is covered by a test that does not need
+    a full `main()` run.
     """
-    coach_lane_factory = call_lane_factory = None
-    coach_briefing = ""
-    # COTHINKER_AGENT=api (default: worker): the coach lane runs over
-    # the agent seam (gateway/agent_lane.py, a Hermes API server, e.g.
-    # on another machine through an SSH tunnel). The call lane stays on the
-    # worker unless COTHINKER_AGENT_CALL=api too -- the remote agent
-    # cannot see this machine's project folder (no file tools here).
-    if os.environ.get("COTHINKER_AGENT", "worker").strip() == "api":
-        import agent_lane
-        agent_url = os.environ.get("COTHINKER_AGENT_URL", "").strip()
-        key_env = (os.environ.get("COTHINKER_AGENT_KEY_ENV", "").strip()
-                   or "API_SERVER_KEY")
-        agent_key = os.environ.get(key_env, "").strip()
-        if not agent_url or not agent_key:
-            raise SystemExit("COTHINKER_AGENT=api needs COTHINKER_AGENT_URL "
-                             f"and the key in ${key_env}")
-        _make = agent_lane.api_lane_factory(agent_url, agent_key, log=log)
-        coach_lane_factory = _make
-        if os.environ.get("COTHINKER_AGENT_CALL", "").strip() == "api":
-            call_lane_factory = _make
-        # The seam's one shared server has no per-session profile
-        # selector (gateway/agent_lane.py's module docstring)
-        # -- send the coach's own SOUL.md as this
-        # session's briefing instead of trusting the server's
-        # ambient profile to be this one.
-        coach_briefing = agent_lane.coach_soul_briefing(
-            Path.home() / ".hermes/profiles/cothinker-coach")
-        log(f"agent seam: coach=api"
-            f" call={'api' if call_lane_factory else 'worker'}"
-            f" url={agent_url}"
-            f" coach_briefing_chars={len(coach_briefing)}")
-    return lane_integration_mod.Lanes(
-        call_command=call_command, coach_command=coach_command,
+    call_lane_factory = None
+    if seam is not None and os.environ.get("COTHINKER_AGENT_CALL", "").strip() == "api":
+        call_lane_factory = seam[0]
+    extra_dirs = call_lane_mod.extra_dirs_from_env(
+        os.environ.get("COTHINKER_EXTRA_DIRS", ""))
+    return call_lane_mod.CallLane(
+        call_command=call_command,
         call_session_id=f"{session_id}-call",
-        coach_session_id=f"{session_id}-coach",
         project_agenda=project_agenda, state=state, writer=writer,
-        call_paths=lane_integration_mod.call_paths_text(
-            folder, path, lane_integration_mod.extra_dirs_from_env(
-                os.environ.get("COTHINKER_EXTRA_DIRS", ""))),
-        image_dirs=stage_image_mod.allowed_dirs(
-            folder, lane_integration_mod.extra_dirs_from_env(
-                os.environ.get("COTHINKER_EXTRA_DIRS", ""))),
-        history_path=run_dir / "coach-history.jsonl",
-        coach_min_delay_s=a.lane_coach_delay,
-        coach_rhythm=a.coach_rhythm,
+        call_paths=call_lane_mod.call_paths_text(folder, path, extra_dirs),
+        image_dirs=stage_image_mod.allowed_dirs(folder, extra_dirs),
         call_lane_factory=call_lane_factory,
-        coach_lane_factory=coach_lane_factory,
-        coach_briefing=coach_briefing,
         log=log)
+
+
+def agent_seam(log: Callable[..., None]):
+    """`COTHINKER_AGENT=api` (default: worker): the agent seam
+    (gateway/agent_lane.py, a Hermes API server, e.g. on another machine
+    through an SSH tunnel) as `(lane_factory, coach_briefing)`, else None.
+    The seam's one shared server has no per-session profile selector
+    (gateway/agent_lane.py's module docstring) -- the coach's own SOUL.md is
+    sent as this session's briefing instead of trusting the server's
+    ambient profile to be this one."""
+    if os.environ.get("COTHINKER_AGENT", "worker").strip() != "api":
+        return None
+    import agent_lane
+    agent_url = os.environ.get("COTHINKER_AGENT_URL", "").strip()
+    key_env = (os.environ.get("COTHINKER_AGENT_KEY_ENV", "").strip()
+               or "API_SERVER_KEY")
+    agent_key = os.environ.get(key_env, "").strip()
+    if not agent_url or not agent_key:
+        raise SystemExit("COTHINKER_AGENT=api needs COTHINKER_AGENT_URL "
+                         f"and the key in ${key_env}")
+    factory = agent_lane.api_lane_factory(agent_url, agent_key, log=log)
+    briefing = agent_lane.coach_soul_briefing(
+        Path.home() / ".hermes/profiles/cothinker-coach")
+    log(f"agent seam: coach=api"
+        f" call={'api' if os.environ.get('COTHINKER_AGENT_CALL', '').strip() == 'api' else 'worker'}"
+        f" url={agent_url} coach_briefing_chars={len(briefing)}")
+    return factory, briefing
 
 
 class StageWriter:
@@ -3095,24 +3089,6 @@ def main() -> int:
                          "builds one from --model/--provider against "
                          "~/.hermes/profiles/cothinker (same profile as "
                          "the serial path)")
-    ap.add_argument("--lane-coach-worker-command", default="",
-                    help="overrides the coach lane's worker command; empty "
-                         "builds one from --model/--provider against "
-                         "~/.hermes/profiles/cothinker-coach")
-    ap.add_argument("--lane-coach-delay", type=float,
-                    default=lane_integration_mod.COACH_MIN_DELAY_S,
-                    help="minimum seconds after a confirmed topic start "
-                         "before the coach lane may contribute (default: "
-                         f"{lane_integration_mod.COACH_MIN_DELAY_S:.0f})")
-    ap.add_argument("--coach-rhythm", action="store_true",
-                    default=os.environ.get("COTHINKER_COACH_RHYTHM") == "1",
-                    help="--lanes only: the coach speaks at a topic's START "
-                         "(first pause >= 15 s, >= 45 s in), at its END "
-                         "(structure into the closed topic's entry) and "
-                         "once more in a long pause (topic >= 4 min); "
-                         "[SILENT] costs no slot, spoken: >= 8 min apart, "
-                         "<= 4/h. Off = the one-shot-per-topic trigger. "
-                         "Env COTHINKER_COACH_RHYTHM=1.")
     ap.add_argument("--speaker-split", action="store_true",
                     help="--speakers only: an utterance >= 4 s is embedded "
                          "in 1.5 s windows; a speaker change inside it "
@@ -3123,6 +3099,10 @@ def main() -> int:
                          "gateway/speaker_split.py.")
     a = ap.parse_args()
     install_sigterm_handler()
+    if os.environ.get("COTHINKER_COACH_RHYTHM") is not None:
+        log("warning: COTHINKER_COACH_RHYTHM is no longer read; set "
+            "`coach_rhythm = true` under `[[blocks]] id = \"mirroring-coach\"` "
+            "in the template instead")
 
     try:
         agenda = read_agenda(a.agenda)
@@ -3288,16 +3268,6 @@ def main() -> int:
             f"{a.thought_end_threshold:.2f}")
     state = StageState()
     writer = StageWriter(run_dir, state, proposals=proposals_path, events=trace)
-    # The session host's block host (ADR 0008, issue #38): built from the
-    # Reflect template (ADR 0010), fed every session event below, its
-    # view intents routed to this same StageWriter through the interim
-    # legacy stage sink (replaced as a whole by the Wave C stage surface).
-    session_blocks = build_session_blocks(
-        session_dir=run_dir,
-        sink=make_sink(writer, log),
-        log=log,
-        trace=lambda event, fields: trace.record(event, **fields),
-    )
     # Diarization-label attribution: names a Speechmatics
     # label (S1, S2, ...) from what is said, independent of --speakers'
     # voice-embedding path above (no audio, no SPEAKER_EMBED_URL needed).
@@ -3382,6 +3352,82 @@ def main() -> int:
         else:
             writer.clear_warning(warning_text("protocol"))
 
+    # konzept-spuren-architektur.md (2026-10-20), --lanes: additive only --
+    # with the flag off, `lanes` stays None and nothing below in this
+    # function ever looks at it, so the serial path above is byte for
+    # byte unaffected. See gateway/call_lane.py for what it does.
+    lanes = None
+    coach_agent_for = None
+    # Point 7 (2026-10-20): the --speakers resolution is per utterance,
+    # but lanes see whole blocks -- this carries the last resolved name
+    # (or "unbekannt") forward to block_done(). Stays "unbekannt" for
+    # good when --speakers is off: an internal recognizer id ("0",
+    # "left") would be meaningless to a lane agent, "unbekannt" is not.
+    letzter_sprecher = ["unbekannt"]
+    if a.lanes:
+        def _default_lane_command(hermes_home: Path) -> list:
+            # Reuse --worker-command when given (it names the interpreter
+            # that can import Hermes -- live 2026-10-20 13:32: the guessed
+            # interpreter could not, every lane worker failed to start),
+            # swapping only its --hermes-home for this lane's profile.
+            # Always carries --no-history regardless of path:
+            # a lane's own prompt already carries the full
+            # bounded window, so the worker must never ALSO replay its
+            # ever-growing per-session store on top of it.
+            if a.worker_command:
+                parts = shlex.split(a.worker_command)
+                if "--hermes-home" in parts:
+                    i = parts.index("--hermes-home")
+                    if i + 1 < len(parts):
+                        parts[i + 1] = str(hermes_home)
+                else:
+                    parts += ["--hermes-home", str(hermes_home)]
+                if "--no-history" not in parts:
+                    parts.append("--no-history")
+                return parts
+            return default_lane_command(
+                python_exe=worker_interpreter(),
+                worker_py=Path(__file__).resolve().parent / "worker.py",
+                model=a.model, provider=a.provider, hermes_home=hermes_home)
+
+        call_command = (shlex.split(a.lane_call_worker_command)
+                        if a.lane_call_worker_command else
+                        _default_lane_command(
+                            Path.home() / ".hermes/profiles/cothinker"))
+        # The coach lane is the mirroring-coach block (ADR 0010): its
+        # worker command comes from the block's configuration, its agent
+        # (a LanePort) from the block host wiring.
+        coach_cfg = coach_block_config()
+        coach_command = (shlex.split(coach_cfg["lane_coach_worker_command"])
+                         if coach_cfg["lane_coach_worker_command"] else
+                         _default_lane_command(
+                             Path.home() / ".hermes/profiles/cothinker-coach"))
+        seam = agent_seam(log)
+        coach_agent_for = make_agent_for(
+            coach_command=coach_command, session_id=session_id,
+            lane_factory=seam[0] if seam else None,
+            coach_briefing=seam[1] if seam else "", log=log)
+    # The session host's block host (ADR 0008, issue #38): built from the
+    # Reflect template (ADR 0010), fed every session event below, its
+    # view intents routed to this same StageWriter through the interim
+    # legacy stage sink (replaced as a whole by the Wave C stage surface).
+    # The call lane sees the coach's mirror lines through the same sink.
+    stage_sink = make_sink(writer, log,
+                           row_config={"coach_history_path":
+                                       run_dir / "coach-history.jsonl"})
+
+    def block_sink(intent) -> None:
+        stage_sink(intent)
+        if lanes is not None:
+            lanes.observe_intent(intent)
+
+    session_blocks = build_session_blocks(
+        session_dir=run_dir,
+        sink=block_sink,
+        log=log,
+        trace=lambda event, fields: trace.record(event, **fields),
+        agent_for=coach_agent_for,
+    )
     minutes_file = MinutesFile(path, threading.RLock(), report=protocol_report)
     minutes_doc = MinutesPort(minutes_file, session_blocks, session_dir=run_dir,
                               mode=a.mode)
@@ -3478,51 +3524,7 @@ def main() -> int:
         session_id=session_id, log=log)
     log("agent session:", session_id)
 
-    # konzept-spuren-architektur.md (2026-10-20), --lanes: additive only --
-    # with the flag off, `lanes` stays None and nothing below in this
-    # function ever looks at it, so the serial path above is byte for
-    # byte unaffected. See gateway/lane_integration.py for what it does.
-    lanes = None
-    # Point 7 (2026-10-20): the --speakers resolution is per utterance,
-    # but lanes see whole blocks -- this carries the last resolved name
-    # (or "unbekannt") forward to block_done(). Stays "unbekannt" for
-    # good when --speakers is off: an internal recognizer id ("0",
-    # "left") would be meaningless to a lane agent, "unbekannt" is not.
-    letzter_sprecher = ["unbekannt"]
     if a.lanes:
-        def _default_lane_command(hermes_home: Path) -> list:
-            # Reuse --worker-command when given (it names the interpreter
-            # that can import Hermes -- live 2026-10-20 13:32: the guessed
-            # interpreter could not, every lane worker failed to start),
-            # swapping only its --hermes-home for this lane's profile.
-            # Always carries --no-history regardless of path:
-            # a lane's own prompt already carries the full
-            # bounded window, so the worker must never ALSO replay its
-            # ever-growing per-session store on top of it.
-            if a.worker_command:
-                parts = shlex.split(a.worker_command)
-                if "--hermes-home" in parts:
-                    i = parts.index("--hermes-home")
-                    if i + 1 < len(parts):
-                        parts[i + 1] = str(hermes_home)
-                else:
-                    parts += ["--hermes-home", str(hermes_home)]
-                if "--no-history" not in parts:
-                    parts.append("--no-history")
-                return parts
-            return default_lane_command(
-                python_exe=worker_interpreter(),
-                worker_py=Path(__file__).resolve().parent / "worker.py",
-                model=a.model, provider=a.provider, hermes_home=hermes_home)
-
-        call_command = (shlex.split(a.lane_call_worker_command)
-                        if a.lane_call_worker_command else
-                        _default_lane_command(
-                            Path.home() / ".hermes/profiles/cothinker"))
-        coach_command = (shlex.split(a.lane_coach_worker_command)
-                         if a.lane_coach_worker_command else
-                         _default_lane_command(
-                             Path.home() / ".hermes/profiles/cothinker-coach"))
         # Point 7 (2026-10-20): participants belong in the STABLE part of
         # the prompt (same cache segment as profile/tools), set once here
         # -- see `project_agenda_text()` below for the ONE later change
@@ -3531,19 +3533,27 @@ def main() -> int:
         project_agenda = project_agenda_text(title, a.participants, agenda)
 
         lanes = build_lanes(
-            a, log, call_command=call_command, coach_command=coach_command,
+            a, log, call_command=call_command,
             session_id=session_id, project_agenda=project_agenda,
             state=state, writer=writer, folder=folder, path=path,
-            run_dir=run_dir)
-        if a.coach_rhythm:
-            log("coach rhythm on: start / end / long pause, pause >= "
-                f"{lane_integration_mod.COACH_PAUSE_S:.0f} s")
-        call_started, coach_started = lanes.start()
-        log(f"lanes on: call started={call_started}, "
-            f"coach started={coach_started}")
+            seam=seam)
+        lanes.attach(session_blocks.dispatch)
+        if coach_cfg["coach_rhythm"]:
+            log("coach rhythm on: start / end / long pause")
+        call_started = lanes.start()
+        log(f"lanes on: call started={call_started}")
+        # Confirmed topic changes come from the `topics` block (issue #39):
+        # the block's `topic` output reaches the call lane through the host
+        # listener; the decisions-tasks-questions block's hook below is
+        # what feeds the block. The call lane's own re-announcement
+        # (`from` = session-host) is not a new topic.
+        session_blocks.on_output(
+            lambda payload: lanes.on_topic(payload["topic"])
+            if "topic" in payload and payload.get("from") != "session-host"
+            else None)
         if decisions.decider_on:
             # Confirmed topic changes come from the `topics` block
-            # (issue #39): the block's `topic` output reaches the coach
+            # (issue #39): the block's `topic` output reaches the call
             # lane through the host listener; this hook is what feeds
             # the block.
             def _lanes_feeds_topics(result, snap, reason) -> None:
@@ -3560,9 +3570,6 @@ def main() -> int:
                 }})
 
             decisions.add_result_hook(_lanes_feeds_topics)
-            session_blocks.on_output(
-                lambda payload: lanes.on_topic(payload["topic"])
-                if "topic" in payload else None)
         else:
             log("lanes: coach gets no topic signal -- needs COTHINKER_DECIDER")
 
@@ -3867,6 +3874,11 @@ def main() -> int:
             "id": segment_counter[0], "text": b.text, "speakers": [],
             "wake_word": b.wake_word, "reason": b.reason, "chars": b.chars,
             "at": jetzt_block.timestamp(),
+            # The last resolved speaker (see `letzter_sprecher`) and the
+            # prefiltered agent-facing text, for the mirroring coach.
+            "speaker": letzter_sprecher[0],
+            "agent_text": (lanes.agent_text(b.text) if lanes is not None
+                           else b.text),
         })
         if lanes is not None:
             # --lanes: a separate code path entirely, never touching
@@ -3984,8 +3996,6 @@ def main() -> int:
                 writer.write()
                 if lanes is not None:
                     lanes.mirror_tick()
-                    if a.coach_rhythm:
-                        lanes.coach_tick()
                 # Once per second, not every 0.5 s wakeup -- the block
                 # host's own clock, not this thread's poll interval.
                 now_mono = time.monotonic()
@@ -4259,8 +4269,6 @@ def main() -> int:
                             write_prefiltered(orte["correction"], t_text, t_spk,
                                               stamp=f"{datetime.now():%H:%M}")
                     n += 1
-                    if lanes is not None and a.coach_rhythm:
-                        lanes.note_utterance()
                     log(f"[{n}] {text[:80]}")
                     # "Did you hear me?" — the one question the round asked
                     # again and again. It is answered here, in seconds,

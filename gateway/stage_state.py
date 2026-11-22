@@ -344,7 +344,7 @@ class StageState:
         self._lock = threading.RLock()
         self.mirror = ""
         # A substantive call-out answer, kept visible independent of
-        # `mirror` (60s, see lane_integration.MIRROR_EXPIRY_S) and of
+        # `mirror` (60s, see call_lane.MIRROR_EXPIRY_S) and of
         # `main`/`topic` (replaced the moment the room moves on, by
         # design -- see `_topic()`'s docstring). Live incident,
         # 27.10.2026: a funding overview answered three wake blocks and
@@ -419,7 +419,7 @@ class StageState:
         """Appends `addition` to an EXISTING history entry's markdown, by id.
 
         For a lane result that arrives after its topic is no longer
-        current (gateway/lane_integration.py, konzept-spuren-architektur.
+        current (gateway/call_lane.py, konzept-spuren-architektur.
         md's "kein Stau" applied to the coach lane): the result belongs
         to that OLDER entry's own record, never to whatever the surface
         shows now -- `main` and today's entry are untouched regardless
@@ -695,7 +695,7 @@ class StageState:
     def _call_answer(self, action: dict, spoken: str) -> str:
         # Same "explicit empty string clears it" exception as `_mirror`,
         # for the same reason: the lane's own expiry
-        # (lane_integration.CALL_ANSWER_VISIBLE_S) writes exactly that.
+        # (call_lane.CALL_ANSWER_VISIBLE_S) writes exactly that.
         if action.get("text") == "":
             self.call_answer = ""
             return ""

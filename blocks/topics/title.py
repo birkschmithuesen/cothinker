@@ -8,7 +8,7 @@
 """Real topic titles, behind `titles = true` of the `topics` block
 in templates/reflect/template.toml (needs `--lanes`), default off.
 
-Until now a confirmed topic change (gateway/lane_integration.py) took
+Until now a confirmed topic change (gateway/call_lane.py) took
 its history title from the first line of the triggering block -- live
 2026-10-20 that was half a spoken sentence. With this switch the
 provisional title still goes up at once (nothing waits), and ONE short

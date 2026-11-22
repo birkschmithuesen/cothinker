@@ -11,7 +11,7 @@ against a Hermes API server on another machine.
 
 `SeamRunner.run()` returns exactly the dict `gateway.worker.WorkerClient.run`
 returns (`ok`, `final`, `usage`, `error`), including the timeout wording
-`gateway.lanes.TIMEOUT_MARKER` matches, so `gateway/lane_integration.py`'s
+`gateway.lanes.TIMEOUT_MARKER` matches, so the lane's
 result handlers need no second code path.
 
 Sessions. A lane worker runs with `--no-history`: every
