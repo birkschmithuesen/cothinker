@@ -1,0 +1,18 @@
+[instance]
+name = "example-workshop"
+timezone = "UTC"
+languages = ["de", "en"]
+app_format = "example-app/1"
+poster_format = "example-poster/1"
+
+[template]
+name = "inscribe"
+format = "workshop"
+
+[secrets]
+hub_secret = "EXAMPLE_HUB_SECRET"
+
+[hosts]
+wall = "wall.example.org"
+floor = "floor.example.org"
+phone = "phone.example.org"

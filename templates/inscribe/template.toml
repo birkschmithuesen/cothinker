@@ -1,0 +1,340 @@
+# CoThinker — InScribe: a method in CoThinker (ADR 0010)
+# Copyright (C) 2026 Birk Schmithuesen
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License, version 3.
+# It is provided WITHOUT ANY WARRANTY. See LICENSE.
+#
+# Template format: blocks + phases + rules, no code (ADR 0009).
+#
+# Two formats share this one template file: "workshop" (issue #103, this
+# file's first half) reproduces the last state of its cue sequence 1:1,
+# advanced by the operator, one cue at a time. "production" (issue #104)
+# is added later, append-only, without touching the entries below.
+[template]
+name = "inscribe"
+api_version = 1
+rules = ["grounding", "add-dont-restructure"]
+
+[formats.workshop]
+surfaces = ["wall", "floor", "phone", "desk"]
+
+# --- blocks: workshop format -------------------------------------------
+# runs_in = "room": one instance for the whole event (operator-facing cue
+# advance, cross-table rotation, the closing announcement).
+# runs_in = "table": one instance per table (own transcript, own captured
+# terms, own prologue text).
+[[blocks]]
+id = "timer"
+format = "workshop"
+runs_in = "room"
+[[blocks]]
+id = "speaker-queue"
+format = "workshop"
+runs_in = "room"
+[[blocks]]
+id = "graph"
+format = "workshop"
+runs_in = "room"
+# speaking-share: the archive splits it into a per-table interview tracker
+# (talk_share.py) and a room-wide feedback-queue tracker (room_talk_time.py).
+# Declared "room" here (the plan's own block table gives it the `share:room`
+# intent); see the commit message for the full justification.
+[[blocks]]
+id = "speaking-share"
+format = "workshop"
+runs_in = "room"
+[[blocks]]
+id = "release"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "intro-round"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "interview-round"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "interview-questions"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "capture-bullets"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "capture-terms"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "merge-terms"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "setting-round"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "contrast-pairs"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "condense"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "write-text"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "dramaturgy-checks"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "poster"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "image-generation"
+format = "workshop"
+runs_in = "table"
+[[blocks]]
+id = "feedback-round"
+format = "workshop"
+runs_in = "table"
+
+# --- phases: workshop format, twelve cues in cue order ------------------
+# Every cue is entered by the operator only (never the group/table).
+[[phases]]
+id = "0"
+format = "workshop"
+titles = { en = "Opening", de = "Eröffnung" }
+blocks = ["timer"]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "0b"
+format = "workshop"
+titles = { en = "Connecting", de = "Verbindung" }
+blocks = ["timer", "intro-round"]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "1"
+format = "workshop"
+titles = { en = "Finding Roles", de = "Rollenfindung" }
+blocks = ["timer", "intro-round"]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "1b"
+format = "workshop"
+titles = { en = "Introductions", de = "Vorstellung" }
+blocks = ["timer", "intro-round", "speaking-share"]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "2"
+format = "workshop"
+titles = { en = "Transition", de = "Übergang" }
+blocks = ["timer"]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "3"
+format = "workshop"
+titles = { en = "Exchange I", de = "Austausch I" }
+blocks = [
+  "timer", "interview-round", "interview-questions",
+  "capture-bullets", "capture-terms", "speaking-share",
+]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "4"
+format = "workshop"
+titles = { en = "Reset", de = "Neustart" }
+blocks = ["timer"]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "5"
+format = "workshop"
+titles = { en = "Exchange II", de = "Austausch II" }
+blocks = [
+  "timer", "setting-round", "capture-terms", "merge-terms",
+  "contrast-pairs", "condense", "capture-bullets", "speaker-queue",
+  "speaking-share", "graph",
+]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "6"
+format = "workshop"
+titles = { en = "Prologue", de = "Prolog" }
+blocks = ["timer", "write-text", "dramaturgy-checks", "poster", "image-generation"]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "7"
+format = "workshop"
+titles = { en = "Pause", de = "Pause" }
+blocks = ["timer"]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "8"
+format = "workshop"
+titles = { en = "Feedback", de = "Rückmeldung" }
+blocks = ["timer", "feedback-round", "condense", "speaker-queue", "speaking-share", "graph"]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+[[phases]]
+id = "9"
+format = "workshop"
+titles = { en = "Closing", de = "Abschluss" }
+blocks = ["timer", "release", "graph", "poster"]
+surfaces = ["wall", "floor", "phone"]
+enter_when = ["operator"]
+
+# --- production format (issue #104): the piece and the group's material,
+# kept across sessions, written through seven phases entered by the group
+# itself (never an operator). Appended after the workshop format above;
+# nothing above this comment is touched by this format.
+[formats.production]
+surfaces = ["inscribe-production"]
+optional_surfaces = ["external-display"]
+
+# --- blocks: production format -------------------------------------------
+# state_scope = "group": every block below keeps its state for the whole
+# group across sessions; there is no room/table split in this format.
+[[blocks]]
+id = "piece-model"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "quote-anchoring"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "characters"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "forms-styles"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "write-text"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "translation"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "research"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "choice-list"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "interview-questions"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "capture-terms"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "conversation-agent"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "status-line"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "condense"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "interview-round"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "dramaturgy-checks"
+format = "production"
+state_scope = "group"
+[[blocks]]
+id = "export"
+format = "production"
+state_scope = "group"
+
+# --- phases: production format, seven phases, entered by the group only --
+[[phases]]
+id = "terms"
+format = "production"
+titles = { en = "Terms", de = "Begriffe" }
+goal = { en = "Take in and sort the list of terms collected in the plenary." }
+blocks = ["capture-terms", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "questions"
+format = "production"
+titles = { en = "Questions", de = "Fragen" }
+goal = { en = "Develop interview questions from the terms." }
+blocks = ["interview-questions", "choice-list", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "interviews"
+format = "production"
+titles = { en = "Interviews", de = "Interviews" }
+goal = { en = "Conduct the interviews, summarise the material." }
+blocks = ["interview-round", "condense", "quote-anchoring", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "frame"
+format = "production"
+titles = { en = "Frame", de = "Rahmen" }
+goal = { en = "Invent freely: where it is set, who is in it, what happens." }
+blocks = ["piece-model", "characters", "forms-styles", "write-text", "choice-list", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "selection"
+format = "production"
+titles = { en = "Interview Selection", de = "Interviewauswahl" }
+goal = { en = "Pick and edit the interview passages for each scene." }
+blocks = ["quote-anchoring", "piece-model", "research", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "cards"
+format = "production"
+titles = { en = "Scene Cards", de = "Szenenkarten" }
+goal = { en = "Turn each scene into a concept card -- one at a time." }
+blocks = ["piece-model", "dramaturgy-checks", "forms-styles", "characters", "translation", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]
+
+[[phases]]
+id = "script"
+format = "production"
+titles = { en = "Stage Script", de = "Buehnenskript" }
+goal = { en = "Write the stage script in your group's format, scene by scene." }
+blocks = ["write-text", "dramaturgy-checks", "translation", "characters", "export", "conversation-agent", "status-line"]
+surfaces = ["inscribe-production"]
+enter_when = ["group"]

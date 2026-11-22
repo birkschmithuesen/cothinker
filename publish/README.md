@@ -36,7 +36,10 @@ line. Current classes, one line each:
 - `mount-path` — this project's volume-mount naming shape,
   `/mnt/<VOL>_<VOL>_<digits>`.
 - `email-real` — any email address that is not a documentation placeholder
-  (`example.*`, `*.invalid`, `*.test`).
+  (`example.*`, `*.invalid`, `*.test`) and does not match a class in
+  `publish/allow-public.txt` (public-safe address shapes, e.g. a GitHub
+  no-reply address — this repo's own commit identity, see FACTORY.yaml,
+  is one of those).
 - a PEM private-key header line (`-----BEGIN ... PRIVATE KEY-----`).
 - a Telegram-style bot-token shape (`\d{8,10}:[A-Za-z0-9_-]{35}`).
 

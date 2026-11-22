@@ -25,7 +25,13 @@ import time
 from pathlib import Path
 from typing import Callable, Mapping, Optional
 
+from blocks.knowledge_link import KnowledgeLinkBlock
+import blocks.status_line as status_line_block
+from blocks.condense import CondenseBlock
 from blocks.mirroring_coach.coach import MirroringCoach, resolve_config
+from blocks.topics import TopicsBlock
+from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
+from blocks.minutes_document import MinutesDocumentBlock
 from gateway.sync_safe import atomic_write_text
 from shared.blocks import BLOCK_API_VERSION, Block, BlockContext, BlockHost
 from shared.modules import CoreEvent, StateStore
@@ -36,10 +42,64 @@ REFLECT_TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "reflect"
 
 # One line per block, added by the pull request that builds it.
 REGISTRY: dict[str, Callable[[], Block]] = {
+    "knowledge-link": KnowledgeLinkBlock,
+    "status-line": status_line_block.StatusLineBlock,
+    "minutes-document": MinutesDocumentBlock,
+    "topics": TopicsBlock,
     "mirroring-coach": MirroringCoach,
 }
 
+REGISTRY["condense"] = CondenseBlock
+
 HOST_LISTENER_ID = "session-host"
+
+# Moves to the instance's text-model configuration (target.md §9).
+CONDENSE_MODEL = "google/gemma-4-31B-it"
+
+# The condense block's reply shape (blocks/condense/coverage.parse_reply);
+# the EU text endpoint only accepts a strict json_schema response format.
+_CONDENSE_SCHEMA = {
+    "type": "object",
+    "properties": {"topics": {"type": "array", "items": {
+        "type": "object",
+        "properties": {"topic_id": {"type": "string"},
+                       "text": {"type": "string"},
+                       "quotes": {"type": "array", "items": {"type": "string"}}},
+        "required": ["topic_id", "text", "quotes"],
+        "additionalProperties": False}}},
+    "required": ["topics"],
+    "additionalProperties": False,
+}
+
+
+class InfomaniakLlm:
+    """`shared.llm.LlmPort` over the EU text client (`gateway/infomaniak_chat.py`).
+
+    The model is `CONDENSE_MODEL`. Raises `ChatError` on failure; the
+    client already rejects an empty reply.
+    """
+
+    def __init__(self, client=None, *, model: Optional[str] = None,
+                 schema: Optional[dict] = None) -> None:
+        self._client = client if client is not None else InfomaniakClient()
+        self._model = model if model is not None else CONDENSE_MODEL
+        self._schema = schema if schema is not None else _CONDENSE_SCHEMA
+
+    def complete(self, system: str, user: str, *, timeout_s: float = 60) -> str:
+        reply = self._client.chat(self._model, system, user, self._schema,
+                                  schema_name="condense", max_tokens=2048,
+                                  request_timeout_s=timeout_s)
+        if not reply.text.strip():
+            raise ChatError("answer carries no content", kind="format")
+        return reply.text
+
+
+def default_llm_for(block_id: str) -> Optional[object]:
+    """The LLM the host hands a block; only condense has one so far, and
+    only when an Infomaniak key is configured."""
+    if block_id == "condense" and api_key():
+        return InfomaniakLlm()
+    return None
 
 _ARTEFACT_NAME_RE = re.compile(r"^[a-z0-9-]+\.md$")
 
@@ -134,6 +194,8 @@ def build_session_blocks(
     registry: Mapping[str, Callable[[], Block]] = REGISTRY,
 ) -> SessionBlocks:
     session_dir = Path(session_dir)
+    if llm_for is None:
+        llm_for = default_llm_for
     template = load_template(template_path)
 
     listener = _OutputListenerBlock()
@@ -169,18 +231,19 @@ def build_session_blocks(
     return SessionBlocks(host=host, intents=intents, by_id=by_id, log=log)
 
 
-def feed_utterance(protocol, blocks: SessionBlocks, text: str,
+def feed_utterance(minutes, blocks: SessionBlocks, text: str,
                    speaker: Optional[str], meta: Mapping[str, object]) -> None:
     """Feeds one STT final into the session: the raw transcript first,
     then the block host.
 
-    `protocol.append_raw` runs FIRST and unguarded -- the transcript is
-    the evidence, the event is a convenience, and a raw-append failure
-    must propagate exactly as it did before this wiring existed. A
+    `minutes` is the session host's `MinutesFile`. `minutes.append_raw`
+    runs FIRST and unguarded -- the transcript is the evidence, the event
+    is a convenience, and a raw-append failure must propagate exactly as
+    it did before this wiring existed. A
     dispatch failure, in contrast, is logged and swallowed: a block
     breaking must never cost a line of the transcript.
     """
-    protocol.append_raw(text, speaker)
+    minutes.append_raw(text, speaker)
     payload = {
         "text": text,
         "speaker": speaker,

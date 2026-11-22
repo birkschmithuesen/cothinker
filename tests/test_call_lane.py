@@ -35,6 +35,7 @@ from call_lane import (  # noqa: E402
     CALL_ANSWER_RULE, CALL_ANSWER_VISIBLE_S, CALL_INTENT_SHAPES, MIRROR_EXPIRY_S,
     CallLane, call_paths_text, extra_dirs_from_env)
 from stage_state import StageState  # noqa: E402
+from shared.text import derived_title, one_line  # noqa: E402
 
 HERE = Path(__file__).resolve().parent
 FAKE = str(HERE / "lane_fake_worker.py")
@@ -73,6 +74,27 @@ class FakeResult:
 
     def by_id(self) -> dict:
         return self._by_id
+
+
+_TOPIC_THRESHOLD = 0.70
+
+
+def decide(lanes, result, snap, reason: str = "pause") -> None:
+    """What the consumer's decider callback and the `topics` block do ahead
+    of `CallLane.on_topic`, minus the block's pacing (the block has its own
+    tests): a probability at or above the block's threshold is a confirmed
+    new topic or return."""
+    by_id = result.by_id()
+    p_neu = (by_id.get("neues_thema") or {}).get("p")
+    p_ruek = (by_id.get("rueckkehr_thema") or {}).get("p")
+    if p_ruek is not None and p_ruek >= _TOPIC_THRESHOLD:
+        lanes.note_decider_block(snap.block)
+        lanes.on_topic({"return": True, "since": lanes.now()})
+    elif p_neu is not None and p_neu >= _TOPIC_THRESHOLD:
+        block = str(snap.block or "")
+        lanes.note_decider_block(block)
+        lanes.on_topic({"id": "t1", "since": lanes.now(), "provisional": True,
+                        "title": derived_title(block) or one_line(block) or "Thema"})
 
 
 def snap(block_text: str):
@@ -581,47 +603,17 @@ def _run_a_confirmed_topic_sets_the_headline_and_opens_the(check) -> None:
     writer.open_protocol_topic = lambda title, stamp=None: opened.append((title, stamp)) or True
     clock.advance(95)
     block_at = _dt(2026, 9, 26, 12, 31, 5)
-    lanes.on_decider_result(FakeResult(neues_thema=0.9),
+    decide(lanes, FakeResult(neues_thema=0.9),
                             SimpleNamespace(block="Bausteine abwaegen und Budget", at=block_at),
                             "pause")
     check("headline = the confirmed topic's title", state.headline == state.main.title
           and state.headline, (state.headline, state.main.title))
     check("protocol topic opened once, stamped 12:31 (block time)",
           opened == [(state.main.title, "12:31")], str(opened))
-    lanes.on_decider_result(FakeResult(rueckkehr_thema=0.9),
+    decide(lanes, FakeResult(rueckkehr_thema=0.9),
                             SimpleNamespace(block="zurueck", at=block_at), "pause")
     check("a confirmed return opens no protocol block", len(opened) == 1, str(opened))
     lanes.stop()
-
-
-def _run_with_a_titler_wired_the_confirmed_topic_does_not(check) -> None:
-    """with a titler wired the confirmed topic does NOT set the headline; the retitle of the current entry does"""
-    class _FakeTitler:
-        def __init__(self, on_title, on_fail):
-            self.on_title = on_title
-            self.requests: list = []
-
-        def request(self, entry_id, provisional, block, previous=""):
-            self.requests.append((entry_id, provisional))
-
-        def stop(self):
-            pass
-
-
-    clock = Clock()
-    state_t = ObservedState(now=clock)
-    lanes_t = CallLane(call_command=[sys.executable, FAKE],
-                    call_session_id="cothinker-lane-it-call-titler",
-                    project_agenda="P", state=state_t, writer=FakeWriter(), now=clock,
-                    titler_factory=_FakeTitler, log=lambda *a: None)
-    clock.advance(95)
-    lanes_t.on_decider_result(FakeResult(neues_thema=0.9), snap("Bausteine abwaegen"), "pause")
-    check("titler wired: headline left to the titler",
-          state_t.headline == "" and state_t.main.title, state_t.headline)
-    prov = state_t.main.title
-    check("titler wired: retitle of the current entry sets the headline",
-          state_t.retitle(state_t.main.id, prov, "Bausteine im Budget")
-          and state_t.headline == "Bausteine im Budget", state_t.headline)
 
 
 def _run_a_snapshot_without_at_still_opens_the_block(check) -> None:
@@ -631,7 +623,7 @@ def _run_a_snapshot_without_at_still_opens_the_block(check) -> None:
     opened2: list = []
     writer.open_protocol_topic = lambda title, stamp=None: opened2.append(stamp) or True
     clock.advance(95)
-    lanes.on_decider_result(FakeResult(neues_thema=0.9), snap("Thema ohne Zeit"), "pause")
+    decide(lanes, FakeResult(neues_thema=0.9), snap("Thema ohne Zeit"), "pause")
     check("stamp None when the snapshot has no time", opened2 == [None], str(opened2))
     lanes.stop()
 
@@ -935,16 +927,6 @@ def test_a_confirmed_topic_sets_the_headline_and_opens_the(i):
 
 
 
-_NAMES_with_a_titler_wired_the_confirmed_topic_does_not = ['titler wired: headline left to the titler',
- 'titler wired: retitle of the current entry sets the headline']
-
-
-@pytest.mark.parametrize("i", _case_ids(_NAMES_with_a_titler_wired_the_confirmed_topic_does_not))
-def test_with_a_titler_wired_the_confirmed_topic_does_not(i):
-    _expect(_run_with_a_titler_wired_the_confirmed_topic_does_not, i, len(_NAMES_with_a_titler_wired_the_confirmed_topic_does_not))
-
-
-
 _NAMES_a_snapshot_without_at_still_opens_the_block = ['stamp None when the snapshot has no time']
 
 
@@ -1087,7 +1069,7 @@ def test_a_plain_block_is_not_the_call_lanes_business():
 def test_a_confirmed_topic_is_announced_to_the_blocks_with_its_entry():
     lane, state, writer, rec, clock = _lane("bx5")
     clock.advance(95)
-    lane.on_decider_result(FakeResult(neues_thema=0.9), snap("Budget klaeren"), "pause")
+    decide(lane, FakeResult(neues_thema=0.9), snap("Budget klaeren"), "pause")
     topic = rec.outputs("topic")[-1]
     assert topic == {"id": state.main.id, "title": state.main.title,
                      "returned": False, "coach_eligible": True}
@@ -1098,9 +1080,9 @@ def test_a_confirmed_topic_is_announced_to_the_blocks_with_its_entry():
 def test_a_confirmed_return_is_announced_without_an_entry_and_not_eligible():
     lane, state, writer, rec, clock = _lane("bx6")
     clock.advance(95)
-    lane.on_decider_result(FakeResult(neues_thema=0.9), snap("Budget klaeren"), "pause")
+    decide(lane, FakeResult(neues_thema=0.9), snap("Budget klaeren"), "pause")
     clock.advance(95)
-    lane.on_decider_result(FakeResult(rueckkehr_thema=0.9), snap("zurueck"), "pause")
+    decide(lane, FakeResult(rueckkehr_thema=0.9), snap("zurueck"), "pause")
     topic = rec.outputs("topic")[-1]
     assert topic["returned"] is True and topic["coach_eligible"] is False
     assert topic["id"] == ""
@@ -1110,26 +1092,28 @@ def test_a_confirmed_return_is_announced_without_an_entry_and_not_eligible():
 
 def test_a_decision_that_changes_nothing_announces_nothing():
     lane, state, writer, rec, clock = _lane("bx7")
-    lane.on_decider_result(FakeResult(neues_thema=0.1), snap("x"), "pause")
+    decide(lane, FakeResult(neues_thema=0.1), snap("x"), "pause")
     assert rec.outputs("topic") == []
     lane.stop()
 
 
-def test_a_retitle_is_announced_to_the_blocks():
-    class FakeTitler:
-        def __init__(self, on_title, on_fail):
-            self.on_title = on_title
-
-        def request(self, *a, **kw):
-            pass
-
-        def stop(self):
-            pass
-    lane, state, writer, rec, clock = _lane("bx8", titler_factory=FakeTitler)
+def test_a_final_topic_title_is_announced_to_the_blocks_as_a_retitle():
+    from shared.surface import ViewIntent
+    lane, state, writer, rec, clock = _lane("bx8")
     clock.advance(95)
-    lane.on_decider_result(FakeResult(neues_thema=0.9), snap("Budget klaeren"), "pause")
+    decide(lane, FakeResult(neues_thema=0.9), snap("Budget klaeren"), "pause")
     entry = state.main
-    lane._on_title(entry.id, entry.title, "Haushalt", 5)
+    provisional = ViewIntent(id="topic:t1", block="topics", kind="status",
+                             audience="room", payload={"title": entry.title,
+                                                       "provisional": True})
+    lane.observe_intent(provisional)
+    assert rec.outputs("topic")[-1]["id"] == entry.id    # nothing new announced
+    state.retitle(entry.id, entry.title, "Haushalt")     # the stage sink's swap
+    final = ViewIntent(id="topic:t1", block="topics", kind="status",
+                       audience="room", payload={"title": "Haushalt",
+                                                 "provisional": False,
+                                                 "replaces": entry.title})
+    lane.observe_intent(final)
     assert rec.outputs("topic")[-1] == {"id": entry.id, "title": "Haushalt",
                                         "retitled": True}
     lane.stop()

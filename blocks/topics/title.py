@@ -5,8 +5,8 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""Real topic titles, behind `--topic-titles` in gateway/consumer.py
-(needs `--lanes`), default off.
+"""Real topic titles, behind `titles = true` of the `topics` block
+in templates/reflect/template.toml (needs `--lanes`), default off.
 
 Until now a confirmed topic change (gateway/call_lane.py) took
 its history title from the first line of the triggering block -- live

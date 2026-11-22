@@ -1,0 +1,79 @@
+# Provenance of imported prompt, profile and catalogue files under templates/inscribe/.
+# Each entry: path (repo-relative), sha256 (hex), reviewed (bool), note (generic description of
+# anything removed into instance content). tests/test_public_text_hygiene.py enforces this file.
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-terms.en.md"
+sha256 = "d9efd6b35ea9f26dba81e51f28d48532283cc4bb0b9798b9170f1d203fe48009"
+reviewed = true
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-terms.de.md"
+sha256 = "64b43a70c5bf0c334cd83658bb6577d0ef17be22c224fb65d2172898fd79a647"
+reviewed = true
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-questions.en.md"
+sha256 = "f685d7ab9e09e055bbfd0c1c77b1658efba3984c40d3775f528520ec5726b467"
+reviewed = true
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-questions.de.md"
+sha256 = "36d94774872c8a46ee03d390e8aa1dc38413c98fdd2315a40a088be114dcf20d"
+reviewed = true
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-interviews.en.md"
+sha256 = "662eb9aeae7546247fca07dc00c7d196ce3a1c019c12d631ef24406f019b607d"
+reviewed = true
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-interviews.de.md"
+sha256 = "75e7339108e77643d96477d5438c6ea38850007f90626b76ded17290adae24ec"
+reviewed = true
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-frame.en.md"
+sha256 = "f63c7034d601d6e16d4cf6e2c4e97452593def0f8b4c728a04214637f0d93253"
+reviewed = true
+note = "generic rewrite of a language-layer source file; dropped a person's name and a dated note that named the setting as the default scene occasion"
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-frame.de.md"
+sha256 = "fb74fb530d42f0f7aa84ad59931304193f36b94dcbe81060776bd95ba527b97c"
+reviewed = true
+note = "own German translation of phase-frame.en.md, no source file to port"
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-selection.en.md"
+sha256 = "bfe25736d283a7dc04df8c71189883349967d47ecefd68dbed1d664807cc5354"
+reviewed = true
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-selection.de.md"
+sha256 = "eba0835ebd343bb5bb5ab221e2efd8a5c1fe06df93e622a814fd033bf6cfd61c"
+reviewed = true
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-cards.en.md"
+sha256 = "0eaddd4704859b13f84a85e56788f8562ebfd5e78f25fdab397234dee18adb2b"
+reviewed = true
+note = "generic rewrite; replaced an example feedback quote that used two personal names with a name-free example"
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-cards.de.md"
+sha256 = "a8c84b22b388ca3d6d3dc1a8d0c5207616d0ad67dd5e00c44ca9f6724768800b"
+reviewed = true
+note = "own German translation of phase-cards.en.md, no source file to port"
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-script.en.md"
+sha256 = "189c7d991fdb1209d001d3b4909c932b430cd8c39ef032a2213ad099e9c902e2"
+reviewed = true
+note = "generic rewrite; dropped a dated note and an other-language line marker, kept one English scene-counter line"
+
+[[file]]
+path = "templates/inscribe/prompts/production/phase-script.de.md"
+sha256 = "7a7918c5117464253eef525b65688ce6538f57c1df3fc70aad6c6e9162f226ab"
+reviewed = true
+note = "own German translation of phase-script.en.md, no source file to port"

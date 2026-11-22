@@ -63,7 +63,7 @@ NUMERIC_FIELDS = frozenset({
     # Level 2 (gateway/policy_runner.py): whether an action fired without
     # a question, and how many blocks the ask lifecycle waited through.
     "autonomous", "blocks",
-    # The wiki layer (gateway/wiki.py): how many wikilinks a new topic
+    # The wiki layer (blocks/knowledge_link/wiki.py): how many wikilinks a new topic
     # block got -- the count, never the note names.
     "links",
 })

@@ -19,6 +19,7 @@ from __future__ import annotations
 
 import json
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Callable, Mapping, Optional
 
@@ -130,14 +131,66 @@ class _MirrorRow:
 
 
 # One line per block, added by the pull request that builds it. A row is a
-# plain `handler(writer, intent)`. A block whose rows need state of their own
-# (the mirroring coach's pending Nachtraege) gets a row object built in
+# plain `handler(writer, intent)`; a block whose rows need state of their
+# own (the mirroring coach's pending Nachtraege) gets a row object built in
 # `make_sink`, configured through `row_config`.
-HANDLERS: dict[str, Callable[[object, ViewIntent], None]] = {}
+def _links(writer: object, intent: ViewIntent) -> None:
+    """`links:<topic_id>` (knowledge-link): the stage's link list, the same
+    update as the surface action `links`."""
+    items = [{"file": path, "label": path.rsplit("/", 1)[-1].removesuffix(".md")}
+             for path in intent.payload.get("links", ())]
+    writer.state.apply({"action": "links", "items": items})
+    writer.write()
+
+
+def _topic(writer: object, intent: ViewIntent) -> None:
+    """A topic intent: the provisional one only needs the stage file
+    rewritten (the call lane pushes the history entry from the
+    block's `topic` output); the final one swaps the provisional title in
+    place, as the call lane's titler callback did, then rewrites."""
+    payload = intent.payload
+    if not payload.get("provisional", True):
+        old = payload.get("replaces")
+        state = getattr(writer, "state", None)
+        if old and state is not None:
+            for entry in reversed(list(state.history)):
+                if entry.title == old:
+                    state.retitle(entry.id, old, payload["title"])
+                    break
+    writer.write()
+
+
+HANDLERS: dict[str, Callable[[object, ViewIntent], None]] = {
+    "links": _links,
+    "topic": _topic,
+}
+
+
+def _log_only(writer: object, intent: ViewIntent) -> None:
+    """Today's stage has no place for this intent: it stays on the intent
+    board; this handler does nothing and nothing is drawn."""
+
+
+# Keyed on the block-id prefix, i.e. "condense" for ids "condense:<topic>".
+HANDLERS["condense"] = _log_only
 
 
 def _prefix(intent_id: str) -> str:
     return intent_id.split(":", 1)[0]
+
+
+def _apply_status(writer: object, intent: ViewIntent) -> None:
+    """`status:line` (blocks/status_line/): the intent never carries a
+    clock value, so the "zuletzt {at}" timestamp is stamped here, from
+    this call's own clock, not from the block."""
+    detail = intent.payload.get("detail", {})
+    writer.set_status(intent.payload["state"],
+                      at=datetime.now().strftime("%H:%M:%S"),
+                      count=detail.get("count", 0),
+                      failed=detail.get("failed"))
+
+
+HANDLERS["status"] = _apply_status
 
 
 def make_sink(writer: object, log: Callable[[str], None],

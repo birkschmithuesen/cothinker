@@ -158,7 +158,7 @@ class Rig:
     """The old `Lanes` object, rebuilt from its parts: the real block host
     with the mirroring coach on a real `LaneQueuePort`, the stage sink onto
     a real StageState, and the call lane for the host-side topic
-    confirmation (`on_decider_result`)."""
+    confirmation (`decide`: the `topics` block, then `CallLane.on_topic`)."""
 
     def __init__(self, tag: str, clock: Clock, *, delay: float = 45.0,
                  coach_sleep: float = 0.05, coach_final: str = "Spiegel: Testbeitrag",
@@ -205,7 +205,24 @@ class Rig:
             session_dir=self.tmp / "session", sink=block_sink, log=_log,
             agent_for=agent_for, clock=clock, template_path=template)
         self.call.attach(self.blocks.dispatch)
+        # As the consumer wires it: the `topics` block's output reaches the
+        # call lane, which pushes the history entry and re-announces it.
+        self.blocks.on_output(
+            lambda payload: self.call.on_topic(payload["topic"])
+            if "topic" in payload and payload.get("from") != "session-host"
+            else None)
         self.call.start()
+
+    def decide(self, result, snap, reason: str = "pause") -> None:
+        """The consumer's decider callback: the block text to the call lane,
+        the decider's numbers to the `topics` block."""
+        by_id = result.by_id()
+        block_text = str(getattr(snap, "block", "") or "")
+        self.call.note_decider_block(block_text)
+        self.blocks.dispatch("block_output", {"decider_result": {
+            "neues_thema": (by_id.get("neues_thema") or {}).get("p"),
+            "rueckkehr_thema": (by_id.get("rueckkehr_thema") or {}).get("p"),
+            "block": block_text, "previous": ""}})
 
     @property
     def block(self) -> MirroringCoach:
@@ -273,7 +290,7 @@ def _run_coach_fires_once_per_confirmed_topic_no_earlier_than(check) -> None:
     rig = Rig("3", clock, delay=45.0)
     state, block = rig.state, rig.block
     clock.advance(95)
-    rig.call.on_decider_result(FakeResult(neues_thema=0.8),
+    rig.decide(FakeResult(neues_thema=0.8),
                                snap("Lasst uns ueber Budget reden"), "pause")
     check("hysteresis confirmed a new topic",
           block._eligible and not block._contributed)
@@ -305,7 +322,7 @@ def _run_a_topic_change_while_the_coach_works_files_the(check) -> None:
     rig = Rig("4", clock, coach_sleep=0.5)
     state, writer = rig.state, rig.writer
     clock.advance(95)
-    rig.call.on_decider_result(FakeResult(neues_thema=0.95), snap("Thema eins"),
+    rig.decide(FakeResult(neues_thema=0.95), snap("Thema eins"),
                                "pause")
     old_entry_id = state.main.id
     clock.advance(45)
@@ -316,7 +333,7 @@ def _run_a_topic_change_while_the_coach_works_files_the(check) -> None:
     # The topic changes WHILE the coach is still working (coach_sleep=0.5s
     # gives a reliable window — confirmed: still running() at this point).
     clock.advance(95)
-    rig.call.on_decider_result(FakeResult(neues_thema=0.97), snap("Thema zwei"),
+    rig.decide(FakeResult(neues_thema=0.97), snap("Thema zwei"),
                                "pause")
     new_entry_id = state.main.id
     check("a second, different history entry exists for the new topic",
@@ -334,7 +351,7 @@ def _run_a_topic_change_while_the_coach_works_files_the(check) -> None:
          "(point 6d)",
           wait_until(lambda: "Thema eins" in writer._warning), writer._warning)
     clock.advance(95)
-    rig.call.on_decider_result(FakeResult(neues_thema=0.95), snap("Thema drei"),
+    rig.decide(FakeResult(neues_thema=0.95), snap("Thema drei"),
                                "pause")
     check("the Nachtrag notice disappears on the NEXT topic change",
           writer._warning == "", writer._warning)
@@ -348,12 +365,12 @@ def _run_the_nachtrag_notice_never_clobbers_an_unrelated_warning_already(check) 
     state, writer = rig.state, rig.writer
     writer.warn("Achtung: Konfliktdateien im Projektordner")
     clock.advance(95)
-    rig.call.on_decider_result(FakeResult(neues_thema=0.95), snap("Thema A"), "pause")
+    rig.decide(FakeResult(neues_thema=0.95), snap("Thema A"), "pause")
     clock.advance(45)
     rig.handle_block("the operator", "triggert")
     wait_until(lambda: rig.port.lane.running(), timeout=2.0)
     clock.advance(95)
-    rig.call.on_decider_result(FakeResult(neues_thema=0.97), snap("Thema B"), "pause")
+    rig.decide(FakeResult(neues_thema=0.97), snap("Thema B"), "pause")
     check("the stale coach result still landed in the old entry",
           wait_until(lambda: "Testbeitrag" in state.history[0].markdown),
           str(state.history))
@@ -393,7 +410,7 @@ def _run_a_confirmed_topic_shortly_after_a_call_result_still(check) -> None:
     rig = Rig("12", clock, delay=45.0)
     state, logs12 = rig.state, rig.logs
     clock.advance(95)
-    rig.call.on_decider_result(FakeResult(neues_thema=0.84), snap("Thema Budget"),
+    rig.decide(FakeResult(neues_thema=0.84), snap("Thema Budget"),
                                "pause")
     check("first confirmed topic -> one entry", len(state.history) == 1,
           str(state.history))
@@ -404,7 +421,7 @@ def _run_a_confirmed_topic_shortly_after_a_call_result_still(check) -> None:
           wait_until(lambda: "mitgeschrieben" in state.history[0].markdown),
           str(state.history))
     clock.advance(15)          # 95 s after topic 1, 15 s after the call result
-    rig.call.on_decider_result(FakeResult(neues_thema=0.77), snap("Thema Personal"),
+    rig.decide(FakeResult(neues_thema=0.77), snap("Thema Personal"),
                                "pause")
     check("the second confirmed topic got its own entry despite the stage brake",
           len(state.history) == 2 and state.main.title.startswith("Thema Personal"),
@@ -414,7 +431,7 @@ def _run_a_confirmed_topic_shortly_after_a_call_result_still(check) -> None:
           str([h.title for h in state.history]))
     check("one consumer log line per confirmed topic change",
           sum(1 for m in logs12 if m.startswith("topic: new ")) == 2
-          and any("topic: new Thema Personal p=0.77" in m for m in logs12),
+          and any("topic: new Thema Personal" in m for m in logs12),
           str(logs12))
     clock.advance(45)
     rig.handle_block("the operator", "weiter zum Personal")

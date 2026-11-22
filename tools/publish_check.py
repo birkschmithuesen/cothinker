@@ -37,19 +37,27 @@ import tempfile
 
 HERE = pathlib.Path(__file__).resolve().parent.parent
 PUBLIC_DENYLIST = HERE / "publish" / "denylist-public.txt"
+ALLOWLIST = HERE / "publish" / "allow-public.txt"
 DEFAULT_PRIVATE_LIST_GLOB = str(pathlib.Path.home() / ".config" / "cothinker" / "denylist.d" / "*.txt")
 CANARY = "cothinker" + "canary"
 TOKEN_RE = re.compile(r"[^a-z0-9]+")
 COMMIT_MARK = "\x01COTHINKER-COMMIT "
 
+# Raster image extensions actually tracked under docs/ in this repo (only
+# .png so far; extend if another raster type shows up there).
+RASTER_IMAGE_EXTENSIONS = (".png",)
+# A raster image's text source: same directory, same stem, one of these.
+IMAGE_SOURCE_EXTENSIONS = (".html", ".svg", ".py", ".md")
+
 
 class PatternList:
-    def __init__(self, ident, literals=(), regexes=(), hmacs=None, key=None):
+    def __init__(self, ident, literals=(), regexes=(), hmacs=None, key=None, allow=frozenset()):
         self.ident = ident
         self.literals = list(literals)
         self.regexes = list(regexes)
         self.hmacs = hmacs
         self.key = key
+        self.allow = allow
 
     def is_empty(self):
         return not (self.literals or self.regexes or self.hmacs)
@@ -60,7 +68,8 @@ class PatternList:
             if lit in lower:
                 return True
         for rx in self.regexes:
-            if rx.search(line):
+            m = rx.search(line)
+            if m and m.group(0).lower() not in self.allow:
                 return True
         if self.hmacs:
             tokens = [t for t in TOKEN_RE.split(lower) if t]
@@ -75,7 +84,7 @@ def _hmac(key, text):
     return hmac.new(key, text.encode("utf-8"), hashlib.sha256).hexdigest()
 
 
-def load_list(path, ident):
+def load_list(path, ident, allow=frozenset()):
     literals, regexes = [], []
     for raw in pathlib.Path(path).read_text(encoding="utf-8").splitlines():
         line = raw.strip()
@@ -85,7 +94,37 @@ def load_list(path, ident):
             regexes.append(re.compile(line[3:]))
         else:
             literals.append(line.lower())
-    return PatternList(ident, literals, regexes)
+    return PatternList(ident, literals, regexes, allow=allow)
+
+
+class AllowList:
+    """Values (literal or `re:` class) that an otherwise-matching regex in
+    the same denylist must not flag. Checked with `in`, same as a
+    frozenset, against the regex's own matched substring (group 0), not
+    the whole scanned line. See publish/allow-public.txt."""
+
+    def __init__(self, literals=frozenset(), regexes=()):
+        self.literals = literals
+        self.regexes = tuple(regexes)
+
+    def __contains__(self, value):
+        return value in self.literals or any(rx.fullmatch(value) for rx in self.regexes)
+
+
+def load_allow(path):
+    path = pathlib.Path(path)
+    if not path.exists():
+        return AllowList()
+    literals, regexes = set(), []
+    for raw in path.read_text(encoding="utf-8").splitlines():
+        line = raw.strip()
+        if not line or line.startswith("#"):
+            continue
+        if line.startswith("re:"):
+            regexes.append(re.compile(line[3:], re.IGNORECASE))
+        else:
+            literals.add(line.lower())
+    return AllowList(frozenset(literals), regexes)
 
 
 def load_hmac_list(path, key):
@@ -119,6 +158,30 @@ def tree_lines(tree_dir):
                     yield "TREE", str(p), line
             except UnicodeDecodeError:
                 continue
+
+
+def missing_image_sources(repo):
+    """Tracked raster images under docs/ with no sibling text source.
+
+    The text-only scan over history/tree lines cannot see text baked into a
+    PNG, so a diagram's rendered raster can silently carry names its own
+    cleaned-up source no longer has. A sibling source (same directory, same
+    stem, one of IMAGE_SOURCE_EXTENSIONS) is what scan() actually reads;
+    without one there is nothing to scan for the image's content.
+    """
+    out = subprocess.run(["git", "-C", str(repo), "ls-files", "--", "docs"],
+                          capture_output=True, text=True, check=True).stdout
+    tracked = set(out.splitlines())
+    missing = []
+    for path in sorted(tracked):
+        p = pathlib.PurePosixPath(path)
+        if p.suffix.lower() not in RASTER_IMAGE_EXTENSIONS:
+            continue
+        has_source = any((p.parent / (p.stem + ext)).as_posix() in tracked
+                          for ext in IMAGE_SOURCE_EXTENSIONS)
+        if not has_source:
+            missing.append(path)
+    return missing
 
 
 def scan(source, lists):
@@ -213,7 +276,7 @@ def main(argv=None):
     if o.hmac_generate:
         return hmac_generate(o.hmac_generate)
 
-    lists = [load_list(PUBLIC_DENYLIST, "public")]
+    lists = [load_list(PUBLIC_DENYLIST, "public", allow=load_allow(ALLOWLIST))]
     private_paths = _expand_private_list(o.private_list) if o.private_list else \
         sorted(glob.glob(DEFAULT_PRIVATE_LIST_GLOB))
     for i, p in enumerate(private_paths):
@@ -239,9 +302,17 @@ def main(argv=None):
             path = "path#" + hashlib.sha256(path.encode()).hexdigest()[:12]
         print(f"{ident}\t{commit}\t{path}")
     rc = 1 if hits else 0
+
+    orphan_images = missing_image_sources(o.repo)
+    for path in orphan_images:
+        print(f"image-source\t-\t{path}: no sibling .html/.svg/.py/.md source, "
+              f"text baked into this image cannot be scanned")
+    if orphan_images:
+        rc = 1
+
     if not o.skip_detect_secrets and not o.tree:
         rc = max(rc, detect_secrets(o.repo))
-    print(f"{'CLEAN' if rc == 0 else 'DIRTY'}: {len(hits)} hits, {len(lists)} lists")
+    print(f"{'CLEAN' if rc == 0 else 'DIRTY'}: {len(hits) + len(orphan_images)} hits, {len(lists)} lists")
     return rc
 
 

@@ -35,7 +35,7 @@ def _clean_env(monkeypatch):
 
 
 def _build(tmp_path, seam):
-    args = SimpleNamespace(topic_threshold=0.6, topic_min_s=0.0)
+    args = SimpleNamespace()
     return consumer.build_lanes(
         args, lambda *a, **k: None, call_command=["true"], session_id="s",
         project_agenda="P", state=StageState(), writer=SimpleNamespace(),

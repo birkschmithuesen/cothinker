@@ -10,7 +10,7 @@
 RUNS UNDER A DIFFERENT PYTHON than the rest of this repo. The laya wheel
 needs 3.11 and torch; the repo's interpreter is 3.9 and stdlib-only. This
 file is therefore never imported by the gateway and never by a test run
-that needs the model: the parent (gateway/topic_detect.LayaDetector)
+that needs the model: the parent (blocks.topics.detect.LayaDetector)
 starts it as a SUBPROCESS and speaks JSON lines to it.
 
 `torch` and `laya` are imported inside `load_predict()`, not at module

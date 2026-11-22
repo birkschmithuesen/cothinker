@@ -17,10 +17,14 @@ rules = ["grounding", "add-dont-restructure"]
 id = "capture-bullets"
 [[blocks]]
 id = "topics"
+threshold = 0.70
+min_topic_age_s = 90.0
+titles = false
 [[blocks]]
 id = "decisions-tasks-questions"
 [[blocks]]
 id = "condense"
+prompt = "prompts/condense.{lang}.md"
 [[blocks]]
 id = "minutes-document"
 [[blocks]]

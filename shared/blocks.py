@@ -13,22 +13,39 @@ host owns the session folder.
 """
 from __future__ import annotations
 
+import re
+import time
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Mapping, Optional, Protocol, Sequence
 
-from shared.modules import CoreEvent, StateStore
+from shared.modules import CoreEvent, StateStore, ToolSpec
 
 BLOCK_API_VERSION = 1
 MAX_FANOUT_DEPTH = 8
 # "block" and "cue" stay valid for module API v1 listeners (workshop/hooks.py).
 EVENT_KINDS = frozenset({"utterance", "segment", "phase", "action", "tick",
                          "block_output", "agent_reply", "block", "cue"})
+TOOL_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,47}$")
 
 
 class BlockError(Exception):
     pass
+
+
+def _check_args(schema: Mapping[str, object], args: Mapping[str, object]) -> Optional[str]:
+    """A minimal, stdlib-only check of `args` against a tool's JSON schema:
+    every `required` property present, no properties outside `properties`.
+    Returns a reason string, or None if `args` is acceptable."""
+    properties = schema.get("properties", {})
+    for key in schema.get("required", ()):
+        if key not in args:
+            return f"missing required argument: {key}"
+    for key in args:
+        if key not in properties:
+            return f"unknown argument: {key}"
+    return None
 
 
 @dataclass
@@ -55,17 +72,27 @@ class Block(Protocol):
 
     def stop(self) -> None: ...
 
+    # Optional: a started block may return ToolSpecs the host exposes to the
+    # agent. Not part of the Protocol above since most blocks have none.
+    # def tools(self) -> Sequence[ToolSpec]: ...
+
 
 class BlockHost:
     def __init__(self, blocks: Sequence[Block], *, ctx_for: Callable[[str], BlockContext],
-                 log: Callable[[str], None] = print) -> None:
+                 log: Callable[[str], None] = print, clock: Callable[[], float] = time.time,
+                 observe: Optional[Callable[[CoreEvent], None]] = None) -> None:
         ids = [b.id for b in blocks]
         if len(ids) != len(set(ids)):
             raise BlockError(f"duplicate block ids: {ids}")
         self._blocks = list(blocks)
         self._ctx_for = ctx_for
         self._log = log
+        self._clock = clock
+        self._observe = observe
         self._active: Optional[set[str]] = None   # None = all
+        self._tools: list[tuple[str, ToolSpec]] = []
+        self._tools_by_name: dict[str, tuple[str, ToolSpec]] = {}
+        self._tool_log: list[dict] = []
 
     def start(self, configs: Mapping[str, Mapping[str, object]]) -> None:
         for b in self._blocks:
@@ -73,6 +100,68 @@ class BlockHost:
                 raise BlockError(f"block {b.id!r}: api_version {b.api_version} != {BLOCK_API_VERSION}")
         for b in self._blocks:
             b.start(self._ctx_for(b.id), configs.get(b.id, {}))
+        for b in self._blocks:
+            get_tools = getattr(b, "tools", None)
+            if get_tools is None:
+                continue
+            for spec in get_tools() or ():
+                if not TOOL_NAME_RE.match(spec.name):
+                    raise BlockError(f"block {b.id!r}: bad tool name {spec.name!r}")
+                if spec.name in self._tools_by_name:
+                    raise BlockError(f"duplicate tool name {spec.name!r}")
+                self._tools_by_name[spec.name] = (b.id, spec)
+                self._tools.append((b.id, spec))
+
+    def tools(self) -> list[tuple[str, ToolSpec]]:
+        """The tools every started block declared, (block id, spec), in block order."""
+        return list(self._tools)
+
+    def call_tool(self, name: str, args: Mapping[str, object]) -> dict:
+        """Validates `args` against the tool's JSON schema and calls its bound
+        function. Never raises: a bad name, bad args or a raising tool all
+        come back as an `{"ok": False, ...}` envelope."""
+        entry = self._tools_by_name.get(name)
+        if entry is None:
+            return {"ok": False, "data": {}, "warnings": [], "rev": None,
+                     "error": f"unknown_tool: {name}"}
+        block_id, spec = entry
+        bad_args = _check_args(spec.parameters, args)
+        if bad_args is not None:
+            return {"ok": False, "data": {}, "warnings": [], "rev": None,
+                     "error": f"bad_args: {bad_args}"}
+        try:
+            raw = spec.fn(**args)
+            if not isinstance(raw, Mapping):
+                raise TypeError(f"tool returned {type(raw).__name__}, not a mapping")
+            result = {
+                "ok": bool(raw.get("ok", True)),
+                "data": raw.get("data", {}),
+                "warnings": list(raw.get("warnings", [])),
+                "rev": raw.get("rev"),
+                "error": raw.get("error"),
+            }
+        except Exception as e:  # noqa: BLE001 -- a tool failure must never propagate
+            self._log(f"tool {name} (block {block_id}): {type(e).__name__}: {e}")
+            result = {"ok": False, "data": {}, "warnings": [], "rev": None,
+                      "error": f"tool_failed: {type(e).__name__}"}
+            self._record_tool_call(name, block_id, result, spec.read_only)
+            return result
+        self._record_tool_call(name, block_id, result, spec.read_only)
+        if result["ok"] and not spec.read_only:
+            self.dispatch(CoreEvent("block_output", {
+                "from": block_id,
+                "tool_call": {"tool": name, "rev": result["rev"]},
+            }))
+        return result
+
+    def _record_tool_call(self, name: str, block_id: str, result: dict, read_only: bool) -> None:
+        entry = {"tool": name, "block": block_id, "ok": result["ok"], "at": self._clock()}
+        if read_only:
+            entry["result"] = result
+        self._tool_log.append(entry)
+
+    def tool_calls_since(self, t: float) -> list[dict]:
+        return [e for e in self._tool_log if e["at"] >= t]
 
     def set_active(self, ids: Sequence[str]) -> None:
         self._active = set(ids)
@@ -87,6 +176,8 @@ class BlockHost:
             cur, depth = queue.popleft()
             if cur.kind not in EVENT_KINDS:
                 raise ValueError(f"unknown event kind {cur.kind!r}")
+            if self._observe is not None:
+                self._observe(cur)
             if depth >= MAX_FANOUT_DEPTH:
                 self._log(f"block host: fan-out depth {depth} reached, dropping {cur.kind}")
                 continue

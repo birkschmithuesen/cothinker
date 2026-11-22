@@ -443,7 +443,7 @@ class StageState:
             return ""
 
     def retitle(self, entry_id: str, old: str, new: str) -> bool:
-        """Replaces a PROVISIONAL title in place (`--topic-titles`).
+        """Replaces a PROVISIONAL title in place (`titles` of the topics block).
 
         Only when the entry still carries `old` -- a title somebody else
         changed meanwhile is never overwritten. When that entry is the one
@@ -824,7 +824,7 @@ class StageState:
 
     def confirmed_topic(self, title: str, markdown: str) -> str:
         """A topic change CONFIRMED by the lane hysteresis
-        (gateway/topic_hysteresis.py: p >= threshold AND a minimum topic
+        (blocks/topics/hysteresis.py: p >= threshold AND a minimum topic
         age) -- always pushed, the N5 brakes are not asked again.
 
         Not reachable through `apply()` on purpose: an agent proposal is

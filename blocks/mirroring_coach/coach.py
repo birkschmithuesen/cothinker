@@ -268,7 +268,10 @@ class MirroringCoach:
         if payload.get("from") == self.id:
             return
         topic = payload.get("topic")
-        if isinstance(topic, Mapping):
+        if isinstance(topic, Mapping) and "since" not in topic:
+            # The topics block's own output carries `since` and no stage
+            # entry id; the session host re-announces each confirmed topic
+            # with the entry id and `coach_eligible` -- that one is followed.
             self._on_topic(topic)
         line = payload.get("robo_line")
         if isinstance(line, Mapping):

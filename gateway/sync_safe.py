@@ -57,10 +57,16 @@ def tmp_path_for(path: Path) -> Path:
 
 def atomic_write_text(path: Path, text: str, *, encoding: str = "utf-8") -> None:
     """Replace `path` with `text` in one step. Readers see the old file or
-    the new one, never a part of it. A failed attempt leaves no temp file."""
+    the new one, never a part of it. A failed attempt leaves no temp file.
+
+    Byte-faithful: a lone surrogate (what a caller gets from reading with
+    errors="surrogateescape") is written back as the original byte, so a
+    stray non-UTF-8 byte survives a rewrite instead of failing it. Valid
+    text encodes exactly as before."""
     tmp = tmp_path_for(path)
     try:
-        with open(tmp, "w", encoding=encoding, newline="") as f:
+        with open(tmp, "w", encoding=encoding, errors="surrogateescape",
+                  newline="") as f:
             f.write(text)
             f.flush()
             os.fsync(f.fileno())

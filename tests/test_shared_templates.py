@@ -121,7 +121,7 @@ def test_wrong_api_version_raises(tmp_path):
 
 def test_merged_block_config_overlays_instance_over_template_default(tmp_path):
     body = TEMPLATE_HEADER + (
-        '[[blocks]]\nid = "timer"\n'
+        '[[blocks]]\nid = "timer"\ndefault_minutes = 10\n'
         '[[blocks]]\nid = "other"\n'
         '[[phases]]\nid = "p"\nblocks = ["timer", "other"]\n'
     )
