@@ -17,6 +17,7 @@ only to bridge the gap.
 """
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Callable, Mapping
 
 from shared.surface import ViewIntent
@@ -38,6 +39,20 @@ HANDLERS: dict[str, Callable[[object, ViewIntent], None]] = {
 
 def _prefix(intent_id: str) -> str:
     return intent_id.split(":", 1)[0]
+
+
+def _apply_status(writer: object, intent: ViewIntent) -> None:
+    """`status:line` (blocks/status_line/): the intent never carries a
+    clock value, so the "zuletzt {at}" timestamp is stamped here, from
+    this call's own clock, not from the block."""
+    detail = intent.payload.get("detail", {})
+    writer.set_status(intent.payload["state"],
+                      at=datetime.now().strftime("%H:%M:%S"),
+                      count=detail.get("count", 0),
+                      failed=detail.get("failed"))
+
+
+HANDLERS["status"] = _apply_status
 
 
 def make_sink(writer: object, log: Callable[[str], None]) -> Callable[[ViewIntent], None]:

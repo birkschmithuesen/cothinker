@@ -75,10 +75,9 @@ from stage_state import PARKED, StageState, scrub  # noqa: E402
 from stage_state import (AgendaRuntime, agenda_payload,  # noqa: E402
                          current_item_from_ticks, detect_agenda_command,
                          meeting_deadline, parse_agenda)
-from status_line import pick as pick_status  # noqa: E402
-from status_line import status as render_status  # noqa: E402
-from status_line import trouble as trouble_text  # noqa: E402
-from status_line import warning as warning_text  # noqa: E402
+from stage_texts import status as render_status  # noqa: E402
+from stage_texts import trouble as trouble_text  # noqa: E402
+from stage_texts import warning as warning_text  # noqa: E402
 from speaker_enroll import DEFAULT_THRESHOLD as SPEAKER_THRESHOLD_DEFAULT  # noqa: E402
 
 # Wall-clock cap per agent turn (seconds). Live 2026-10-20: one ORDER ran
@@ -3151,7 +3150,7 @@ class StageWriter:
         """
         with self._lock:
             # The warning and the failed run share the SECOND line and
-            # leave the operating line alone -- see status_line.trouble().
+            # leave the operating line alone -- see stage_texts.trouble().
             data = {**self.state.content(),
                     "status": {**self._status, "since": self._since,
                                "warning": trouble_text(self._warning,
@@ -3941,11 +3940,16 @@ def main() -> int:
         """Decide and write the operating line -- in ONE place.
 
         Every caller states the facts it knows; the precedence
-        (working > backlog > listening) lives in status_line.pick() so two
-        call sites can never disagree about who wins. The listening
-        refresh therefore keeps running while nothing is in flight,
-        including under --no-agent and --dry-agent, where the
-        acknowledgement is the only thing the stage has to offer.
+        (working > backlog > listening) lives in the status-line block's
+        pick() (blocks/status_line/line.py) so two call sites can never
+        disagree about who wins. This function only reports the facts as a
+        `tick` to the block host; the block turns them into the winning
+        state and -- only when it changes -- a view intent that
+        `gateway.legacy_stage_sink` applies to `writer` via
+        `writer.set_status()`. The listening refresh therefore keeps
+        running while nothing is in flight, including under --no-agent and
+        --dry-agent, where the acknowledgement is the only thing the stage
+        has to offer.
 
         A FAILED run does not take this line. It goes to the second one,
         beside the warnings: for 40-180 s after every failure the round
@@ -3960,14 +3964,13 @@ def main() -> int:
         """
         try:
             waiting = 0 if a.no_agent else queue.backlog()
-            states = ["listening"]
-            if waiting > 1:
-                states.append("backlog")
-            if turn_running.is_set():
-                states.append("working")
-            writer.set_status(pick_status(states),
-                              at=datetime.now().strftime("%H:%M:%S"),
-                              count=waiting, failed=last_run_failed.is_set())
+            session_blocks.dispatch("tick", {
+                "components": {
+                    "queue_backlog": waiting,
+                    "turn_running": turn_running.is_set(),
+                    "run_failed": last_run_failed.is_set(),
+                },
+            })
             writer.write()
         except Exception as e:            # noqa: BLE001 -- see the docstring
             log("operating line skipped:", repr(e))

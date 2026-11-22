@@ -25,6 +25,7 @@ from pathlib import Path
 from typing import Callable, Mapping, Optional
 
 from blocks.knowledge_link import KnowledgeLinkBlock
+import blocks.status_line as status_line_block
 from gateway.sync_safe import atomic_write_text
 from shared.blocks import BLOCK_API_VERSION, Block, BlockContext, BlockHost
 from shared.modules import CoreEvent, StateStore
@@ -36,6 +37,7 @@ REFLECT_TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "reflect"
 # One line per block, added by the pull request that builds it.
 REGISTRY: dict[str, Callable[[], Block]] = {
     "knowledge-link": KnowledgeLinkBlock,
+    "status-line": status_line_block.StatusLineBlock,
 }
 
 HOST_LISTENER_ID = "session-host"
