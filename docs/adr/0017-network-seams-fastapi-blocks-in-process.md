@@ -1,6 +1,6 @@
 # ADR 0017: Network seams on FastAPI, blocks stay in-process
 
-- **Status:** proposed — Robo's recommendation, not yet confirmed by Birk
+- **Status:** accepted (confirmed 2026-11-23)
 - **Date:** 2026-11-20
 
 ## Context

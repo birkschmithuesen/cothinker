@@ -27,5 +27,6 @@ an entry number of the 2026-11-20 concept-round decision log, or a decision (D1,
 | [0014](0014-licence-agpl-cla-dco-modules-own-licence.md) | Licence: AGPL core, CLA and DCO; modules may carry their own licence | accepted |
 | [0015](0015-public-repo-fresh-export-private-instances.md) | Public repository from a fresh export, private instance repositories | accepted |
 | [0016](0016-public-repo-issues-and-prs.md) | Work in the public repository through issues and pull requests | accepted |
-| [0017](0017-network-seams-fastapi-blocks-in-process.md) | Network seams on FastAPI, blocks stay in-process | proposed, not yet confirmed by Birk |
+| [0017](0017-network-seams-fastapi-blocks-in-process.md) | Network seams on FastAPI, blocks stay in-process | accepted |
 | [0018](0018-product-names-interaction-migration-rules.md) | Product names, interaction and migration rules | accepted |
+| [0019](0019-surface-contract-for-external-designers.md) | Surface contract for external designers | accepted |
