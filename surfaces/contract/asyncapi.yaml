@@ -101,8 +101,8 @@ components:
     ChoiceIntent:
       properties:
         kind:
-          const: choice
-          default: choice
+          const: choice_list
+          default: choice_list
           title: Kind
           type: string
         id:
@@ -181,6 +181,155 @@ components:
       - id
       - text
       title: PromptIntent
+      type: object
+    QueueIntent:
+      description: '`queue:room`: the speaker-queue block''s view intent (kind `queue`,
+
+        `blocks/speaker_queue/__init__.py::_emit_view()`); the same shape as
+
+        `StageStateSnapshot.queue`.'
+      properties:
+        kind:
+          const: queue
+          default: queue
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - queue:room
+          title: Id
+          type: string
+        mode:
+          const: tap
+          default: tap
+          description: How seats join the queue; only `tap` exists today.
+          examples:
+          - tap
+          title: Mode
+          type: string
+        speaking:
+          anyOf:
+          - $ref: '#/components/schemas/QueueSeat'
+          - type: 'null'
+          default: null
+          description: Who currently holds the floor; `None` when nobody does.
+        waiting:
+          description: Seats waiting their turn, in order.
+          items:
+            $ref: '#/components/schemas/QueueSeat'
+          title: Waiting
+          type: array
+        round:
+          default: null
+          description: Reserved for a future round-based queue mode; always `None`
+            today.
+          title: Round
+          type: 'null'
+      required:
+      - id
+      title: QueueIntent
+      type: object
+    QueueSeat:
+      description: One seat in the speaker queue (`blocks/speaker_queue/__init__.py`).
+      properties:
+        pid:
+          description: The seat's participant id.
+          examples:
+          - P1
+          title: Pid
+          type: string
+        name:
+          description: Display name for the seat.
+          examples:
+          - Mira
+          title: Name
+          type: string
+      required:
+      - pid
+      - name
+      title: QueueSeat
+      type: object
+    ShareIntent:
+      description: '`share:room`: the speaking-share block''s view intent (kind `share`,
+
+        `blocks/speaking_share/__init__.py::_on_tick()`); the same shape as
+
+        `StageStateSnapshot.share`.'
+      properties:
+        kind:
+          const: share
+          default: share
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - share:room
+          title: Id
+          type: string
+        shares:
+          description: Per-person talk-share rows; empty while nobody has spoken yet.
+          items:
+            $ref: '#/components/schemas/ShareRow'
+          title: Shares
+          type: array
+        total_words:
+          description: Total words counted so far across everyone.
+          examples:
+          - 400
+          title: Total Words
+          type: integer
+      required:
+      - id
+      - total_words
+      title: ShareIntent
+      type: object
+    ShareRow:
+      description: One row of `blocks/speaking_share/talk_share.py`'s `talk_share`
+        event.
+      properties:
+        person:
+          description: Placeholder person id.
+          examples:
+          - P1
+          title: Person
+          type: string
+        role_id:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The person's bound role, if known.
+          examples:
+          - null
+          title: Role Id
+        words:
+          description: Words counted for this person so far.
+          examples:
+          - 123
+          title: Words
+          type: integer
+        share:
+          description: This person's share of `total_words`, 0..1.
+          examples:
+          - 0.31
+          title: Share
+          type: number
+        given:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: The role's given name, only present when known.
+          examples:
+          - null
+          title: Given
+      required:
+      - person
+      - words
+      - share
+      title: ShareRow
       type: object
     StatusIntent:
       properties:
@@ -385,8 +534,10 @@ components:
       discriminator:
         mapping:
           artefact: '#/components/schemas/ArtefactIntent'
-          choice: '#/components/schemas/ChoiceIntent'
+          choice_list: '#/components/schemas/ChoiceIntent'
           prompt: '#/components/schemas/PromptIntent'
+          queue: '#/components/schemas/QueueIntent'
+          share: '#/components/schemas/ShareIntent'
           status: '#/components/schemas/StatusIntent'
           tasks: '#/components/schemas/TasksIntent'
           timer: '#/components/schemas/TimerIntent'
@@ -398,5 +549,7 @@ components:
       - $ref: '#/components/schemas/TimerIntent'
       - $ref: '#/components/schemas/StatusIntent'
       - $ref: '#/components/schemas/ArtefactIntent'
+      - $ref: '#/components/schemas/QueueIntent'
+      - $ref: '#/components/schemas/ShareIntent'
       - $ref: '#/components/schemas/TranscriptRecentIntent'
       - $ref: '#/components/schemas/TasksIntent'

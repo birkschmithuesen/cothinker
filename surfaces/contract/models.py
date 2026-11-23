@@ -180,6 +180,78 @@ class AgendaSnapshot(BaseModel):
     )
 
 
+class QueueSeat(BaseModel):
+    """One seat in the speaker queue (`blocks/speaker_queue/__init__.py`)."""
+
+    pid: str = Field(description="The seat's participant id.", examples=["P1"])
+    name: str = Field(description="Display name for the seat.", examples=["Mira"])
+
+
+class QueueSnapshot(BaseModel):
+    """`content()["queue"]`: the speaker-queue block's `queue:room` view-intent
+    payload, filled by `blocks/speaker_queue/__init__.py::_emit_view()`."""
+
+    mode: Literal["tap"] = Field(
+        default="tap", description="How seats join the queue; only `tap` exists today.", examples=["tap"],
+    )
+    speaking: QueueSeat | None = Field(default=None, description="Who currently holds the floor; `None` when nobody does.")
+    waiting: list[QueueSeat] = Field(default_factory=list, description="Seats waiting their turn, in order.")
+    round: None = Field(default=None, description="Reserved for a future round-based queue mode; always `None` today.")
+
+
+class ShareRow(BaseModel):
+    """One row of `blocks/speaking_share/talk_share.py`'s `talk_share` event."""
+
+    person: str = Field(description="Placeholder person id.", examples=["P1"])
+    role_id: str | None = Field(default=None, description="The person's bound role, if known.", examples=[None])
+    words: int = Field(description="Words counted for this person so far.", examples=[123])
+    share: float = Field(description="This person's share of `total_words`, 0..1.", examples=[0.31])
+    given: str | None = Field(default=None, description="The role's given name, only present when known.", examples=[None])
+
+
+class ShareSnapshot(BaseModel):
+    """`content()["share"]`: the speaking-share block's `share:room` view-intent
+    payload, filled by `blocks/speaking_share/__init__.py::_on_tick()`."""
+
+    shares: list[ShareRow] = Field(default_factory=list, description="Per-person talk-share rows; empty while nobody has spoken yet.")
+    total_words: int = Field(description="Total words counted so far across everyone.", examples=[400])
+
+
+class SessionGraphNode(BaseModel):
+    """One node of `blocks/graph/session_graph.py::build_session_graph()`."""
+
+    id: str = Field(description="Node identity.", examples=["file:protokoll.md"])
+    label: str = Field(description="Label shown for the node.", examples=["Quarterly planning"])
+    kind: str = Field(description="`session`, `topic`, `entry` or `note`.", examples=["session"])
+    ring: int = Field(description="0 for the session and its structure, 1 for linked notes, 2 for their neighbours.", examples=[0])
+    href: str = Field(default="", description="Where the node links to, if anywhere.", examples=[""])
+    time: str = Field(default="", description="Wall-clock label attached to the node, if any.", examples=[""])
+    tag: str = Field(default="", description="The entry's tag, if the node is an entry.", examples=[""])
+    parent: str = Field(default="", description="The id of the node this one hangs off of.", examples=["file:protokoll.md"])
+    hidden: bool = Field(default=False, description="Whether the visibility cap folds this node away.", examples=[False])
+    grace: bool = Field(default=False, description="Whether the node is kept only by the ring-selection hysteresis grace window.", examples=[False])
+
+
+class SessionGraphEdge(BaseModel):
+    """One edge of `blocks/graph/session_graph.py::build_session_graph()`."""
+
+    id: str = Field(description="Edge identity.", examples=["e:1"])
+    source: str = Field(description="Id of the edge's source node.", examples=["file:protokoll.md"])
+    target: str = Field(description="Id of the edge's target node.", examples=["t1"])
+    kind: str = Field(description="`entry`, `block`, `wikilink`, or a vault edge kind.", examples=["entry"])
+    ring: int = Field(description="The ring the edge belongs to.", examples=[0])
+
+
+class SessionGraph(BaseModel):
+    """`content()["session_graph"]`: the `graph` block's `graph:session` view-intent
+    payload, filled by `blocks/graph/__init__.py::GraphBlock._build()`."""
+
+    seed: str = Field(description="Id of the session node the graph is seeded from.", examples=["file:protokoll.md"])
+    nodes: list[SessionGraphNode] = Field(default_factory=list)
+    edges: list[SessionGraphEdge] = Field(default_factory=list)
+    hidden: int = Field(description="Count of nodes folded away by the visibility cap.", examples=[0])
+
+
 class StageStateSnapshot(BaseModel):
     """The content fields of `buehne.json`; the consumer adds `status`."""
 
@@ -201,6 +273,24 @@ class StageStateSnapshot(BaseModel):
     follow_up_after_s: int = Field(description="Seconds before an open notice/question needs a follow-up mark.", examples=[300])
     image: StageImage | None = Field(default=None, description="An image on request, by id; `None` otherwise.")
     agenda: AgendaSnapshot | None = Field(default=None, description="`None` for a session without `agenda.md`.")
+    queue: QueueSnapshot | None = Field(
+        default=None,
+        description="The speaker queue, from the `speaker-queue` block; `None`"
+        " when that block is absent from the session, not merely empty of"
+        " seats (key-absent-means-hidden, `StageState._content()`).",
+    )
+    share: ShareSnapshot | None = Field(
+        default=None,
+        description="Per-person talk-share, from the `speaking-share` block;"
+        " `None` when that block is absent from the session"
+        " (key-absent-means-hidden, `StageState._content()`).",
+    )
+    session_graph: SessionGraph | None = Field(
+        default=None,
+        description="The session graph the stage tab draws, from the `graph`"
+        " block; `None` until the block has emitted one"
+        " (key-absent-means-hidden, `StageState._content()`).",
+    )
 
 
 # --------------------------------------------------------------------------
@@ -216,7 +306,7 @@ class PromptIntent(BaseModel):
 
 
 class ChoiceIntent(BaseModel):
-    kind: Literal["choice"] = "choice"
+    kind: Literal["choice_list"] = "choice_list"
     id: str = Field(description="Identity a user action refers back to.", examples=["VI2"])
     to_person: str | None = Field(default=None, description="Who the choice is directed at; `None` is everyone.", examples=["Jonas"])
     question: str = Field(description="The question the choices answer.", examples=["Which topic next?"])
@@ -252,6 +342,30 @@ class ArtefactIntent(BaseModel):
     label: str = Field(description="Label for the artefact.", examples=["Session graph, round 2"])
     url: str = Field(description="Where the artefact can be fetched.", examples=["https://example.invalid/artefacts/graph-2.png"])
     media_type: str = Field(description="MIME type of the artefact.", examples=["image/png"])
+
+
+class QueueIntent(BaseModel):
+    """`queue:room`: the speaker-queue block's view intent (kind `queue`,
+    `blocks/speaker_queue/__init__.py::_emit_view()`); the same shape as
+    `StageStateSnapshot.queue`."""
+
+    kind: Literal["queue"] = "queue"
+    id: str = Field(description="Identity a user action refers back to.", examples=["queue:room"])
+    mode: Literal["tap"] = Field(default="tap", description="How seats join the queue; only `tap` exists today.", examples=["tap"])
+    speaking: QueueSeat | None = Field(default=None, description="Who currently holds the floor; `None` when nobody does.")
+    waiting: list[QueueSeat] = Field(default_factory=list, description="Seats waiting their turn, in order.")
+    round: None = Field(default=None, description="Reserved for a future round-based queue mode; always `None` today.")
+
+
+class ShareIntent(BaseModel):
+    """`share:room`: the speaking-share block's view intent (kind `share`,
+    `blocks/speaking_share/__init__.py::_on_tick()`); the same shape as
+    `StageStateSnapshot.share`."""
+
+    kind: Literal["share"] = "share"
+    id: str = Field(description="Identity a user action refers back to.", examples=["share:room"])
+    shares: list[ShareRow] = Field(default_factory=list, description="Per-person talk-share rows; empty while nobody has spoken yet.")
+    total_words: int = Field(description="Total words counted so far across everyone.", examples=[400])
 
 
 class TranscriptLine(BaseModel):
@@ -293,6 +407,8 @@ ViewIntent = Annotated[
         TimerIntent,
         StatusIntent,
         ArtefactIntent,
+        QueueIntent,
+        ShareIntent,
         TranscriptRecentIntent,
         TasksIntent,
     ],
@@ -341,7 +457,14 @@ class VoiceAction(BaseModel):
     confidence: float | None = Field(default=None, description="Recognition confidence, 0..1, if known.", examples=[0.92])
 
 
+class MessageAction(BaseModel):
+    kind: Literal["message"] = "message"
+    intent_id: str = Field(description="The intent this message responds to.", examples=["VI1"])
+    person: str = Field(description="Who typed the message.", examples=["P3"])
+    text: str = Field(description="What was typed.", examples=["hello"])
+
+
 UserAction = Annotated[
-    Union[ChooseAction, AcceptAction, RejectAction, EditAction, TapAction, VoiceAction],
+    Union[ChooseAction, AcceptAction, RejectAction, EditAction, TapAction, VoiceAction, MessageAction],
     Field(discriminator="kind"),
 ]
