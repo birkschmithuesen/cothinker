@@ -170,3 +170,31 @@ def test_capture_bullets_gets_the_worker_failure_markers(tmp_path):
         {"text": FAILURE_MARKERS[0] + ' ```json\n{"verlauf": ["x"]}\n```', "turn": 1},
         "capture-bullets")
     assert [(o["kind"], o["failed"]) for o in got] == [("parse_failed", True)]
+
+
+def test_registry_has_timer_queue_and_share_blocks():
+    assert {"timer", "speaker-queue", "speaking-share"} <= set(bhw.REGISTRY)
+
+
+def test_round_actions_reach_speaker_queue_through_the_host(tmp_path):
+    emitted = []
+    blocks = bhw.build_session_blocks(session_dir=tmp_path, sink=emitted.append,
+                                      log=lambda m: None)
+    blocks.dispatch("action", {"intent_id": "queue:room", "kind": "voice",
+                               "person": None, "at": 1.0,
+                               "payload": {"op": "round_start", "people": ["A"]}})
+    blocks.dispatch("action", {"intent_id": "queue:room", "kind": "voice",
+                               "person": None, "at": 2.0,
+                               "payload": {"op": "next_person"}})
+    assert any(i.id == "queue:room" and i.payload["mode"] == "round" for i in emitted)
+
+
+def test_block_configs_override_the_template_config(tmp_path):
+    emitted = []
+    bhw.build_session_blocks(
+        session_dir=tmp_path, sink=emitted.append, log=lambda m: None,
+        block_configs={"timer": {"items": [{"label": "A", "minutes": 5}],
+                                 "deadline": 99.0}})
+    timer = [i for i in emitted if i.id == "timer:current"]
+    assert timer and timer[0].payload["current_text"] == "A"
+    assert timer[0].payload["meeting_deadline"] == 99.0

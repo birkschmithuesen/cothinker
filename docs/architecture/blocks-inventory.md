@@ -57,8 +57,8 @@ tables below are built from.
 | status line | Show + share | `blocks/status_line/__init__.py` 143, `group.py` 57, `line.py` 24 — 224 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `blocks/graph/__init__.py` 143, `session_graph.py` 386 — 529 | Reflect | 1× |
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
-| timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
-| speaker queue | Show + share | `blocks/speaker_queue/__init__.py` 102, `queue.py` 82 — 184 | Reflect | 1× |
+| timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 164 — 223 | Reflect | 1× |
+| speaker queue | Show + share | `blocks/speaker_queue/__init__.py` 149, `queue.py` 82, `round.py` 56 — 287 | Reflect | 1× |
 
 **Reflect check:** all 12 of the blocks Birk confirmed for Reflect now have
 code in this repository — topic change, capture bullets, condense,
@@ -148,6 +148,7 @@ blocks/timer/clock.py                                                           
 blocks/decisions_tasks_questions/__init__.py                                      block:decisions-tasks-questions
 blocks/speaker_queue/__init__.py                                                  block:speaker-queue
 blocks/speaker_queue/queue.py                                                     block:speaker-queue
+blocks/speaker_queue/round.py                                                     block:speaker-queue
 blocks/topics/__init__.py                                                         block:topics
 blocks/topics/detect.py                                                           block:topics
 blocks/topics/hysteresis.py                                                       block:topics

@@ -30,8 +30,13 @@ from shared.surface import ACTION_KINDS, UserAction
 
 
 def dispatcher_for(blocks) -> Callable[[UserAction], object]:
-    """The session host's dispatch path: `SessionBlocks.dispatch("action", ...)`."""
-    return lambda action: blocks.dispatch("action", {"action": action})
+    """The session host's dispatch path: `SessionBlocks.dispatch("action", ...)`.
+
+    The event payload is the flat `UserAction` contract the blocks read:
+    `{"intent_id", "kind", "person", "payload", "at"}`."""
+    return lambda action: blocks.dispatch("action", {
+        "intent_id": action.intent_id, "kind": action.kind,
+        "person": action.person, "payload": action.payload, "at": action.at})
 
 
 def _parse(raw: bytes) -> UserAction:

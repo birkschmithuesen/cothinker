@@ -283,8 +283,10 @@ class StageSurface:
         return rule
 
     def _timer(self, intent: ViewIntent) -> bool:
-        # Until D.4 replaces AgendaRuntime, the legacy AgendaController still
-        # sets state.agenda and can overwrite this intent's agenda.
+        # The consumer's block_sink first lets the agenda controller observe()
+        # this intent and set state.agenda (it owns the round list: people,
+        # speaker); the timer payload is rendered over it here, and the
+        # round-list keys it does not carry are kept from the existing agenda.
         agenda = dict(intent.payload)
         old = self._state.agenda or {}
         for key in _AGENDA_PEOPLE_KEYS:

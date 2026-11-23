@@ -393,9 +393,9 @@ class StageState:
         self.image: dict | None = None
         # The agenda + voice-command zone (AgendaController in
         # gateway/consumer.py), or None when a session has no `agenda.md`.
-        # Not restored from `buehne.json`: it is derived from the ticks in
-        # `agenda.md` and a small state file of its own, so it survives a
-        # restart on its own terms (see `AgendaController` there).
+        # Not restored from `buehne.json`: it is rebuilt from the `timer`
+        # and `speaker-queue` blocks' view intents, which restore their
+        # own state on start (see `AgendaController` there).
         self.agenda: dict | None = None
         # Optional stage regions rendered by `gateway/stage_surface.py`
         # from the `queue`, `share` and `graph` view intents. None means
@@ -1422,11 +1422,11 @@ class StageState:
 # ~/scratch/moderation.py (session 2026-10-20): it watched the
 # protocol for "naechste Person"/"naechste Frage" by regex and served a
 # tiny page with the current question, who is on, and a budget counter.
-# This is the same model as a built-in element: pure data and the
-# deterministic rules that move it. The I/O around it -- reading and
-# ticking `agenda.md`, persisting the speaker index and the item's start
-# time across a restart -- is gateway/consumer.py's `AgendaController`,
-# the same split as `StageState` (pure) vs. `StageWriter` (I/O) above.
+# The agenda clock and the round-robin list are now the `timer` and
+# `speaker-queue` blocks (ADR 0010); what is left here is the parsing of
+# `agenda.md` and the voice-command detection. Reading and ticking
+# `agenda.md` and feeding the blocks is gateway/consumer.py's
+# `AgendaController`.
 #
 # Voice commands are detected here by regex alone, in code, so they never
 # reach the agent: a block that is never built is a turn that is never
@@ -1503,16 +1503,6 @@ def parse_agenda(markdown: str) -> AgendaDoc:
     return AgendaDoc(items=items, duration_min=duration_min, end_time=end_time)
 
 
-def current_item_from_ticks(items: list[AgendaItem]) -> int:
-    """The current item, derived from `agenda.md` alone: the number of
-    ticked items, clamped to the last one. What survives a restart
-    without any state file -- see `AgendaController`."""
-    if not items:
-        return 0
-    done = sum(1 for i in items if i.done)
-    return min(done, len(items) - 1)
-
-
 def meeting_deadline(doc: AgendaDoc, started_at: float) -> float | None:
     """The epoch second the meeting is due to end, or None.
 
@@ -1529,76 +1519,3 @@ def meeting_deadline(doc: AgendaDoc, started_at: float) -> float | None:
         return base.replace(hour=hour, minute=minute, second=0,
                             microsecond=0).timestamp()
     return None
-
-
-class AgendaRuntime:
-    """Which item and which speaker are current, and since when.
-
-    Pure: no file I/O, an injected wall clock (epoch seconds, NOT the
-    monotonic `now` the rest of this module uses -- this one has to
-    survive a process restart via `AgendaController`'s state file, and
-    `time.monotonic()` does not).
-    """
-
-    def __init__(self, item_count: int, *, current_item: int = 0,
-                people: list[str] = (), speaker_index: int = 0,
-                item_started_at: float | None = None,
-                now: Callable[[], float] = time.time) -> None:
-        self._now = now
-        self.item_count = max(item_count, 0)
-        self.current_item = (min(current_item, self.item_count - 1)
-                             if self.item_count else 0)
-        self.people = list(people)
-        self.speaker_index = (speaker_index % len(self.people)
-                              if self.people else 0)
-        self.item_started_at = (item_started_at if item_started_at is not None
-                                else self._now())
-
-    def advance_item(self) -> None:
-        """Move to the next item, if there is one, and reset its timer."""
-        if self.current_item < self.item_count - 1:
-            self.current_item += 1
-        self.item_started_at = self._now()
-
-    def advance_person(self) -> None:
-        """Cycle the speaker queue; wrapping past the last one also moves
-        to the next agenda item -- moderation.py's
-        `state["p"] += 1; if state["p"] >= len(PEOPLE): state["p"] = 0;
-        state["q"] += 1`. A no-op without a queue: there is nothing to
-        cycle, and guessing an item advance from a command that was about
-        a PERSON would move the agenda on a session that never set up a
-        speaker queue at all."""
-        if not self.people:
-            return
-        self.speaker_index += 1
-        if self.speaker_index >= len(self.people):
-            self.speaker_index = 0
-            self.advance_item()
-
-
-def agenda_payload(doc: AgendaDoc, runtime: AgendaRuntime, *,
-                   meeting_deadline: float | None) -> dict:
-    """The `agenda` field of `StageState.content()`: plain data, like
-    `pending` -- the page computes the live countdown off `item_started_at`
-    and `meeting_deadline` itself (see AGENTS.md: nothing derived from the
-    clock may enter the fingerprint)."""
-    items = doc.items
-    idx = runtime.current_item
-    current = items[idx] if items else None
-    has_next = bool(items) and idx + 1 < len(items)
-    nxt = items[idx + 1] if has_next else None
-    people = runtime.people
-    return {
-        "current": idx + 1 if items else 0,
-        "current_text": current.text if current else "",
-        "next": idx + 2 if has_next else None,
-        "next_text": nxt.text if nxt else None,
-        "total": len(items),
-        "item_started_at": runtime.item_started_at,
-        "item_budget_s": current.budget_s if current else None,
-        "meeting_deadline": meeting_deadline,
-        "people": list(people),
-        "speaker": people[runtime.speaker_index] if people else None,
-        "next_speaker": (people[(runtime.speaker_index + 1) % len(people)]
-                        if len(people) > 1 else None),
-    }

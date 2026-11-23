@@ -72,8 +72,7 @@ from shared.minutes_format import (DEFAULT_MODE, MODES, TAGS, Entry,  # noqa: E4
 from shared.minutes_format import is_v2 as is_v2_text  # noqa: E402
 from shared.minutes_format import _ROH_LINE_RE  # noqa: E402
 from stage_state import PARKED, StageState, scrub  # noqa: E402
-from stage_state import (AgendaRuntime, agenda_payload,  # noqa: E402
-                         current_item_from_ticks, detect_agenda_command,
+from stage_state import (detect_agenda_command,  # noqa: E402
                          meeting_deadline, parse_agenda)
 from stage_texts import status as render_status  # noqa: E402
 from stage_texts import trouble as trouble_text  # noqa: E402
@@ -110,6 +109,7 @@ from gateway.raw_transcript import MinutesFile  # noqa: E402
 from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
 from blocks.minutes_document import minutes as minutes_block  # noqa: E402
 from gateway.stage_surface import StageSurface       # noqa: E402
+from shared.modules import StateStore                # noqa: E402
 
 ENTITIES = Path(os.environ.get(
     "COTHINKER_ENTITIES", Path.home() / "vault/entities"))
@@ -735,12 +735,11 @@ SESSION_FILES = {
     # the session folder like the raw transcript does.
     "speakers": "speakers.json",
     # The built-in agenda + voice-command element (AgendaController
-    # below): a checkbox list the round ticks by speaking, and this
-    # process's own small restart-state file for what agenda.md cannot
-    # carry (the speaker queue position, the item's start time). Both
-    # new, no legacy layout, like timing.jsonl -- no `-{day}` suffix.
+    # below): a checkbox list the round ticks by speaking. Item and
+    # speaker position live in the timer / speaker-queue block state, not
+    # in a file of its own. New, no legacy layout, like timing.jsonl -- no
+    # `-{day}` suffix.
     "agenda": "agenda.md",
-    "agenda_state": "agenda-state.json",
 }
 # Long enough to still read as the meeting's name in a folder listing,
 # short enough that `<date>-<slug>` stays a sane path component.
@@ -834,7 +833,6 @@ def session_paths(folder: Path, day: str, title: str | None,
                 "decisions": folder / f"decisions-{day}.jsonl",
                 "thought_end": folder / SESSION_FILES["thought_end"],
                 "agenda": folder / SESSION_FILES["agenda"],
-                "agenda_state": folder / SESSION_FILES["agenda_state"],
                 "flat": True}
     # Which of the known names does this project already use? The stage
     # reads all of them, so the consumer must not blindly create the
@@ -869,7 +867,6 @@ def session_paths(folder: Path, day: str, title: str | None,
             "decisions": ordner / f"decisions-{day}.jsonl",
             "thought_end": ordner / SESSION_FILES["thought_end"],
             "agenda": ordner / SESSION_FILES["agenda"],
-            "agenda_state": ordner / SESSION_FILES["agenda_state"],
             "flat": False}
 
 
@@ -897,62 +894,82 @@ def tick_agenda_item(path: Path, index: int) -> None:
 
 
 class AgendaController:
-    """The I/O around the pure agenda model (gateway/stage_state.py).
+    """Feeds the `timer` and `speaker-queue` blocks from `agenda.md` and
+    reads their view intents back into the stage's `agenda` field.
 
-    Owns two files: `agenda.md` (read once at start-up, ticked on a
-    "naechster Punkt"/"naechste Frage" command) and a small JSON state
-    file for the one thing `agenda.md`'s ticks cannot carry across a
-    restart -- the speaker queue position and the current item's start
-    time. `current_item` itself is NEVER persisted: it is derived afresh
-    from the ticks every time (`current_item_from_ticks`), the same way
-    `StageWriter`/`StageState.restore()` derive the rest of the stage from
-    facts on disk rather than trusting a counter that could drift from
-    them.
+    Owns `agenda.md` (read once at start-up, ticked on a "naechster
+    Punkt"/"naechste Frage" command). Which item is current, since when,
+    and which speaker is up live ONLY in the blocks' own state (`timer.json`,
+    `round.json` under the session's `.blocks/`), restored by the blocks on
+    start. The controller keeps the latest `timer:current` / `queue:room`
+    payloads it was handed through `observe()` and nothing else.
+
+    Wiring order (see `_main`): `block_configs()` goes into
+    `build_session_blocks`, `observe` is part of its sink, then `attach()`
+    hands the finished host back for the voice commands.
     """
 
-    def __init__(self, agenda_path: Path, state_path: Path, *,
-                people: list[str] = (),
-                now: Callable[[], float] = time.time,
-                log: Callable[..., None] = log) -> None:
+    def __init__(self, agenda_path: Path, session_dir: Path, *,
+                 people: list[str] = (),
+                 now: Callable[[], float] = time.time,
+                 log: Callable[..., None] = log) -> None:
         self.agenda_path = agenda_path
-        self.state_path = state_path
         self._now = now
         self.log = log
+        self.people = list(people)
+        self.blocks = None
         self.doc = parse_agenda(agenda_path.read_text(encoding="utf-8"))
-        persisted = self._load_state()
-        self.meeting_started_at = persisted.get("meeting_started_at")
-        if not isinstance(self.meeting_started_at, (int, float)):
-            self.meeting_started_at = now()
-        queue = persisted.get("people")
-        self.runtime = AgendaRuntime(
-            len(self.doc.items),
-            current_item=current_item_from_ticks(self.doc.items),
-            people=queue if isinstance(queue, list) and queue else list(people),
-            speaker_index=persisted.get("speaker_index", 0)
-            if isinstance(persisted.get("speaker_index"), int) else 0,
-            item_started_at=persisted.get("item_started_at")
-            if isinstance(persisted.get("item_started_at"), (int, float))
-            else None,
-            now=now)
-        self._save_state()
-
-    def _load_state(self) -> dict:
+        # The meeting's start is the timer block's persisted anchor, so a
+        # restart keeps the same `Dauer` deadline instead of re-basing it.
         try:
-            data = json.loads(self.state_path.read_text(encoding="utf-8"))
-        except (OSError, ValueError):
-            return {}
-        return data if isinstance(data, dict) else {}
+            anchor = StateStore(Path(session_dir) / ".blocks" / "timer").read(
+                "timer.json").get("anchor")
+        except (OSError, ValueError, AttributeError) as e:
+            self.log("timer state unreadable, starting a fresh anchor:", repr(e))
+            anchor = None
+        self.meeting_started_at = (anchor if isinstance(anchor, (int, float))
+                                   else now())
+        self.deadline = meeting_deadline(self.doc, self.meeting_started_at)
+        self._timer: dict | None = None
+        self._queue: dict | None = None
 
-    def _save_state(self) -> None:
-        try:
-            atomic_write_text(self.state_path, json.dumps({
-                "speaker_index": self.runtime.speaker_index,
-                "item_started_at": self.runtime.item_started_at,
-                "meeting_started_at": self.meeting_started_at,
-                "people": self.runtime.people,
-            }))
-        except OSError as e:          # noqa: BLE001
-            self.log("agenda state not written:", repr(e))
+    def block_configs(self) -> dict:
+        """The timer block's items (label + minutes) and deadline."""
+        return {"timer": {
+            "items": [{"label": i.text,
+                       "minutes": (i.budget_s / 60 if i.budget_s is not None
+                                   else None)}
+                      for i in self.doc.items],
+            "deadline": self.deadline,
+        }}
+
+    def observe(self, intent) -> bool:
+        """Takes the view intents the agenda zone is built from; True when
+        `intent` was one of them."""
+        if intent.id == "timer:current":
+            self._timer = dict(intent.payload)
+            return True
+        if intent.id == "queue:room":
+            self._queue = dict(intent.payload)
+            return True
+        return False
+
+    def attach(self, blocks) -> None:
+        """Starts the round-robin from the participants. Idempotent: the
+        block keeps its persisted position for the same list."""
+        self.blocks = blocks
+        if self.people:
+            self._dispatch("queue:room",
+                           {"op": "round_start", "people": self.people})
+
+    def _dispatch(self, intent_id: str, payload: dict) -> None:
+        self.blocks.dispatch("action", {
+            "intent_id": intent_id, "kind": "voice", "person": None,
+            "payload": payload, "at": self._now()})
+
+    def _current_index(self) -> int:
+        return (self._timer["current"] - 1
+                if self._timer and self._timer.get("current") else 0)
 
     def handle_utterance(self, text: str) -> bool:
         """True when `text` is a recognized command -- it must then never
@@ -963,26 +980,35 @@ class AgendaController:
         if kind is None:
             return False
         try:
-            before = self.runtime.current_item
+            before = self._current_index()
             if kind == "person":
-                self.runtime.advance_person()
+                self._dispatch("queue:room", {"op": "next_person"})
             else:
-                self.runtime.advance_item()
-            if self.runtime.current_item != before:
+                self._dispatch("timer:current", {"op": "next"})
+            after = self._current_index()
+            if after != before and before < len(self.doc.items):
                 tick_agenda_item(self.agenda_path, before)
-                self.doc.items[before].done = True
-            self._save_state()
         except Exception as e:         # noqa: BLE001
             self.log("agenda command not applied:", repr(e))
         return True
 
     def payload(self) -> dict:
-        deadline = meeting_deadline(self.doc, self.meeting_started_at)
-        return agenda_payload(self.doc, self.runtime, meeting_deadline=deadline)
+        """The stage's `agenda` field: the latest `timer:current` payload
+        plus the round list from the latest `queue:room` payload."""
+        out = dict(self._timer) if self._timer else {
+            "current": 0, "current_text": "", "next": None, "next_text": None,
+            "total": 0, "item_started_at": None, "item_budget_s": None,
+            "meeting_deadline": self.deadline}
+        rnd = (self._queue or {}).get("round") or {}
+        out["people"] = list(rnd.get("people") or [])
+        out["speaker"] = rnd.get("speaker")
+        out["next_speaker"] = rnd.get("next_speaker")
+        return out
 
 
 def build_agenda_controller(session_dir: Path, participants: str,
-                           *, log: Callable[..., None] = log
+                           *, log: Callable[..., None] = log,
+                           now: Callable[[], float] = time.time
                            ) -> AgendaController | None:
     """None, and never raises, when `session_dir/agenda.md` is absent or
     unreadable -- the feature is simply off, exactly as before it existed."""
@@ -991,9 +1017,8 @@ def build_agenda_controller(session_dir: Path, participants: str,
         return None
     people = [p.strip() for p in participants.split(",") if p.strip()]
     try:
-        return AgendaController(
-            agenda_path, session_dir / SESSION_FILES["agenda_state"],
-            people=people, log=log)
+        return AgendaController(agenda_path, session_dir, people=people,
+                                now=now, log=log)
     except (OSError, UnicodeDecodeError) as e:
         log("agenda off: agenda.md not readable:", repr(e))
         return None
@@ -3218,6 +3243,12 @@ def main() -> int:
             f"{a.thought_end_threshold:.2f}")
     state = StageState()
     writer = StageWriter(run_dir, state, proposals=proposals_path, events=trace)
+    # The built-in agenda + voice-command element: on only when this
+    # session's own folder has an `agenda.md`. Off (None) costs nothing --
+    # the payload shape is unchanged for every session without one. Built
+    # BEFORE the block host: its items become the timer block's config and
+    # it taps the timer / speaker-queue view intents for the stage.
+    agenda_ctrl = build_agenda_controller(run_dir, a.participants, log=log)
     # Diarization-label attribution: names a Speechmatics
     # label (S1, S2, ...) from what is said, independent of --speakers'
     # voice-embedding path above (no audio, no SPEAKER_EMBED_URL needed).
@@ -3266,10 +3297,6 @@ def main() -> int:
         writer.attach_vault(a.vault, session_dir=run_dir,
                             datum=day, teilnehmende=a.participants,
                             include_network=a.vault_include_network)
-    # The built-in agenda + voice-command element: on only when this
-    # session's own folder has an `agenda.md`. Off (None) costs nothing --
-    # the payload shape is unchanged for every session without one.
-    agenda_ctrl = build_agenda_controller(run_dir, a.participants, log=log)
     if agenda_ctrl is not None:
         state.agenda = agenda_ctrl.payload()
         log("agenda on:", orte["agenda"].name,
@@ -3368,6 +3395,11 @@ def main() -> int:
     session_blocks_cell: list = []
 
     def block_sink(intent) -> None:
+        # The agenda controller takes the timer / speaker-queue intents
+        # first: it owns the round list (`people`, `speaker`) the timer
+        # intent does not carry, then the surface renders the intent.
+        if agenda_ctrl is not None and agenda_ctrl.observe(intent):
+            state.agenda = agenda_ctrl.payload()
         # The snapshot, not just `intent`: render() needs the whole board
         # to notice what has left it since the last call. `intent` itself
         # is added back in when missing: a settle's own intent expires at
@@ -3387,9 +3419,13 @@ def main() -> int:
         log=log,
         trace=lambda event, fields: trace.record(event, **fields),
         agent_for=coach_agent_for,
+        block_configs=agenda_ctrl.block_configs() if agenda_ctrl else None,
     )
     session_blocks_cell.append(session_blocks)
     stage_surface.render(session_blocks.intents.current())
+    if agenda_ctrl is not None:
+        agenda_ctrl.attach(session_blocks)
+        state.agenda = agenda_ctrl.payload()
     # Participant taps the stage spooled (issue #47). The stage names the
     # spool folder after the folder holding the buehne.json it shows, which
     # is this run's folder. The folder name must equal the stage's
@@ -3849,7 +3885,7 @@ def main() -> int:
         # (captured even earlier, before bb.sentence() is called).
         jetzt_block = datetime.now().astimezone()
         segment_counter[0] += 1
-        # gateway/blocks.Block carries no per-speaker breakdown yet, so
+        # gateway/segmenter.Block carries no per-speaker breakdown yet, so
         # "speakers" stays empty until that lands.
         session_blocks.dispatch("segment", {
             "id": segment_counter[0], "text": b.text, "speakers": [],

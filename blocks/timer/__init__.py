@@ -6,10 +6,20 @@
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
 """The `timer` block (ADR 0010, ADR 0008): planned items with minutes, the
 current item, and (via `clock.py`) drift against the plan and the projected
-end. Config: `{"items": [{"label", "minutes"}], "deadline": "HH:MM" | null}`.
+end. Config: `{"items": [{"label", "minutes"}], "deadline": epoch seconds | null}`.
 
-Consumes `action` (`op` `"next"` | `"back"`) and `tick`; emits the view
-intent `timer:current` (kind `timer`) only when the current item changes.
+Consumes `action` with `intent_id` `timer:current` (`payload` `{"op":
+"next" | "back"}`, any kind, voice included) and `block_output` from
+`speaker-queue` carrying `round_wrapped` (moves to the next item), and
+`tick`; emits the view intent `timer:current` (kind `timer`) once on `start`
+(when there are items, so the stage shows the agenda before the first move,
+and the fresh position is persisted so the anchor survives a restart) and
+then only when the current item changes. `next` always restarts the new current item's clock, also on the last
+item, where it stays. `current`/`next` are 1-based item numbers (`next` is None on the last
+item); `item_budget_s` is None for an item without numeric minutes;
+`meeting_deadline` is passed through from the config (epoch seconds).
+The position (index, anchor, item starts) persists in block state
+(`timer.json`) and is restored on `start`.
 The payload carries only absolute times (`item_started_at`, `anchor_at`,
 `meeting_deadline`) and plan data (`item_budget_s`, `planned_cumulative_min`),
 never a ticking value — the stage turns those into a countdown itself, so
@@ -27,10 +37,16 @@ from .clock import planned_cumulative
 
 __all__ = ["TimerBlock"]
 
+STATE_FILE = "timer.json"
+
 
 def _label(item: Mapping[str, object]) -> Optional[str]:
     label = item.get("label")
     return str(label) if label is not None else None
+
+
+def _is_number(value: object) -> bool:
+    return isinstance(value, (int, float)) and not isinstance(value, bool)
 
 
 def _minutes(item: Mapping[str, object]) -> object:
@@ -44,7 +60,7 @@ class TimerBlock:
     def __init__(self) -> None:
         self._ctx: Optional[BlockContext] = None
         self._items: list[Mapping[str, object]] = []
-        self._deadline: Optional[str] = None
+        self._deadline: Optional[float] = None
         self._cumulative_min: tuple[float, ...] = ()
         self._index = 0
         self._anchor: Optional[float] = None
@@ -58,22 +74,59 @@ class TimerBlock:
         self._index = 0
         self._anchor = ctx.clock()
         self._item_started_at = {0: self._anchor}
+        try:
+            restored = self._restore(ctx.state.read(STATE_FILE))
+        except (OSError, ValueError, TypeError, AttributeError):
+            restored = False        # unreadable/corrupt state: start fresh
+        if self._items:
+            if not restored:
+                self._save()
+            self._emit_current()
 
     def on_event(self, ev: CoreEvent) -> Sequence[CoreEvent]:
-        if ev.kind == "action" and self._move(ev.payload.get("op")):
+        op = None
+        if ev.kind == "action" and ev.payload.get("intent_id") == "timer:current":
+            op = (ev.payload.get("payload") or {}).get("op")
+        elif (ev.kind == "block_output" and ev.payload.get("from") == "speaker-queue"
+              and "round_wrapped" in ev.payload):
+            op = "next"
+        if op is not None and self._move(op):
+            self._save()
             self._emit_current()
         return ()
 
     def stop(self) -> None:
         pass
 
+    def _restore(self, data: Mapping[str, object]) -> bool:
+        index = data.get("index")
+        anchor = data.get("anchor")
+        started = data.get("started")
+        if not (isinstance(index, int) and isinstance(anchor, (int, float))
+                and isinstance(started, dict) and 0 <= index < len(self._items)):
+            return False
+        parsed = {int(k): float(v) for k, v in started.items()}
+        self._index = index
+        self._anchor = float(anchor)
+        self._item_started_at = parsed
+        return True
+
+    def _save(self) -> None:
+        self._ctx.state.write(STATE_FILE, {
+            "index": self._index, "anchor": self._anchor,
+            "started": {str(k): v for k, v in self._item_started_at.items()},
+        })
+
     def _move(self, op: object) -> bool:
         if not self._items:
             return False
         last = len(self._items) - 1
-        if op == "next" and self._index < last:
-            self._index += 1
-        elif op == "back" and self._index > 0:
+        if op == "next":
+            if self._index < last:
+                self._index += 1
+            self._item_started_at[self._index] = self._ctx.clock()
+            return True
+        if op == "back" and self._index > 0:
             self._index -= 1
         else:
             return False
@@ -81,7 +134,9 @@ class TimerBlock:
             self._item_started_at[self._index] = self._ctx.clock()
         return True
 
-    def _budget_s(self, index: int) -> float:
+    def _budget_s(self, index: int) -> Optional[float]:
+        if not _is_number(_minutes(self._items[index])):
+            return None
         start_min = self._cumulative_min[index - 1] if index > 0 else 0.0
         return (self._cumulative_min[index] - start_min) * 60.0
 
@@ -95,9 +150,9 @@ class TimerBlock:
             kind="timer",
             audience="room",
             payload={
-                "current": current,
+                "current": current + 1,
                 "current_text": _label(self._items[current]),
-                "next": next_index,
+                "next": next_index + 1 if next_index is not None else None,
                 "next_text": _label(self._items[next_index]) if next_index is not None else None,
                 "total": total,
                 "item_started_at": self._item_started_at.get(current, self._anchor),

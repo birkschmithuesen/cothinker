@@ -18,6 +18,15 @@ Emits the view intent `queue:room` (`kind` `queue`, audience `room`) on
 every `action` it consumes, and a `block_output` `{"holder": {"before",
 "after", "at"}}` only when who speaks actually changes.
 
+Round mode (`round.py`): `queue:room` with `payload` `{"op": "round_start",
+"people": [...]}` (any kind) switches the view to `mode` `"round"` with the
+people in that order; the same list again keeps the persisted position, a
+different list starts over. `{"op": "next_person"}` (any kind, voice
+included) moves to the next person; wrapping past the last one emits a
+`block_output` `{"from": "speaker-queue", "round_wrapped": {"at"}}`. The
+round persists in block state (`round.json`). Without a round, `next_person`
+does nothing.
+
 A tap from a participant id this block never saw a `participant:name` edit
 for still works: it gets a placeholder display name instead of blocking the
 floor request on a missing name.
@@ -30,9 +39,11 @@ from shared.modules import CoreEvent
 from shared.surface import ViewIntent
 
 from .queue import SpeakQueue
+from .round import RoundRobin
 
 BLOCK_ID = "speaker-queue"
 API_VERSION = 1
+ROUND_STATE = "round.json"
 
 
 class SpeakerQueueBlock:
@@ -43,10 +54,17 @@ class SpeakerQueueBlock:
         self._ctx = None
         self._queue = SpeakQueue()
         self._names: dict[str, str] = {}
+        self._round: Optional[RoundRobin] = None
 
     def start(self, ctx, config: Mapping[str, object]) -> None:
         self._ctx = ctx
         self._queue = SpeakQueue(clock=ctx.clock)
+        try:
+            self._round = RoundRobin.from_state(ctx.state.read(ROUND_STATE))
+        except (OSError, ValueError, TypeError, AttributeError):
+            self._round = None      # unreadable/corrupt state: no round
+        if self._round is not None:
+            self._emit_view()       # a restart shows the restored round again
 
     def on_event(self, ev: CoreEvent) -> Sequence[CoreEvent]:
         if ev.kind != "action":
@@ -59,6 +77,11 @@ class SpeakerQueueBlock:
             self._names[person] = inner.get("name", "")
             self._emit_view()
             return ()
+        if intent_id == "queue:room" and inner.get("op") == "round_start":
+            self._round_start(inner.get("people"))
+            return ()
+        if intent_id == "queue:room" and inner.get("op") == "next_person":
+            return self._next_person(ev.payload.get("at"))
         if intent_id == "queue:room" and kind == "tap":
             return self._on_tap(person, inner.get("op"))
         return ()
@@ -82,6 +105,30 @@ class SpeakerQueueBlock:
             "before": before, "after": after, "at": self._ctx.clock(),
         }}),)
 
+    def _round_start(self, people: object) -> None:
+        if not isinstance(people, list) or not people:
+            return
+        names = [str(p) for p in people]
+        if self._round is None or self._round.people != names:
+            self._round = RoundRobin(names)
+            self._save_round()
+        self._emit_view()
+
+    def _next_person(self, at: object) -> Sequence[CoreEvent]:
+        if self._round is None:
+            return ()
+        wrapped = self._round.advance()
+        self._save_round()
+        self._emit_view()
+        if not wrapped:
+            return ()
+        return (CoreEvent("block_output", {
+            "from": self.id, "round_wrapped": {"at": at},
+        }),)
+
+    def _save_round(self) -> None:
+        self._ctx.state.write(ROUND_STATE, self._round.to_state())
+
     def _name_for(self, pid: str) -> str:
         return self._names.get(pid) or f"Guest {pid}"
 
@@ -94,9 +141,9 @@ class SpeakerQueueBlock:
         self._ctx.emit(ViewIntent(
             id="queue:room", block=self.id, kind="queue", audience="room",
             payload={
-                "mode": "tap",
+                "mode": "round" if self._round is not None else "tap",
                 "speaking": self._seat(self._queue.speaking),
                 "waiting": [self._seat(pid) for pid in self._queue.queue],
-                "round": None,
+                "round": self._round.view() if self._round is not None else None,
             },
         ))

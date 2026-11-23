@@ -1057,8 +1057,8 @@ def image_file(image_id: str) -> Path | None:
     return hit
 
 
-# The agenda zone (gateway/consumer.py::AgendaController, gateway/
-# stage_state.py::agenda_payload). Plain data, like `pending_part` above,
+# The agenda zone (gateway/consumer.py::AgendaController, fed by the
+# timer and speaker-queue blocks' view intents). Plain data, like `pending_part` above,
 # for the same reason: `item_started_at` and `meeting_deadline` are the
 # clocks the PAGE counts down from, so the page needs the numbers, not a
 # rendered string -- and like `pending`, the zone is deliberately left
@@ -2508,7 +2508,7 @@ sgBlockAnchorJump();
     bildEl.hidden=false;
   }
 
-  // ---- The agenda zone (gateway/stage_state.py::agenda_payload). DATA,
+  // ---- The agenda zone (gateway/consumer.py::AgendaController). DATA,
   // not HTML, for the same reason as `pending` above: `item_started_at`,
   // `item_budget_s` and `meeting_deadline` are numbers the page itself
   // counts down from in `agendaPaint()`, driven by the existing 1 s

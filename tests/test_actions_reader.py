@@ -104,8 +104,8 @@ class Echo:
         self.ctx = ctx
 
     def on_event(self, ev):
-        a = ev.payload["action"]
-        self.ctx.trace("action", {"intent_id": a.intent_id, "kind": a.kind})
+        self.ctx.trace("action", {"intent_id": ev.payload["intent_id"],
+                                  "kind": ev.payload["kind"]})
         return ()
 
     def stop(self):

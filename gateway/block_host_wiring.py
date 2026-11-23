@@ -37,6 +37,9 @@ from blocks.mirroring_coach.coach import MirroringCoach, resolve_config
 from blocks.topics import TopicsBlock
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
 from blocks.minutes_document import MinutesDocumentBlock
+from blocks.speaker_queue import SpeakerQueueBlock
+from blocks.speaking_share import SpeakingShareBlock
+from blocks.timer import TimerBlock
 from gateway.sync_safe import atomic_write_text
 from gateway.worker import FAILURE_MARKERS
 from shared.blocks import BLOCK_API_VERSION, Block, BlockContext, BlockHost
@@ -59,6 +62,9 @@ REGISTRY: dict[str, Callable[[], Block]] = {
     "topics": TopicsBlock,
     "mirroring-coach": MirroringCoach,
     "graph": GraphBlock,
+    "timer": TimerBlock,
+    "speaker-queue": SpeakerQueueBlock,
+    "speaking-share": SpeakingShareBlock,
 }
 
 REGISTRY["condense"] = CondenseBlock
@@ -226,6 +232,7 @@ def build_session_blocks(
     clock: Callable[[], float] = time.time,
     template_path: Path = REFLECT_TEMPLATE,
     registry: Mapping[str, Callable[[], Block]] = REGISTRY,
+    block_configs: Optional[Mapping[str, Mapping[str, object]]] = None,
 ) -> SessionBlocks:
     session_dir = Path(session_dir)
     if llm_for is None:
@@ -261,7 +268,10 @@ def build_session_blocks(
         )
 
     host = BlockHost(block_list, ctx_for=ctx_for, log=log)
-    host.start(merged_block_config(template, None))
+    configs = merged_block_config(template, None)
+    for block_id, extra in (block_configs or {}).items():
+        configs[block_id] = {**configs.get(block_id, {}), **extra}
+    host.start(configs)
     return SessionBlocks(host=host, intents=intents, by_id=by_id, log=log)
 
 
