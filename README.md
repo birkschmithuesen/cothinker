@@ -95,6 +95,8 @@ example instance contains and why.
 | understand the instance directory format (configuration and content for one deployment) | [`docs/instance-format.md`](docs/instance-format.md) |
 | understand the module format (optional, pluggable session behaviour) | [`docs/module-format.md`](docs/module-format.md) |
 | see a complete, invented instance | [`instances/example/README.md`](instances/example/README.md) |
+| build a surface (screen, room display, phone view) | [`docs/contributing-surfaces.md`](docs/contributing-surfaces.md) |
+| follow what is being built, in plain words | [progress reports](https://cothinker.eu/dev/) |
 
 ## Repo map
 
