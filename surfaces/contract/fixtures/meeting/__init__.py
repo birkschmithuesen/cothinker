@@ -6,6 +6,11 @@ turns over, the meeting takes a pause and tasks are named at the close.
 Two of the pushed view intents (`transcript:recent`, `tasks`) are fields
 the core cannot fill yet (issue #129); this fixture populates them anyway
 so a surface can design against their shape, per ADR 0019 point 3.
+
+The speaker queue (`StageStateSnapshot.queue`, the speaker-queue block's
+`queue:room` payload) turns over in step with `agenda.speaker` /
+`agenda.next_speaker` -- it is the same queue, viewed through the
+`speaker-queue` block's own wire shape rather than the agenda's.
 """
 from __future__ import annotations
 
@@ -15,6 +20,8 @@ from surfaces.contract.models import (
     Decision,
     HistoryEntry,
     PromptIntent,
+    QueueSeat,
+    QueueSnapshot,
     Question,
     StageMain,
     StageStateSnapshot,
@@ -37,6 +44,18 @@ _T5 = "2026-11-23T09:18:00+01:00"
 _T6 = "2026-11-23T09:20:00+01:00"
 
 _EPOCH_START = 1732352400.0  # 2026-11-23T09:00:00+01:00
+
+# Participant ids (speaker-queue block terms: `pid`, resolved to a display
+# `name` via a `participant:name` edit -- a fixture just fixes both up front).
+_PIDS = {"Mira": "p-mira", "Jonas": "p-jonas", "Tamar": "p-tamar"}
+
+
+def _seat(person: str) -> QueueSeat:
+    return QueueSeat(pid=_PIDS[person], name=person)
+
+
+def _queue(speaking: str, waiting: list[str]) -> QueueSnapshot:
+    return QueueSnapshot(speaking=_seat(speaking), waiting=[_seat(p) for p in waiting])
 
 _OPENING = HistoryEntry(
     id="M1", title="Opening round",
@@ -80,6 +99,7 @@ def _snapshot(**overrides) -> StageStateSnapshot:
             meeting_deadline=_EPOCH_START + 1200.0,
             people=PEOPLE, speaker="Mira", next_speaker="Jonas",
         ),
+        queue=_queue("Mira", ["Jonas", "Tamar"]),
     )
     base.update(overrides)
     return StageStateSnapshot(**base)
@@ -131,6 +151,7 @@ FRAMES: list[Frame] = [
                 meeting_deadline=_EPOCH_START + 1200.0,
                 people=PEOPLE, speaker="Jonas", next_speaker="Tamar",
             ),
+            queue=_queue("Jonas", ["Tamar", "Mira"]),
         ),
         view_intents=[
             TranscriptRecentIntent(
@@ -158,6 +179,7 @@ FRAMES: list[Frame] = [
                 meeting_deadline=_EPOCH_START + 1200.0,
                 people=PEOPLE, speaker="Tamar", next_speaker="Mira",
             ),
+            queue=_queue("Tamar", ["Mira", "Jonas"]),
         ),
         view_intents=[
             TranscriptRecentIntent(
@@ -185,6 +207,7 @@ FRAMES: list[Frame] = [
                 meeting_deadline=_EPOCH_START + 1200.0,
                 people=PEOPLE, speaker="Tamar", next_speaker="Mira",
             ),
+            queue=_queue("Tamar", ["Mira", "Jonas"]),
         ),
         view_intents=[StatusIntent(id="VI6", text="Pause for coffee", severity="info")],
     ),
