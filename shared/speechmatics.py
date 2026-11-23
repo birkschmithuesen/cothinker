@@ -10,18 +10,15 @@
 client: the meeting STT backend
 (`stt/fundusapps/stt_server/backends/speechmatics_rt_backend.py`, which
 subclasses `shared.utterance.UtteranceCollector` to publish onto its own
-`EventBus`) and the table hub (`workshop/hub.py`, via
-`workshop/stt_speechmatics.py`, which still holds enrollment (`enroll()`),
-the excerpt pacing helper (`pace`) and the manual `--probe` CLI --
-repo split task 4.2 moved only the pieces `stt/` needs, not the whole
-module, so `stt/` does not import `workshop`.
+`EventBus`) and the table hub, which also holds enrollment, the excerpt
+pacing helper and the manual probe CLI.
 
 Speaker labels sent over the wire are always placeholders `P1`..`Pn`,
 n = `MAX_SPEAKERS` (`docs/kurator-kernmotivation.md` / spec section 5,
 "names never go to the model").
 
 No live calls happen in the automated tests: `tests/fake_speechmatics.py`
-is the only server `tests/test_stt_speechmatics.py` talks to.
+is the only server `tests/test_speechmatics_client.py` talks to.
 """
 from __future__ import annotations
 
@@ -31,21 +28,23 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import AsyncIterator
 
-from workshop.persons import PERSONS
-
 SPEECHMATICS_URL = "wss://eu.rt.speechmatics.com/v2"
 RATE = 16000
 CHUNK_S = 0.1  # 100 ms per send, paced in real time
-MAX_SPEAKERS = len(PERSONS)
+# The table's placeholder-label budget: how many "names never go to the
+# model" labels (P1..Pn) a table can seat. 5 today; the hub's
+# enrollment UI caps a table's roster at the same number.
+DEFAULT_TABLE_SIZE = 5
+MAX_SPEAKERS = DEFAULT_TABLE_SIZE
 
 
 def effective_max_speakers(max_speakers: int | None) -> int:
     """The Speechmatics diarization label budget actually in effect for one
     connection: `max_speakers` if given, else `MAX_SPEAKERS + 3` (MUST 5's
     own default -- see `sm_config`'s docstring). Pure,
-    so `workshop/hub.py`'s reconnect guard (MUST 1) can read
-    the same cap `sm_config` sends over the wire without a second, driftable
-    copy of the "None -> +3" rule."""
+    so the table hub's reconnect guard (MUST 1) can read the same cap
+    `sm_config` sends over the wire without a second, driftable copy of
+    the "None -> +3" rule."""
     return MAX_SPEAKERS + 3 if max_speakers is None else int(max_speakers)
 
 
@@ -68,9 +67,9 @@ def sm_config(speakers: list[dict] | None, get_speakers: bool, language: str,
 
     `additional_vocab`: the custom-dictionary entries
     Speechmatics' own docs describe (docs.speechmatics.com/speech-to-text/
-    features/custom-dictionary) -- `workshop.role_enroll.additional_vocab_for_roles()`
-    builds these from a table's roles.<language>.json. Omitted (not an empty
-    list) when there is nothing to send, same style as `speakers`/`get_speakers`.
+    features/custom-dictionary) -- built by the table hub from a table's
+    roles file. Omitted (not an empty list) when there is nothing to
+    send, same style as `speakers`/`get_speakers`.
 
     `speaker_sensitivity`: Speechmatics realtime speaker-
     identification's own knob for how strongly an enrolled speaker is
@@ -181,9 +180,8 @@ def _join_transcript(results: list[dict]) -> str:
 class SpeechmaticsStream:
     """One realtime connection to Speechmatics EU for one table.
 
-    `speakers`, if given, is the enrollment config from `enroll()`
-    (`workshop/stt_speechmatics.py`):
-    `[{"label": "P1", "speaker_identifiers": [...]}, ...]`.
+    `speakers`, if given, is the enrollment config from the table hub's
+    `enroll()`: `[{"label": "P1", "speaker_identifiers": [...]}, ...]`.
     """
 
     def __init__(self, key: str, language: str, speakers: list[dict] | None,

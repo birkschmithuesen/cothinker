@@ -34,7 +34,6 @@ REPO = Path(__file__).resolve().parents[1]
 # measurement. This set may only shrink (a fixed file falls out of it); a
 # newly introduced, unlisted import is a violation.
 WORKSHOP_IMPORT_ALLOWLIST = frozenset({
-    "shared/speechmatics.py",
     "shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py",
     "shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py",
     "scripts/build-wall-demo.py",

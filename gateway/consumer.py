@@ -45,13 +45,12 @@ import sys
 import threading
 import time
 import unicodedata
-import urllib.request
 from collections import deque
 from dataclasses import dataclass
 from datetime import date, datetime
 from pathlib import Path
 from types import SimpleNamespace
-from typing import Callable, Iterable, Iterator
+from typing import Callable, Iterable
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
@@ -110,6 +109,7 @@ from gateway.raw_transcript import MinutesFile  # noqa: E402
 from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
 from blocks.minutes_document import minutes as minutes_block  # noqa: E402
 from gateway.stage_surface import StageSurface       # noqa: E402
+from shared.stt import SttConfig, open_stt           # noqa: E402
 
 ENTITIES = Path(os.environ.get(
     "COTHINKER_ENTITIES", Path.home() / "vault/entities"))
@@ -997,73 +997,6 @@ def build_agenda_controller(session_dir: Path, participants: str,
     except (OSError, UnicodeDecodeError) as e:
         log("agenda off: agenda.md not readable:", repr(e))
         return None
-
-
-# ==================================================================== SSE
-def parse_sse(zeilen: Iterable) -> Iterator[dict]:
-    """Splits an SSE stream into JSON objects.
-
-    Robust against anything a foreign server might send: CRLF, comments,
-    `event:`/`id:`/`retry:`, `data:` with and without a space, multi-line
-    data fields (pretty-printed JSON), broken JSON, invalid bytes.
-
-    An event normally ends with a blank line. Because a buffer that only
-    waits for the blank line would delay an entire utterance during the
-    conversation, after every data line we check whether what has been
-    collected so far already forms a complete object.
-    """
-    daten: list[str] = []
-
-    def fertig() -> Iterator[dict]:
-        if not daten:
-            return
-        roh = "\n".join(daten)
-        daten.clear()
-        try:
-            obj = json.loads(roh)
-        except (json.JSONDecodeError, ValueError):
-            return
-        if isinstance(obj, dict):
-            yield obj
-
-    for roh_zeile in zeilen:
-        if isinstance(roh_zeile, (bytes, bytearray)):
-            zeile = bytes(roh_zeile).decode("utf-8", "replace")
-        else:
-            zeile = str(roh_zeile)
-        zeile = zeile.rstrip("\r\n")
-        if not zeile:
-            yield from fertig()
-            continue
-        if zeile.startswith(":"):          # comment / keep-alive
-            continue
-        feld, _, wert = zeile.partition(":")
-        if wert.startswith(" "):
-            wert = wert[1:]
-        if feld != "data":
-            continue                       # event:, id:, retry: not needed
-        daten.append(wert)
-        try:                               # already complete? then emit now
-            obj = json.loads("\n".join(daten))
-        except (json.JSONDecodeError, ValueError):
-            continue
-        daten.clear()
-        if isinstance(obj, dict):
-            yield obj
-    yield from fertig()                    # remainder at end of stream
-
-
-def sse_events(url: str, timeout: float | None = 300.0) -> Iterator[dict]:
-    """Generator over the JSON payloads of an SSE stream. Stdlib only.
-
-    `timeout` is a READ timeout: if the server stays silent that long, the
-    stream is considered dead and the caller rebuilds it. Without this
-    limit the consumer would hang on a half-open connection until the end
-    of the meeting — it would never notice an unplugged network cable.
-    """
-    req = urllib.request.Request(url, headers={"Accept": "text/event-stream"})
-    with urllib.request.urlopen(req, timeout=timeout) as r:
-        yield from parse_sse(r)
 
 
 # ======================================================= session files
@@ -4043,13 +3976,15 @@ def main() -> int:
         except Exception as e:            # noqa: BLE001
             log("commit skipped:", repr(e))
 
-    url = a.stt.rstrip("/") + "/events"
-    log("connecting to", url)
+    stt_cfg = SttConfig(transport="sse", url=a.stt, read_timeout_s=a.stt_timeout)
+    log("connecting to", a.stt.rstrip("/") + "/events")
     versuch = n = 0
     try:
         while True:
+            source = None
             try:
-                for ev in sse_events(url, timeout=a.stt_timeout):
+                source = open_stt(stt_cfg)
+                for ev in source.events():
                     if versuch:
                         log("connected.")
                         versuch = 0
@@ -4061,23 +3996,23 @@ def main() -> int:
                     # The STT server's smart-turn answer for a final that
                     # already arrived (stt/.../thought_end.py). Numbers
                     # only; handed to the lane, never to the block builder.
-                    if ev.get("type") == "thought_end":
+                    if ev.type == "thought_end":
                         if gedankenende is not None:
-                            gedankenende.smart_turn(ev)
+                            gedankenende.smart_turn(ev.to_wire())
                         continue
-                    if ev.get("type") != "final":
+                    if ev.type != "final":
                         continue
-                    text = ev.get("text")
+                    text = ev.text
                     text = ("" if text is None else str(text)).strip()
                     if not text:
                         continue
-                    spk = ev.get("recognizer_id")
+                    spk = ev.recognizer_id
                     spk = str(spk) if spk and spk not in ("default", "mic_gate") else None
                     # Separate from `spk` on purpose: `spk` folds
                     # "default"/"mic_gate" to None for speaker
                     # attribution in the protocol -- timing.jsonl wants
                     # the raw channel id as the STT server sent it.
-                    roh_recognizer = ev.get("recognizer_id")
+                    roh_recognizer = ev.recognizer_id
                     recognizer_id_raw = (str(roh_recognizer)
                                          if roh_recognizer not in (None, "")
                                          else None)
@@ -4087,8 +4022,8 @@ def main() -> int:
                     # is not one -- and anything unusable counts as ABSENT
                     # rather than as an error: an older server simply
                     # sends nothing here and must keep working.
-                    t_start = ev.get("t_start")
-                    t_end = ev.get("t_end")
+                    t_start = ev.t_start
+                    t_end = ev.t_end
                     if not valid_span(t_start, t_end):
                         t_start = t_end = None
                     # Speaker resolution, --speakers
@@ -4123,7 +4058,7 @@ def main() -> int:
                             if (splitter is not None and not control
                                     and t_start is not None):
                                 split_future = splitter.split_async(
-                                    text, t_start, t_end, ev.get("words"))
+                                    text, t_start, t_end, ev.extra.get("words"))
                             resolved = enrollment.resolve(t_start, t_end)
                         except Exception as e:     # noqa: BLE001
                             log("speaker resolution skipped:", repr(e))
@@ -4352,7 +4287,7 @@ def main() -> int:
                             gedankenende.enqueue(
                                 text, at=jetzt,
                                 recognizer_id=recognizer_id_raw,
-                                turn_id=ev.get("turn_id"),
+                                turn_id=ev.turn_id,
                                 t_start=t_start, t_end=t_end)
                     commit_if_due()
                 # Even a cleanly closed stream counts as a drop: without a
@@ -4364,6 +4299,9 @@ def main() -> int:
                 raise
             except Exception as e:
                 grund = repr(e)
+            finally:
+                if source is not None:
+                    source.close()
             versuch += 1
             wart = min(30.0, a.retry_delay * (2.0 ** (versuch - 1)))
             log(f"STT stream dropped ({grund}); retrying in {wart:.1f}s")
