@@ -225,6 +225,15 @@ shared/utterance.py                                                             
 shared/wake_word.py                                                               block:segment
 shared/wiki_names.py                                                              block:knowledge-link
 stage/stage.py                                                                   surface:stage
+surfaces/__init__.py                                                             core:surface-api
+surfaces/contract/__init__.py                                                    core:surface-api
+surfaces/contract/__main__.py                                                    core:surface-api
+surfaces/contract/app.py                                                         core:surface-api
+surfaces/contract/fixtures/__init__.py                                           core:surface-api
+surfaces/contract/fixtures/meeting/__init__.py                                   core:surface-api
+surfaces/contract/generate_spec.py                                               core:surface-api
+surfaces/contract/models.py                                                      core:surface-api
+surfaces/contract/player.py                                                      core:surface-api
 stt/fundusapps/__init__.py                                                       stt:server
 stt/fundusapps/bbb_tap/__init__.py                                               stt:audio
 stt/fundusapps/bbb_tap/__main__.py                                               stt:audio
