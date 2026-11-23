@@ -53,7 +53,7 @@ from concurrent.futures import ThreadPoolExecutor, wait
 from dataclasses import dataclass, field
 from typing import Callable, Optional, Sequence
 
-from speaker_enroll import UNKNOWN, cosine_similarity, cut_clip
+from .enroll import UNKNOWN, cosine_similarity, cut_clip
 
 WINDOW_S = 1.5
 HOP_S = 0.75
