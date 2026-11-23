@@ -49,6 +49,20 @@ RASTER_IMAGE_EXTENSIONS = (".png",)
 # A raster image's text source: same directory, same stem, one of these.
 IMAGE_SOURCE_EXTENSIONS = (".html", ".svg", ".py", ".md")
 
+# Git exports these into every hook to point it at the repo being pushed.
+# Left alone, they override every git invocation's -C/explicit path below
+# (issue #125): self_test()'s temp-repo commit lands on the pushing branch
+# and history_lines()/detect_secrets() scan that branch instead of --repo.
+_GIT_LOCATION_VARS = (
+    "GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+    "GIT_OBJECT_DIRECTORY", "GIT_ALTERNATE_OBJECT_DIRECTORIES", "GIT_PREFIX",
+)
+
+
+def clean_git_env():
+    """Copy of os.environ with the inherited repo-location variables removed."""
+    return {k: v for k, v in os.environ.items() if k not in _GIT_LOCATION_VARS}
+
 
 class PatternList:
     def __init__(self, ident, literals=(), regexes=(), hmacs=None, key=None, allow=frozenset()):
@@ -138,7 +152,7 @@ def history_lines(repo):
     fmt = COMMIT_MARK + "%H%n%an <%ae>%n%cn <%ce>%n%B"
     out = subprocess.run(
         ["git", "-C", str(repo), "log", "--all", "-p", "--no-color", "--format=" + fmt],
-        capture_output=True, check=True).stdout.decode("utf-8", "replace")
+        capture_output=True, check=True, env=clean_git_env()).stdout.decode("utf-8", "replace")
     commit, path = "?", "META"
     for line in out.splitlines():
         if line.startswith(COMMIT_MARK):
@@ -204,7 +218,7 @@ def self_test(lists):
     canary-text match. Pin all four explicitly so the check means what it
     says regardless of the calling environment.
     """
-    canary_env = dict(os.environ)
+    canary_env = clean_git_env()
     canary_env.update({
         "GIT_AUTHOR_NAME": "t",
         "GIT_AUTHOR_EMAIL": "t@example.org",
@@ -227,9 +241,9 @@ def detect_secrets(repo):
         print("ERROR detect-secrets-hook not found", file=sys.stderr)
         return 3
     files = subprocess.run(["git", "-C", str(repo), "ls-files", "-z"], capture_output=True,
-                            text=True, check=True).stdout.split("\0")
+                            text=True, check=True, env=clean_git_env()).stdout.split("\0")
     r = subprocess.run([hook, "--baseline", ".secrets.baseline", *filter(None, files)],
-                        cwd=repo, capture_output=True, text=True)
+                        cwd=repo, capture_output=True, text=True, env=clean_git_env())
     if r.returncode != 0:
         print("HIT detect-secrets (details: run detect-secrets-hook locally)")
         return 1

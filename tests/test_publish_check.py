@@ -44,3 +44,47 @@ def test_public_list_still_flags_the_retired_real_address():
 def test_public_list_without_allow_flags_the_current_identity_too():
     pl = load_list(PUBLIC_DENYLIST, "public")
     assert pl.hit(f"Robo <{CURRENT_IDENTITY}>")
+
+
+"""Tests for tools/publish_check.py (issue #125: git exports repository-location
+variables such as GIT_DIR/GIT_WORK_TREE into every hook; publish_check.py must
+strip them from every subprocess call it makes, or self_test() commits onto the
+inherited repository and history_lines()/detect_secrets() scan it instead of
+the repo they were asked to scan)."""
+import subprocess
+
+import publish_check as pc
+
+
+def _git(repo, *args):
+    return subprocess.run(["git", "-C", str(repo), *args], check=True,
+                           capture_output=True, text=True).stdout
+
+
+def _init_repo(path, filename, content):
+    path.mkdir()
+    _git(path, "init", "-q")
+    (path / filename).write_text(content)
+    _git(path, "-c", "user.email=t@example.org", "-c", "user.name=t", "add", ".")
+    _git(path, "-c", "user.email=t@example.org", "-c", "user.name=t", "commit", "-qm", "init")
+    return _git(path, "rev-parse", "HEAD").strip()
+
+
+def test_self_test_and_scan_ignore_inherited_git_location_vars(tmp_path, monkeypatch):
+    scratch = tmp_path / "scratch"
+    second = tmp_path / "second"
+    scratch_head = _init_repo(scratch, "scratch.txt", "scratch-marker-1a2b\n")
+    _init_repo(second, "second.txt", "second-marker-9f3c\n")
+
+    # Simulate the environment a git hook inherits: GIT_DIR/GIT_WORK_TREE
+    # pinned to the repo being pushed (here: scratch).
+    monkeypatch.setenv("GIT_DIR", str(scratch / ".git"))
+    monkeypatch.setenv("GIT_WORK_TREE", str(scratch))
+
+    lists = [pc.load_list(pc.PUBLIC_DENYLIST, "public")]
+    assert pc.self_test(lists) is True
+    assert _git(scratch, "rev-parse", "HEAD").strip() == scratch_head
+
+    lines = [line for _, _, line in pc.history_lines(second)]
+    assert any("second-marker-9f3c" in line for line in lines)
+    assert not any("scratch-marker-1a2b" in line for line in lines)
