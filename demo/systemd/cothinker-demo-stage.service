@@ -1,0 +1,21 @@
+[Unit]
+Description=CoThinker demo: stage (read-only view of the project)
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/cothinker-demo/secrets.env
+EnvironmentFile=-%h/.config/cothinker-demo/demo.env
+EnvironmentFile=-%t/cothinker-demo/run.env
+Environment=COTHINKER_PROJECT_DIR=@DEMO_HOME@/project
+UnsetEnvironment=PYTHONPATH PYTHONHOME
+WorkingDirectory=@REPO@
+ExecStart=/usr/bin/python3 @REPO@/stage/stage.py --project cothinker-demo --host 127.0.0.1 --port 8020 --token ${STAGE_TOKEN}
+StandardOutput=append:@DEMO_HOME@/logs/stage.log
+StandardError=inherit
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

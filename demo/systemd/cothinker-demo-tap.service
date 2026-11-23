@@ -1,0 +1,25 @@
+[Unit]
+Description=CoThinker demo: listen-only tap (per-track PCM into the STT server)
+
+[Service]
+Type=simple
+# robo.env holds ROBO_JOIN_URL, minted fresh by demo.sh start (it overrides
+# any value in secrets.env). run.env holds DEMO_RUN_TS.
+EnvironmentFile=%h/.config/cothinker-demo/secrets.env
+EnvironmentFile=-%h/.config/cothinker-demo/demo.env
+EnvironmentFile=%t/cothinker-demo/robo.env
+EnvironmentFile=%t/cothinker-demo/run.env
+UnsetEnvironment=PYTHONPATH PYTHONHOME
+WorkingDirectory=@REPO@/stt
+# systemd does not expand ${} inside Environment=, hence the shell wrapper;
+# $$ is a literal $ for the shell.
+ExecStart=/bin/sh -c 'BBB_JOIN_URL="$$ROBO_JOIN_URL" exec @REPO@/stt/.venv/bin/python -m fundusapps.bbb_tap --pcm tcp:127.0.0.1:5053 --cdp http://127.0.0.1:9223 --per-track --record-time "$$DEMO_RUN_TS" --record-dir @DEMO_HOME@/audio --name Robo --join-timeout 120'
+StandardOutput=append:@DEMO_HOME@/logs/tap.log
+StandardError=inherit
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

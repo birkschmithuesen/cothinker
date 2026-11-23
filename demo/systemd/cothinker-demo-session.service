@@ -1,0 +1,19 @@
+[Unit]
+Description=CoThinker demo: session endpoint (per-user Jitsi JWT)
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/cothinker-demo/secrets.env
+EnvironmentFile=-%h/.config/cothinker-demo/demo.env
+Environment=DEMO_SESSION_PORT=8091
+UnsetEnvironment=PYTHONPATH PYTHONHOME
+ExecStart=/usr/bin/python3 @REPO@/demo/session_server.py
+StandardOutput=append:@DEMO_HOME@/logs/session.log
+StandardError=inherit
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

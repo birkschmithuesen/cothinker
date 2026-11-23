@@ -1,0 +1,28 @@
+[Unit]
+Description=CoThinker demo: consumer (protocol, lanes, stage state)
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/cothinker-demo/secrets.env
+EnvironmentFile=-%h/.config/cothinker-demo/demo.env
+Environment=COTHINKER_PROJECT_DIR=@DEMO_HOME@/project
+Environment=COTHINKER_DECIDER=jev
+# Defaults; override in demo.env. HERMES_PYTHONPATH has no default and must
+# be set in demo.env (the hermes checkout and its site-packages).
+Environment=HERMES_PROFILE_DIR=%h/.hermes/profiles/cothinker-lanes
+Environment=LANE_MODEL=claude-sonnet-5
+Environment=LANE_PROVIDER=custom:anthropic_plan
+UnsetEnvironment=PYTHONPATH PYTHONHOME
+WorkingDirectory=@REPO@
+# The default lane workers use profiles that may not exist: BOTH lane worker
+# commands are passed explicitly. ${VAR} is expanded by systemd per argument.
+ExecStart=/usr/bin/python3 @REPO@/gateway/consumer.py --policy --lanes --max-batch 2000 --stt http://127.0.0.1:5051 --project cothinker-demo --title "CoThinker Demo" --participants "" --mode sitzung --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER}" --lane-call-worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --no-history" --lane-coach-worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --no-history"
+StandardOutput=append:@DEMO_HOME@/logs/consumer.log
+StandardError=inherit
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target
