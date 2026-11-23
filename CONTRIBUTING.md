@@ -91,6 +91,13 @@ gates:
 Either gate catching a hit means the branch does not land until the
 work-item id or publish-check hit is removed from the commit history.
 
+## 5. Building a surface
+
+Designers who build a surface (a screen, a room display, a phone view) follow
+[`docs/contributing-surfaces.md`](docs/contributing-surfaces.md): where each kind
+of work lives, how it reaches `main`, and how to build against the surface
+contract.
+
 ## Questions
 
 Open an issue in this repository on GitHub.
