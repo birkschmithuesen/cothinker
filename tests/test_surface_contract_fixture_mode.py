@@ -68,3 +68,13 @@ def test_meeting_scenario_matches_the_issue_132_beats():
     assert any(q.state == "resolved" for q in questions)   # later resolved
     speakers = {f.snapshot.agenda.speaker for f in frames}
     assert len(speakers) > 1              # the speaker queue turns over
+
+
+def test_meeting_scenario_exercises_the_queue_snapshot_field():
+    """issue #132 review finding: StageStateSnapshot.queue must be exercised
+    by at least one frame, not left `None` throughout the fixture."""
+    frames = load_scenario("meeting")
+    queues = [f.snapshot.queue for f in frames if f.snapshot.queue is not None]
+    assert queues, "no frame sets StageStateSnapshot.queue"
+    speaking_pids = {q.speaking.pid for q in queues if q.speaking is not None}
+    assert len(speaking_pids) > 1         # the speaker queue snapshot turns over too

@@ -39,7 +39,7 @@ Build the surface against this server exactly as you would against the
 live one: poll or cache `GET /snapshot`, subscribe to `GET /events` for
 view intents, and — once your surface needs to answer back — `POST
 /actions` with a user action from the contract (`choose`, `accept`,
-`reject`, `edit`, `tap`, `voice`). A surface never invents its own field or
+`reject`, `edit`, `tap`, `voice`, `message`). A surface never invents its own field or
 event; it renders what the schema says, or drops what it does not render
 (ADR 0006) and logs the drop.
 
