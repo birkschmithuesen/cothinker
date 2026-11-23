@@ -1,0 +1,5 @@
+# surfaces/contract: new dependencies per ADR 0019's consequences section.
+fastapi
+uvicorn
+pydantic
+PyYAML
