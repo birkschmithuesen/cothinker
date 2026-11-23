@@ -161,6 +161,9 @@ do_stop() {
   local rev="" u
   for u in $DEMO_UNITS; do rev="$u $rev"; done
   for u in $rev; do sc stop "$(unit "$u")" || fail=1; done
+  # A unit that was SIGKILLed after its stop timeout stays "failed"; the
+  # stack is stopped, so clear that state.
+  for u in $DEMO_UNITS; do sc reset-failed "$(unit "$u")" 2>/dev/null || true; done
   check_stopped
   if [ "$ALL" = 1 ]; then
     sudo -n docker compose --project-directory "$JITSI_DIR" down >/dev/null \

@@ -22,7 +22,7 @@ StandardError=inherit
 Restart=on-failure
 RestartSec=3
 KillMode=control-group
-TimeoutStopSec=15
+TimeoutStopSec=90
 
 [Install]
 WantedBy=default.target

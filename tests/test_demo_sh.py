@@ -33,8 +33,11 @@ def test_units_have_required_directives():
     for u in units:
         text = u.read_text()
         for needle in ("Restart=on-failure", "RestartSec=3",
-                       "KillMode=control-group", "TimeoutStopSec=15"):
+                       "KillMode=control-group"):
             assert needle in text, (u.name, needle)
+        # the consumer flushes the protocol on SIGTERM and needs longer
+        want = "TimeoutStopSec=90" if u.stem.endswith("consumer") else "TimeoutStopSec=15"
+        assert want in text, (u.name, want)
         assert not re.search(r"/home/\w+/", text), u.name
 
 
