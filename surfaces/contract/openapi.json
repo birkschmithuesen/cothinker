@@ -455,6 +455,47 @@
         "title": "HistoryEntry",
         "type": "object"
       },
+      "MessageAction": {
+        "properties": {
+          "intent_id": {
+            "description": "The intent this message responds to.",
+            "examples": [
+              "VI1"
+            ],
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "message",
+            "default": "message",
+            "title": "Kind",
+            "type": "string"
+          },
+          "person": {
+            "description": "Who typed the message.",
+            "examples": [
+              "P3"
+            ],
+            "title": "Person",
+            "type": "string"
+          },
+          "text": {
+            "description": "What was typed.",
+            "examples": [
+              "hello"
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "person",
+          "text"
+        ],
+        "title": "MessageAction",
+        "type": "object"
+      },
       "Notice": {
         "properties": {
           "follow_up": {
@@ -668,6 +709,74 @@
         "title": "Question",
         "type": "object"
       },
+      "QueueSeat": {
+        "description": "One seat in the speaker queue (`blocks/speaker_queue/__init__.py`).",
+        "properties": {
+          "name": {
+            "description": "Display name for the seat.",
+            "examples": [
+              "Mira"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "pid": {
+            "description": "The seat's participant id.",
+            "examples": [
+              "P1"
+            ],
+            "title": "Pid",
+            "type": "string"
+          }
+        },
+        "required": [
+          "pid",
+          "name"
+        ],
+        "title": "QueueSeat",
+        "type": "object"
+      },
+      "QueueSnapshot": {
+        "description": "`content()[\"queue\"]`: the speaker-queue block's `queue:room` view-intent\npayload, filled by `blocks/speaker_queue/__init__.py::_emit_view()`.",
+        "properties": {
+          "mode": {
+            "const": "tap",
+            "default": "tap",
+            "description": "How seats join the queue; only `tap` exists today.",
+            "examples": [
+              "tap"
+            ],
+            "title": "Mode",
+            "type": "string"
+          },
+          "round": {
+            "description": "Reserved for a future round-based queue mode; always `None` today.",
+            "title": "Round",
+            "type": "null"
+          },
+          "speaking": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QueueSeat"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who currently holds the floor; `None` when nobody does."
+          },
+          "waiting": {
+            "description": "Seats waiting their turn, in order.",
+            "items": {
+              "$ref": "#/components/schemas/QueueSeat"
+            },
+            "title": "Waiting",
+            "type": "array"
+          }
+        },
+        "title": "QueueSnapshot",
+        "type": "object"
+      },
       "RejectAction": {
         "properties": {
           "intent_id": {
@@ -704,6 +813,292 @@
           "intent_id"
         ],
         "title": "RejectAction",
+        "type": "object"
+      },
+      "SessionGraph": {
+        "description": "`content()[\"session_graph\"]`: the `graph` block's `graph:session` view-intent\npayload, filled by `blocks/graph/__init__.py::GraphBlock._build()`.",
+        "properties": {
+          "edges": {
+            "items": {
+              "$ref": "#/components/schemas/SessionGraphEdge"
+            },
+            "title": "Edges",
+            "type": "array"
+          },
+          "hidden": {
+            "description": "Count of nodes folded away by the visibility cap.",
+            "examples": [
+              0
+            ],
+            "title": "Hidden",
+            "type": "integer"
+          },
+          "nodes": {
+            "items": {
+              "$ref": "#/components/schemas/SessionGraphNode"
+            },
+            "title": "Nodes",
+            "type": "array"
+          },
+          "seed": {
+            "description": "Id of the session node the graph is seeded from.",
+            "examples": [
+              "file:protokoll.md"
+            ],
+            "title": "Seed",
+            "type": "string"
+          }
+        },
+        "required": [
+          "seed",
+          "hidden"
+        ],
+        "title": "SessionGraph",
+        "type": "object"
+      },
+      "SessionGraphEdge": {
+        "description": "One edge of `blocks/graph/session_graph.py::build_session_graph()`.",
+        "properties": {
+          "id": {
+            "description": "Edge identity.",
+            "examples": [
+              "e:1"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "description": "`entry`, `block`, `wikilink`, or a vault edge kind.",
+            "examples": [
+              "entry"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "ring": {
+            "description": "The ring the edge belongs to.",
+            "examples": [
+              0
+            ],
+            "title": "Ring",
+            "type": "integer"
+          },
+          "source": {
+            "description": "Id of the edge's source node.",
+            "examples": [
+              "file:protokoll.md"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "target": {
+            "description": "Id of the edge's target node.",
+            "examples": [
+              "t1"
+            ],
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "source",
+          "target",
+          "kind",
+          "ring"
+        ],
+        "title": "SessionGraphEdge",
+        "type": "object"
+      },
+      "SessionGraphNode": {
+        "description": "One node of `blocks/graph/session_graph.py::build_session_graph()`.",
+        "properties": {
+          "grace": {
+            "default": false,
+            "description": "Whether the node is kept only by the ring-selection hysteresis grace window.",
+            "examples": [
+              false
+            ],
+            "title": "Grace",
+            "type": "boolean"
+          },
+          "hidden": {
+            "default": false,
+            "description": "Whether the visibility cap folds this node away.",
+            "examples": [
+              false
+            ],
+            "title": "Hidden",
+            "type": "boolean"
+          },
+          "href": {
+            "default": "",
+            "description": "Where the node links to, if anywhere.",
+            "examples": [
+              ""
+            ],
+            "title": "Href",
+            "type": "string"
+          },
+          "id": {
+            "description": "Node identity.",
+            "examples": [
+              "file:protokoll.md"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "description": "`session`, `topic`, `entry` or `note`.",
+            "examples": [
+              "session"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "description": "Label shown for the node.",
+            "examples": [
+              "Quarterly planning"
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "parent": {
+            "default": "",
+            "description": "The id of the node this one hangs off of.",
+            "examples": [
+              "file:protokoll.md"
+            ],
+            "title": "Parent",
+            "type": "string"
+          },
+          "ring": {
+            "description": "0 for the session and its structure, 1 for linked notes, 2 for their neighbours.",
+            "examples": [
+              0
+            ],
+            "title": "Ring",
+            "type": "integer"
+          },
+          "tag": {
+            "default": "",
+            "description": "The entry's tag, if the node is an entry.",
+            "examples": [
+              ""
+            ],
+            "title": "Tag",
+            "type": "string"
+          },
+          "time": {
+            "default": "",
+            "description": "Wall-clock label attached to the node, if any.",
+            "examples": [
+              ""
+            ],
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "label",
+          "kind",
+          "ring"
+        ],
+        "title": "SessionGraphNode",
+        "type": "object"
+      },
+      "ShareRow": {
+        "description": "One row of `blocks/speaking_share/talk_share.py`'s `talk_share` event.",
+        "properties": {
+          "given": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The role's given name, only present when known.",
+            "examples": [
+              null
+            ],
+            "title": "Given"
+          },
+          "person": {
+            "description": "Placeholder person id.",
+            "examples": [
+              "P1"
+            ],
+            "title": "Person",
+            "type": "string"
+          },
+          "role_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The person's bound role, if known.",
+            "examples": [
+              null
+            ],
+            "title": "Role Id"
+          },
+          "share": {
+            "description": "This person's share of `total_words`, 0..1.",
+            "examples": [
+              0.31
+            ],
+            "title": "Share",
+            "type": "number"
+          },
+          "words": {
+            "description": "Words counted for this person so far.",
+            "examples": [
+              123
+            ],
+            "title": "Words",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "person",
+          "words",
+          "share"
+        ],
+        "title": "ShareRow",
+        "type": "object"
+      },
+      "ShareSnapshot": {
+        "description": "`content()[\"share\"]`: the speaking-share block's `share:room` view-intent\npayload, filled by `blocks/speaking_share/__init__.py::_on_tick()`.",
+        "properties": {
+          "shares": {
+            "description": "Per-person talk-share rows; empty while nobody has spoken yet.",
+            "items": {
+              "$ref": "#/components/schemas/ShareRow"
+            },
+            "title": "Shares",
+            "type": "array"
+          },
+          "total_words": {
+            "description": "Total words counted so far across everyone.",
+            "examples": [
+              400
+            ],
+            "title": "Total Words",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_words"
+        ],
+        "title": "ShareSnapshot",
         "type": "object"
       },
       "StageImage": {
@@ -932,6 +1327,39 @@
             ],
             "description": "The single open-question slot; `None` when empty."
           },
+          "queue": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/QueueSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The speaker queue, from the `speaker-queue` block; `None` when that block is absent from the session, not merely empty of seats (key-absent-means-hidden, `StageState._content()`)."
+          },
+          "session_graph": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SessionGraph"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The session graph the stage tab draws, from the `graph` block; `None` until the block has emitted one (key-absent-means-hidden, `StageState._content()`)."
+          },
+          "share": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ShareSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Per-person talk-share, from the `speaking-share` block; `None` when that block is absent from the session (key-absent-means-hidden, `StageState._content()`)."
+          },
           "updated": {
             "description": "Wall-clock label of the last update.",
             "examples": [
@@ -1114,6 +1542,7 @@
                     "accept": "#/components/schemas/AcceptAction",
                     "choose": "#/components/schemas/ChooseAction",
                     "edit": "#/components/schemas/EditAction",
+                    "message": "#/components/schemas/MessageAction",
                     "reject": "#/components/schemas/RejectAction",
                     "tap": "#/components/schemas/TapAction",
                     "voice": "#/components/schemas/VoiceAction"
@@ -1138,6 +1567,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/VoiceAction"
+                  },
+                  {
+                    "$ref": "#/components/schemas/MessageAction"
                   }
                 ],
                 "title": "Action"
