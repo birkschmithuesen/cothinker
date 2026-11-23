@@ -9,6 +9,7 @@ live gateway instance (ADR 0001: a module needs no instance material).
 from __future__ import annotations
 
 import asyncio
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.responses import StreamingResponse
@@ -20,12 +21,22 @@ SSE_PING_S = 15.0
 
 
 def create_app(player: ScenarioPlayer | None = None) -> FastAPI:
+    @asynccontextmanager
+    async def lifespan(_app: FastAPI):
+        task = asyncio.create_task(player.run()) if player is not None else None
+        try:
+            yield
+        finally:
+            if task is not None:
+                task.cancel()
+
     app = FastAPI(
         title="CoThinker surface contract",
         description="The machine-readable contract between a surface and "
         "the core (ADR 0019): stage-state snapshot, the view-intent push "
         "channel and user actions.",
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     @app.get("/snapshot", response_model=StageStateSnapshot, tags=["snapshot"])
