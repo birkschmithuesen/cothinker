@@ -42,6 +42,7 @@ import numpy as np
 from fundusapps.common.turnid import ulid_now
 from fundusapps.stt_server.backends.base import RecognizerBackend
 from fundusapps.stt_server.events import EventBus, TranscriptionEvent
+from fundusapps.stt_server.track_speaker_resolver import build_speaker_resolver
 
 BACKEND_NAME = "speechmatics-rt"
 # Defaults measured on the 26.10. meeting audio (docs/stt.md, "Speechmatics
@@ -217,7 +218,11 @@ class SpeechmaticsRtBackend(RecognizerBackend):
                    max_utt_s=args.max_utt,
                    max_speakers=getattr(args, "max_speakers", DEFAULT_MAX_SPEAKERS),
                    prefer_current_speaker=bool(getattr(args, "prefer_current_speaker", False)),
-                   url=args.url or None)
+                   url=args.url or None,
+                   # Issue #128: None (the default build_speaker_resolver
+                   # returns) for every input path except the Jitsi/BBB
+                   # --per-track tap, which sets args.per_track_sidecar.
+                   speaker_resolver=build_speaker_resolver(args))
 
     def wants_streaming(self) -> bool:
         return True
