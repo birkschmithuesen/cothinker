@@ -71,10 +71,19 @@ class _UtteranceCollector(UtteranceCollector):
     """`shared.utterance.UtteranceCollector`, publishing each merged final
     (and every live partial) as a `TranscriptionEvent` on `bus`."""
 
-    def __init__(self, channel_id: str, bus: EventBus, max_utt_s: float = DEFAULT_MAX_UTT_S):
+    def __init__(self, channel_id: str, bus: EventBus, max_utt_s: float = DEFAULT_MAX_UTT_S,
+                 speaker_resolver: Optional[Callable[[float, float], Optional[str]]] = None):
         super().__init__(max_utt_s)
         self.channel_id = channel_id
         self.bus = bus
+        # Issue #128 (Jitsi/BBB per-track energy attribution): when set,
+        # called with (t_start, t_end) on THIS event's own audio clock for
+        # every partial/final; a non-empty return overrides `speaker`
+        # (normally the Speechmatics diarization label) with the
+        # participant's real display name. None (the default) leaves
+        # today's S1/S2 label behaviour untouched -- no caller wires this
+        # yet; see fundusapps.bbb_tap.speaker_attribution.
+        self.speaker_resolver = speaker_resolver
         #: audio-clock sample offset of the first chunk of this session
         self.session_base_samples: Optional[int] = None
         self._turn_id: Optional[str] = None
@@ -102,8 +111,13 @@ class _UtteranceCollector(UtteranceCollector):
             partial_seq=self._partial_seq if type_ == "partial" else None,
             extending=False if type_ == "partial" else None,
             t_start=t_start, t_end=t_end)
+        speaker = label
+        if self.speaker_resolver is not None and t_start is not None and t_end is not None:
+            resolved = self.speaker_resolver(t_start, t_end)
+            if resolved:
+                speaker = resolved
         # Extra keys, serialised by TranscriptionEvent.to_dict() only when set.
-        setattr(ev, "speaker", label)
+        setattr(ev, "speaker", speaker)
         setattr(ev, "channel", self.channel_id)
         return ev
 
@@ -151,7 +165,8 @@ class SpeechmaticsRtBackend(RecognizerBackend):
                  max_speakers: int = DEFAULT_MAX_SPEAKERS,
                  prefer_current_speaker: bool = False,
                  url: Optional[str] = None,
-                 stream_factory: Optional[Callable] = None):
+                 stream_factory: Optional[Callable] = None,
+                 speaker_resolver: Optional[Callable[[float, float], Optional[str]]] = None):
         super().__init__(event_bus)
         default_url, stream_cls = _import_stream()
         self._api_key = api_key
@@ -161,6 +176,10 @@ class SpeechmaticsRtBackend(RecognizerBackend):
         self._max_utt_s = float(max_utt_s)
         self._max_speakers = int(max_speakers)
         self._prefer_current_speaker = bool(prefer_current_speaker)
+        # Issue #128: passed straight through to every per-channel
+        # _UtteranceCollector; see its own docstring/comment for the
+        # contract. None (the default) is a no-op.
+        self._speaker_resolver = speaker_resolver
         self._url = url or default_url
         self._stream_factory = stream_factory or (
             lambda: stream_cls(self._api_key, self._language, None,
@@ -217,7 +236,8 @@ class SpeechmaticsRtBackend(RecognizerBackend):
         if q is None:
             q = asyncio.Queue()
             self._queues[rid] = q
-            self._collectors[rid] = _UtteranceCollector(rid, self._bus, self._max_utt_s)
+            self._collectors[rid] = _UtteranceCollector(
+                rid, self._bus, self._max_utt_s, speaker_resolver=self._speaker_resolver)
             self._tasks[rid] = self._loop.create_task(self._run(rid))
         q.put_nowait((offset, pcm))
 
