@@ -38,7 +38,8 @@ if a demo Chrome, a unit or a socket on the demo ports is left over.
 
 `demo/systemd/*.service` are templates. Replace `@DEMO_HOME@` (state dir
 with `repo/`, `project/`, `audio/`, `logs/`), `@REPO@` (CoThinker checkout)
-and `@HERMES_PY@` (Python that can import the hermes worker), copy them to
+`@KIT@` (directory that contains this `demo/` folder; set `DEMO_KIT` in
+`demo.env` if it is not the checkout) and `@HERMES_PY@` (Python that can import the hermes worker), copy them to
 `~/.config/systemd/user/`, run `systemctl --user daemon-reload`. Serve
 `demo/page/` under `/demo/` and proxy the paths above (nginx). Run
 `git init` once in `@DEMO_HOME@/project`.

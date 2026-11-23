@@ -43,6 +43,8 @@ set +a
 : "${DEMO_HOME:?DEMO_HOME missing in demo.env}"
 : "${JITSI_DIR:?JITSI_DIR missing in demo.env}"
 DEMO_REPO=${DEMO_REPO:-$DEMO_HOME/repo}
+# Directory that holds this demo/ kit (may differ from the runtime checkout).
+DEMO_KIT=${DEMO_KIT:-$DEMO_REPO}
 DEMO_UNITS=${DEMO_UNITS:-"session stage stt chrome tap consumer"}
 JITSI_WEB=${JITSI_WEB:-http://127.0.0.1:8000/}
 RUN_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cothinker-demo
@@ -98,7 +100,7 @@ start_all() {
     # shellcheck disable=SC1091
     . "$CONF_DIR/secrets.env"
     set +a
-    python3 "$DEMO_REPO/demo/session_server.py" --mint-robo "$RUN_DIR/robo.env"
+    python3 "$DEMO_KIT/demo/session_server.py" --mint-robo "$RUN_DIR/robo.env"
   ) || { echo "FAIL: minting the bot join URL" >&2; return 1; }
 
   git -C "$DEMO_HOME/project" config user.name >/dev/null 2>&1 \
