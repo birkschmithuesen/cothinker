@@ -1,0 +1,1222 @@
+{
+  "components": {
+    "schemas": {
+      "AcceptAction": {
+        "properties": {
+          "intent_id": {
+            "description": "The intent being accepted.",
+            "examples": [
+              "VI1"
+            ],
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "accept",
+            "default": "accept",
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id"
+        ],
+        "title": "AcceptAction",
+        "type": "object"
+      },
+      "AgendaItemSummary": {
+        "description": "One item of the full agenda list -- not wired yet, see issue #129.",
+        "properties": {
+          "budget_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Planned duration in seconds.",
+            "examples": [
+              600.0
+            ],
+            "title": "Budget S"
+          },
+          "status": {
+            "description": "Where this item stands relative to the current one.",
+            "enum": [
+              "done",
+              "current",
+              "next",
+              "open"
+            ],
+            "examples": [
+              "current"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "title": {
+            "description": "The agenda item's title.",
+            "examples": [
+              "Retro: what worked"
+            ],
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "status"
+        ],
+        "title": "AgendaItemSummary",
+        "type": "object"
+      },
+      "AgendaSnapshot": {
+        "description": "`gateway.stage_state.agenda_payload()`'s result; `None` for a session without `agenda.md`.",
+        "properties": {
+          "current": {
+            "description": "1-based position of the current item; 0 when there are no items.",
+            "examples": [
+              2
+            ],
+            "title": "Current",
+            "type": "integer"
+          },
+          "current_text": {
+            "description": "Title of the current item.",
+            "examples": [
+              "Retro: what worked"
+            ],
+            "title": "Current Text",
+            "type": "string"
+          },
+          "item_budget_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Budget of the current item in seconds.",
+            "examples": [
+              600.0
+            ],
+            "title": "Item Budget S"
+          },
+          "item_started_at": {
+            "description": "Epoch seconds the current item started; the reader computes the live countdown against `meeting_deadline` itself.",
+            "examples": [
+              1732352400.0
+            ],
+            "title": "Item Started At",
+            "type": "number"
+          },
+          "items": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AgendaItemSummary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The whole agenda as a list, not just current/next; the core does not wire this up yet (issue #129). A fixture populates it so a surface can design against it.",
+            "examples": [
+              null
+            ],
+            "title": "Items",
+            "x-issue": "https://github.com/birkschmithuesen/cothinker/issues/129",
+            "x-status": "planned"
+          },
+          "meeting_deadline": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Epoch seconds the whole meeting is due to end.",
+            "examples": [
+              1732356000.0
+            ],
+            "title": "Meeting Deadline"
+          },
+          "next": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "1-based position of the next item, if any.",
+            "examples": [
+              3
+            ],
+            "title": "Next"
+          },
+          "next_speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who speaks next, if the queue has more than one person.",
+            "examples": [
+              "Jonas"
+            ],
+            "title": "Next Speaker"
+          },
+          "next_text": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Title of the next item, if any.",
+            "examples": [
+              "Retro: what to change"
+            ],
+            "title": "Next Text"
+          },
+          "people": {
+            "description": "The speaker queue, in order.",
+            "examples": [
+              [
+                "Mira",
+                "Jonas",
+                "Tamar"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "People",
+            "type": "array"
+          },
+          "speaker": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who is currently speaking, if the queue is non-empty.",
+            "examples": [
+              "Mira"
+            ],
+            "title": "Speaker"
+          },
+          "total": {
+            "description": "Total number of agenda items.",
+            "examples": [
+              5
+            ],
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "current",
+          "current_text",
+          "total",
+          "item_started_at"
+        ],
+        "title": "AgendaSnapshot",
+        "type": "object"
+      },
+      "ChooseAction": {
+        "properties": {
+          "intent_id": {
+            "description": "The choice intent this responds to.",
+            "examples": [
+              "VI2"
+            ],
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "choose",
+            "default": "choose",
+            "title": "Kind",
+            "type": "string"
+          },
+          "option": {
+            "description": "The chosen option.",
+            "examples": [
+              "Timeline"
+            ],
+            "title": "Option",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "option"
+        ],
+        "title": "ChooseAction",
+        "type": "object"
+      },
+      "Decision": {
+        "properties": {
+          "added_at": {
+            "description": "Wall-clock label of when this decision was added; used for the few seconds of a 'new' mark, computed by the reader.",
+            "examples": [
+              "2026-11-23T09:12:00+01:00"
+            ],
+            "title": "Added At",
+            "type": "string"
+          },
+          "id": {
+            "description": "Identity of this decision.",
+            "examples": [
+              "D3"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "text": {
+            "description": "The decision text.",
+            "examples": [
+              "We ship the public repo split first."
+            ],
+            "title": "Text",
+            "type": "string"
+          },
+          "time": {
+            "description": "When the decision takes effect, as named by the round.",
+            "examples": [
+              "from next week"
+            ],
+            "title": "Time",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "time",
+          "text",
+          "added_at"
+        ],
+        "title": "Decision",
+        "type": "object"
+      },
+      "EditAction": {
+        "properties": {
+          "intent_id": {
+            "description": "The intent whose text is being edited.",
+            "examples": [
+              "VI1"
+            ],
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "edit",
+            "default": "edit",
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "description": "The edited text.",
+            "examples": [
+              "What is one worry for today?"
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "text"
+        ],
+        "title": "EditAction",
+        "type": "object"
+      },
+      "HTTPValidationError": {
+        "properties": {
+          "detail": {
+            "items": {
+              "$ref": "#/components/schemas/ValidationError"
+            },
+            "title": "Detail",
+            "type": "array"
+          }
+        },
+        "title": "HTTPValidationError",
+        "type": "object"
+      },
+      "HistoryEntry": {
+        "description": "One position in `history`: every surface shown so far, in full.",
+        "properties": {
+          "collapsed_lines": {
+            "default": 0,
+            "description": "Folded-away line count.",
+            "examples": [
+              0
+            ],
+            "title": "Collapsed Lines",
+            "type": "integer"
+          },
+          "collapsed_markdown": {
+            "default": "",
+            "description": "Folded-away markdown.",
+            "examples": [
+              ""
+            ],
+            "title": "Collapsed Markdown",
+            "type": "string"
+          },
+          "graph": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Nodes and edges when `kind` is `graph`; an older graph position keeps only its `seed`, the newest keeps the full drawing.",
+            "examples": [
+              null
+            ],
+            "title": "Graph"
+          },
+          "id": {
+            "description": "Identity of this history position.",
+            "examples": [
+              "M5"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "default": "markdown",
+            "description": "`markdown` for a normal position, `graph` for a session-graph position.",
+            "enum": [
+              "markdown",
+              "graph"
+            ],
+            "examples": [
+              "markdown"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "markdown": {
+            "description": "The markdown body of this position.",
+            "examples": [
+              "## Opening round\n\nEveryone names one expectation."
+            ],
+            "title": "Markdown",
+            "type": "string"
+          },
+          "set_at": {
+            "description": "Wall-clock label of when this position was set.",
+            "examples": [
+              "2026-11-23T09:00:00+01:00"
+            ],
+            "title": "Set At",
+            "type": "string"
+          },
+          "title": {
+            "description": "Short label the history is navigated by.",
+            "examples": [
+              "Opening round"
+            ],
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "title",
+          "markdown",
+          "set_at"
+        ],
+        "title": "HistoryEntry",
+        "type": "object"
+      },
+      "Notice": {
+        "properties": {
+          "follow_up": {
+            "default": false,
+            "description": "Whether this notice needs a follow-up after it ages out.",
+            "examples": [
+              false
+            ],
+            "title": "Follow Up",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Identity of this notice.",
+            "examples": [
+              "N2"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "description": "The notice kind, chosen by the raising block.",
+            "examples": [
+              "risk"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "raised_at": {
+            "description": "Wall-clock label of when the notice was raised.",
+            "examples": [
+              "2026-11-23T09:05:00+01:00"
+            ],
+            "title": "Raised At",
+            "type": "string"
+          },
+          "resolution": {
+            "default": "",
+            "description": "How the notice was resolved, if it was.",
+            "examples": [
+              ""
+            ],
+            "title": "Resolution",
+            "type": "string"
+          },
+          "state": {
+            "default": "open",
+            "enum": [
+              "open",
+              "resolved",
+              "expired"
+            ],
+            "examples": [
+              "open"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "text": {
+            "description": "The notice text.",
+            "examples": [
+              "The vendor contract still needs signature."
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "text",
+          "raised_at"
+        ],
+        "title": "Notice",
+        "type": "object"
+      },
+      "ParkedEntry": {
+        "description": "A notice or question that found no free slot; it carries no identity.",
+        "properties": {
+          "parked_at": {
+            "description": "Wall-clock label of when it was parked.",
+            "examples": [
+              "2026-11-23T09:20:00+01:00"
+            ],
+            "title": "Parked At",
+            "type": "string"
+          },
+          "text": {
+            "description": "What was parked.",
+            "examples": [
+              "Should we invite the vendor to the next round?"
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text",
+          "parked_at"
+        ],
+        "title": "ParkedEntry",
+        "type": "object"
+      },
+      "PendingAnnouncement": {
+        "description": "Something of `kind` is on its way to the stage.",
+        "properties": {
+          "id": {
+            "description": "Identity pairing this announcement's start with its end.",
+            "examples": [
+              "P1"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "description": "What is coming, chosen by the calling code.",
+            "examples": [
+              "decision"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "label": {
+            "description": "Short label shown while the announcement is pending.",
+            "examples": [
+              "noting a decision..."
+            ],
+            "title": "Label",
+            "type": "string"
+          },
+          "since": {
+            "description": "Wall-clock label of when the announcement started.",
+            "examples": [
+              "2026-11-23T09:11:55+01:00"
+            ],
+            "title": "Since",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "kind",
+          "label",
+          "since"
+        ],
+        "title": "PendingAnnouncement",
+        "type": "object"
+      },
+      "Question": {
+        "properties": {
+          "follow_up": {
+            "default": false,
+            "description": "Whether this question needs a follow-up after it ages out.",
+            "examples": [
+              false
+            ],
+            "title": "Follow Up",
+            "type": "boolean"
+          },
+          "id": {
+            "description": "Identity of this open question.",
+            "examples": [
+              "Q1"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "raised_at": {
+            "description": "Wall-clock label of when the question was raised.",
+            "examples": [
+              "2026-11-23T09:07:00+01:00"
+            ],
+            "title": "Raised At",
+            "type": "string"
+          },
+          "resolution": {
+            "default": "",
+            "description": "The answer, once resolved.",
+            "examples": [
+              ""
+            ],
+            "title": "Resolution",
+            "type": "string"
+          },
+          "state": {
+            "default": "open",
+            "enum": [
+              "open",
+              "resolved",
+              "expired"
+            ],
+            "examples": [
+              "open"
+            ],
+            "title": "State",
+            "type": "string"
+          },
+          "text": {
+            "description": "The question text.",
+            "examples": [
+              "Who owns the migration runbook?"
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "text",
+          "raised_at"
+        ],
+        "title": "Question",
+        "type": "object"
+      },
+      "RejectAction": {
+        "properties": {
+          "intent_id": {
+            "description": "The intent being rejected.",
+            "examples": [
+              "VI1"
+            ],
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "kind": {
+            "const": "reject",
+            "default": "reject",
+            "title": "Kind",
+            "type": "string"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Why it was rejected, if given.",
+            "examples": [
+              null
+            ],
+            "title": "Reason"
+          }
+        },
+        "required": [
+          "intent_id"
+        ],
+        "title": "RejectAction",
+        "type": "object"
+      },
+      "StageImage": {
+        "properties": {
+          "caption": {
+            "description": "Caption shown with the image.",
+            "examples": [
+              "Session graph, round 2"
+            ],
+            "title": "Caption",
+            "type": "string"
+          },
+          "id": {
+            "description": "Identity of the requested image.",
+            "examples": [
+              "IMG1"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "set_at": {
+            "description": "Wall-clock label of when the image was set.",
+            "examples": [
+              "2026-11-23T09:30:00+01:00"
+            ],
+            "title": "Set At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "caption",
+          "set_at"
+        ],
+        "title": "StageImage",
+        "type": "object"
+      },
+      "StageMain": {
+        "description": "The surface currently shown, `StageState.content()`'s `main` field.",
+        "properties": {
+          "collapsed_lines": {
+            "default": 0,
+            "description": "Number of markdown lines folded away by the collapse view.",
+            "examples": [
+              0
+            ],
+            "title": "Collapsed Lines",
+            "type": "integer"
+          },
+          "collapsed_markdown": {
+            "default": "",
+            "description": "The folded-away markdown, shown on request.",
+            "examples": [
+              ""
+            ],
+            "title": "Collapsed Markdown",
+            "type": "string"
+          },
+          "id": {
+            "description": "Identity of the current surface.",
+            "examples": [
+              "M7"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "markdown": {
+            "description": "The markdown body shown as the main surface.",
+            "examples": [
+              "## Opening round\n\nEveryone names one expectation."
+            ],
+            "title": "Markdown",
+            "type": "string"
+          },
+          "set_at": {
+            "description": "Wall-clock label of when this surface was set; the reader computes the age itself, it is never baked into the payload.",
+            "examples": [
+              "2026-11-23T09:00:00+01:00"
+            ],
+            "title": "Set At",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "markdown",
+          "set_at"
+        ],
+        "title": "StageMain",
+        "type": "object"
+      },
+      "StageStateSnapshot": {
+        "description": "The content fields of `buehne.json`; the consumer adds `status`.",
+        "properties": {
+          "age_visible_after_s": {
+            "description": "Seconds before an entry's age becomes visible.",
+            "examples": [
+              20
+            ],
+            "title": "Age Visible After S",
+            "type": "integer"
+          },
+          "agenda": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AgendaSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "`None` for a session without `agenda.md`."
+          },
+          "call_answer": {
+            "default": "",
+            "description": "The last call-and-answer line, if any.",
+            "examples": [
+              ""
+            ],
+            "title": "Call Answer",
+            "type": "string"
+          },
+          "decisions": {
+            "items": {
+              "$ref": "#/components/schemas/Decision"
+            },
+            "title": "Decisions",
+            "type": "array"
+          },
+          "follow_up_after_s": {
+            "description": "Seconds before an open notice/question needs a follow-up mark.",
+            "examples": [
+              300
+            ],
+            "title": "Follow Up After S",
+            "type": "integer"
+          },
+          "headline": {
+            "default": "",
+            "description": "The session headline.",
+            "examples": [
+              "Quarterly planning"
+            ],
+            "title": "Headline",
+            "type": "string"
+          },
+          "history": {
+            "items": {
+              "$ref": "#/components/schemas/HistoryEntry"
+            },
+            "title": "History",
+            "type": "array"
+          },
+          "image": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/StageImage"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "An image on request, by id; `None` otherwise."
+          },
+          "links": {
+            "description": "Links shown alongside the stage.",
+            "examples": [
+              [
+                "https://example.invalid/agenda"
+              ]
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "Links",
+            "type": "array"
+          },
+          "main": {
+            "$ref": "#/components/schemas/StageMain"
+          },
+          "mirror": {
+            "description": "The live transcript mirror text.",
+            "examples": [
+              "...and then we agreed on the timeline."
+            ],
+            "title": "Mirror",
+            "type": "string"
+          },
+          "notices": {
+            "items": {
+              "$ref": "#/components/schemas/Notice"
+            },
+            "title": "Notices",
+            "type": "array"
+          },
+          "parked": {
+            "description": "Count of notices/questions parked for lack of a free slot.",
+            "examples": [
+              1
+            ],
+            "title": "Parked",
+            "type": "integer"
+          },
+          "parked_entries": {
+            "items": {
+              "$ref": "#/components/schemas/ParkedEntry"
+            },
+            "title": "Parked Entries",
+            "type": "array"
+          },
+          "pending": {
+            "items": {
+              "$ref": "#/components/schemas/PendingAnnouncement"
+            },
+            "title": "Pending",
+            "type": "array"
+          },
+          "question": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/Question"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The single open-question slot; `None` when empty."
+          },
+          "updated": {
+            "description": "Wall-clock label of the last update.",
+            "examples": [
+              "2026-11-23T09:30:05+01:00"
+            ],
+            "title": "Updated",
+            "type": "string"
+          },
+          "version": {
+            "description": "Schema version of the stage file.",
+            "examples": [
+              7
+            ],
+            "title": "Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "version",
+          "updated",
+          "mirror",
+          "main",
+          "parked",
+          "age_visible_after_s",
+          "follow_up_after_s"
+        ],
+        "title": "StageStateSnapshot",
+        "type": "object"
+      },
+      "TapAction": {
+        "properties": {
+          "intent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The intent tapped, if any; a navigation tap has none.",
+            "examples": [
+              "VI4"
+            ],
+            "title": "Intent Id"
+          },
+          "kind": {
+            "const": "tap",
+            "default": "tap",
+            "title": "Kind",
+            "type": "string"
+          },
+          "target": {
+            "description": "What was tapped.",
+            "examples": [
+              "status-badge"
+            ],
+            "title": "Target",
+            "type": "string"
+          }
+        },
+        "required": [
+          "target"
+        ],
+        "title": "TapAction",
+        "type": "object"
+      },
+      "ValidationError": {
+        "properties": {
+          "ctx": {
+            "title": "Context",
+            "type": "object"
+          },
+          "input": {
+            "title": "Input"
+          },
+          "loc": {
+            "items": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "integer"
+                }
+              ]
+            },
+            "title": "Location",
+            "type": "array"
+          },
+          "msg": {
+            "title": "Message",
+            "type": "string"
+          },
+          "type": {
+            "title": "Error Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "loc",
+          "msg",
+          "type"
+        ],
+        "title": "ValidationError",
+        "type": "object"
+      },
+      "VoiceAction": {
+        "properties": {
+          "confidence": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Recognition confidence, 0..1, if known.",
+            "examples": [
+              0.92
+            ],
+            "title": "Confidence"
+          },
+          "intent_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The intent the spoken command responds to, if any.",
+            "examples": [
+              "VI2"
+            ],
+            "title": "Intent Id"
+          },
+          "kind": {
+            "const": "voice",
+            "default": "voice",
+            "title": "Kind",
+            "type": "string"
+          },
+          "text": {
+            "description": "What was recognised.",
+            "examples": [
+              "timeline"
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "VoiceAction",
+        "type": "object"
+      }
+    }
+  },
+  "info": {
+    "description": "The machine-readable contract between a surface and the core (ADR 0019): stage-state snapshot, the view-intent push channel and user actions.",
+    "title": "CoThinker surface contract",
+    "version": "0.1.0"
+  },
+  "openapi": "3.1.0",
+  "paths": {
+    "/actions": {
+      "post": {
+        "description": "A user action sent back by a surface (ADR 0006); accepted, not acted on.",
+        "operationId": "post_action_actions_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "discriminator": {
+                  "mapping": {
+                    "accept": "#/components/schemas/AcceptAction",
+                    "choose": "#/components/schemas/ChooseAction",
+                    "edit": "#/components/schemas/EditAction",
+                    "reject": "#/components/schemas/RejectAction",
+                    "tap": "#/components/schemas/TapAction",
+                    "voice": "#/components/schemas/VoiceAction"
+                  },
+                  "propertyName": "kind"
+                },
+                "oneOf": [
+                  {
+                    "$ref": "#/components/schemas/ChooseAction"
+                  },
+                  {
+                    "$ref": "#/components/schemas/AcceptAction"
+                  },
+                  {
+                    "$ref": "#/components/schemas/RejectAction"
+                  },
+                  {
+                    "$ref": "#/components/schemas/EditAction"
+                  },
+                  {
+                    "$ref": "#/components/schemas/TapAction"
+                  },
+                  {
+                    "$ref": "#/components/schemas/VoiceAction"
+                  }
+                ],
+                "title": "Action"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "additionalProperties": true,
+                  "title": "Response Post Action Actions Post",
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Post Action",
+        "tags": [
+          "actions"
+        ]
+      }
+    },
+    "/events": {
+      "get": {
+        "description": "Server-sent events: one `view-intent` event per pushed intent.",
+        "operationId": "get_events_events_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Events",
+        "tags": [
+          "events"
+        ]
+      }
+    },
+    "/snapshot": {
+      "get": {
+        "description": "The current stage-state snapshot.",
+        "operationId": "get_snapshot_snapshot_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/StageStateSnapshot"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Get Snapshot",
+        "tags": [
+          "snapshot"
+        ]
+      }
+    }
+  }
+}

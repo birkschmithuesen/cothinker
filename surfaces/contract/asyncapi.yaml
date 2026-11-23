@@ -1,0 +1,402 @@
+asyncapi: 3.0.0
+info:
+  title: CoThinker surface contract -- push channel
+  version: 0.1.0
+  description: View intents pushed by the surface contract's fixture-mode server over
+    server-sent events (ADR 0019, ADR 0006).
+channels:
+  viewIntents:
+    address: /events
+    messages:
+      viewIntent:
+        $ref: '#/components/messages/viewIntent'
+operations:
+  sendViewIntent:
+    action: send
+    channel:
+      $ref: '#/channels/viewIntents'
+    summary: The server sends one view intent per SSE event.
+    messages:
+    - $ref: '#/channels/viewIntents/messages/viewIntent'
+components:
+  messages:
+    viewIntent:
+      name: viewIntent
+      title: View intent
+      payload:
+        $ref: '#/components/schemas/ViewIntent'
+  schemas:
+    AgendaItemSummary:
+      description: 'One item of the full agenda list -- not wired yet, see issue #129.'
+      properties:
+        title:
+          description: The agenda item's title.
+          examples:
+          - 'Retro: what worked'
+          title: Title
+          type: string
+        budget_s:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          description: Planned duration in seconds.
+          examples:
+          - 600.0
+          title: Budget S
+        status:
+          description: Where this item stands relative to the current one.
+          enum:
+          - done
+          - current
+          - next
+          - open
+          examples:
+          - current
+          title: Status
+          type: string
+      required:
+      - title
+      - status
+      title: AgendaItemSummary
+      type: object
+    ArtefactIntent:
+      properties:
+        kind:
+          const: artefact
+          default: artefact
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - VI5
+          title: Id
+          type: string
+        label:
+          description: Label for the artefact.
+          examples:
+          - Session graph, round 2
+          title: Label
+          type: string
+        url:
+          description: Where the artefact can be fetched.
+          examples:
+          - https://example.invalid/artefacts/graph-2.png
+          title: Url
+          type: string
+        media_type:
+          description: MIME type of the artefact.
+          examples:
+          - image/png
+          title: Media Type
+          type: string
+      required:
+      - id
+      - label
+      - url
+      - media_type
+      title: ArtefactIntent
+      type: object
+    ChoiceIntent:
+      properties:
+        kind:
+          const: choice
+          default: choice
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - VI2
+          title: Id
+          type: string
+        to_person:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Who the choice is directed at; `None` is everyone.
+          examples:
+          - Jonas
+          title: To Person
+        question:
+          description: The question the choices answer.
+          examples:
+          - Which topic next?
+          title: Question
+          type: string
+        options:
+          description: The offered choices, in display order.
+          examples:
+          - - Budget
+            - Timeline
+            - Risks
+          items:
+            type: string
+          title: Options
+          type: array
+        allow_multiple:
+          default: false
+          description: Whether more than one option may be chosen.
+          examples:
+          - false
+          title: Allow Multiple
+          type: boolean
+      required:
+      - id
+      - question
+      - options
+      title: ChoiceIntent
+      type: object
+    PromptIntent:
+      properties:
+        kind:
+          const: prompt
+          default: prompt
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - VI1
+          title: Id
+          type: string
+        to_person:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Who the prompt is directed at; `None` is everyone.
+          examples:
+          - Mira
+          title: To Person
+        text:
+          description: The prompt text.
+          examples:
+          - What is one expectation for today?
+          title: Text
+          type: string
+      required:
+      - id
+      - text
+      title: PromptIntent
+      type: object
+    StatusIntent:
+      properties:
+        kind:
+          const: status
+          default: status
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - VI4
+          title: Id
+          type: string
+        text:
+          description: The status line text.
+          examples:
+          - Recording
+          title: Text
+          type: string
+        severity:
+          default: info
+          enum:
+          - info
+          - warning
+          - error
+          examples:
+          - info
+          title: Severity
+          type: string
+      required:
+      - id
+      - text
+      title: StatusIntent
+      type: object
+    Task:
+      properties:
+        text:
+          description: The task text.
+          examples:
+          - Send the updated timeline to the vendor.
+          title: Text
+          type: string
+        person:
+          default: ''
+          description: Who owns it; empty when the meeting did not name anyone.
+          examples:
+          - Jonas
+          title: Person
+          type: string
+        due:
+          default: ''
+          description: Due date, as named by the meeting; empty when not named.
+          examples:
+          - '2026-12-01'
+          title: Due
+          type: string
+      required:
+      - text
+      title: Task
+      type: object
+    TasksIntent:
+      description: 'Tasks named by the meeting, from `decisions-tasks-questions`.
+        Not wired yet, see issue #129.'
+      properties:
+        kind:
+          const: tasks
+          default: tasks
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - VI7
+          title: Id
+          type: string
+        tasks:
+          description: Tasks named by the meeting so far.
+          examples:
+          - []
+          items:
+            $ref: '#/components/schemas/Task'
+          title: Tasks
+          type: array
+      required:
+      - id
+      - tasks
+      title: TasksIntent
+      type: object
+      x-issue: https://github.com/birkschmithuesen/cothinker/issues/129
+      x-status: planned
+    TimerIntent:
+      properties:
+        kind:
+          const: timer
+          default: timer
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - VI3
+          title: Id
+          type: string
+        label:
+          description: Label shown next to the timer.
+          examples:
+          - 'Retro: what worked'
+          title: Label
+          type: string
+        remaining_s:
+          description: Seconds remaining on this timer.
+          examples:
+          - 480.0
+          title: Remaining S
+          type: number
+        budget_s:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          description: The timer's total budget in seconds.
+          examples:
+          - 600.0
+          title: Budget S
+        items:
+          anyOf:
+          - items:
+              $ref: '#/components/schemas/AgendaItemSummary'
+            type: array
+          - type: 'null'
+          default: null
+          description: 'The whole agenda as a list of items, not just the current
+            one; the core does not wire this up yet (issue #129).'
+          examples:
+          - null
+          title: Items
+          x-issue: https://github.com/birkschmithuesen/cothinker/issues/129
+          x-status: planned
+      required:
+      - id
+      - label
+      - remaining_s
+      title: TimerIntent
+      type: object
+    TranscriptLine:
+      properties:
+        speaker:
+          default: ''
+          description: Who said it; empty when attribution is unsure.
+          examples:
+          - Tamar
+          title: Speaker
+          type: string
+        started_at:
+          description: Wall-clock label of when the line started.
+          examples:
+          - '2026-11-23T09:14:02+01:00'
+          title: Started At
+          type: string
+        text:
+          description: The transcribed text.
+          examples:
+          - Let's park the vendor question for now.
+          title: Text
+          type: string
+      required:
+      - started_at
+      - text
+      title: TranscriptLine
+      type: object
+    TranscriptRecentIntent:
+      description: 'The last three contributions. Not wired yet, see issue #129.'
+      properties:
+        kind:
+          const: transcript:recent
+          default: transcript:recent
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - VI6
+          title: Id
+          type: string
+        lines:
+          description: The last three contributions, oldest first.
+          examples:
+          - []
+          items:
+            $ref: '#/components/schemas/TranscriptLine'
+          title: Lines
+          type: array
+      required:
+      - id
+      - lines
+      title: TranscriptRecentIntent
+      type: object
+      x-issue: https://github.com/birkschmithuesen/cothinker/issues/129
+      x-status: planned
+    ViewIntent:
+      discriminator:
+        mapping:
+          artefact: '#/components/schemas/ArtefactIntent'
+          choice: '#/components/schemas/ChoiceIntent'
+          prompt: '#/components/schemas/PromptIntent'
+          status: '#/components/schemas/StatusIntent'
+          tasks: '#/components/schemas/TasksIntent'
+          timer: '#/components/schemas/TimerIntent'
+          transcript:recent: '#/components/schemas/TranscriptRecentIntent'
+        propertyName: kind
+      oneOf:
+      - $ref: '#/components/schemas/PromptIntent'
+      - $ref: '#/components/schemas/ChoiceIntent'
+      - $ref: '#/components/schemas/TimerIntent'
+      - $ref: '#/components/schemas/StatusIntent'
+      - $ref: '#/components/schemas/ArtefactIntent'
+      - $ref: '#/components/schemas/TranscriptRecentIntent'
+      - $ref: '#/components/schemas/TasksIntent'
