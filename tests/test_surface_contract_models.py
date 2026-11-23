@@ -12,6 +12,7 @@ from pydantic import TypeAdapter
 
 from surfaces.contract.models import (
     ChoiceIntent,
+    GraphIntent,
     MessageAction,
     QueueIntent,
     QueueSeat,
@@ -112,3 +113,11 @@ def test_view_intent_union_accepts_queue_and_share_kinds():
         "kind": "share", "id": "share:room", "shares": [], "total_words": 0,
     })
     assert isinstance(share_intent, ShareIntent)
+
+
+def test_view_intent_union_accepts_graph_kind():
+    graph_intent = TypeAdapter(ViewIntent).validate_python({
+        "kind": "graph", "id": "graph:session",
+        "seed": "file:protokoll.md", "nodes": [], "edges": [], "hidden": 0,
+    })
+    assert isinstance(graph_intent, GraphIntent)

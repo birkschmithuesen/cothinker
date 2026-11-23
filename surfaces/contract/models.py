@@ -368,6 +368,15 @@ class ShareIntent(BaseModel):
     total_words: int = Field(description="Total words counted so far across everyone.", examples=[400])
 
 
+class GraphIntent(SessionGraph):
+    """`graph:session`: the graph block's view intent (kind `graph`,
+    `blocks/graph/__init__.py::GraphBlock._build()`); the same shape as
+    `StageStateSnapshot.session_graph`, plus the envelope's `kind`/`id`."""
+
+    kind: Literal["graph"] = "graph"
+    id: str = Field(description="Identity a user action refers back to.", examples=["graph:session"])
+
+
 class TranscriptLine(BaseModel):
     speaker: str = Field(default="", description="Who said it; empty when attribution is unsure.", examples=["Tamar"])
     started_at: str = Field(description="Wall-clock label of when the line started.", examples=["2026-11-23T09:14:02+01:00"])
@@ -409,6 +418,7 @@ ViewIntent = Annotated[
         ArtefactIntent,
         QueueIntent,
         ShareIntent,
+        GraphIntent,
         TranscriptRecentIntent,
         TasksIntent,
     ],
