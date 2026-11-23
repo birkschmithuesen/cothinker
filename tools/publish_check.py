@@ -264,6 +264,15 @@ def _expand_private_list(patterns):
 
 
 def main(argv=None):
+    # A caller (e.g. this repo's pre-push hook) may have GIT_DIR/GIT_WORK_TREE/
+    # GIT_INDEX_FILE/etc set in the environment (git sets these for hooks). Every
+    # git subprocess this tool runs takes an explicit --repo/-C path; a leaked
+    # GIT_DIR silently overrides that and redirects every git command here at
+    # the real repo the hook is running in instead of the throwaway scoped clone
+    # it was given, turning a single-commit scan into a full-history scan.
+    for _leak in ("GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR",
+                  "GIT_OBJECT_DIRECTORY", "GIT_PREFIX"):
+        os.environ.pop(_leak, None)
     a = argparse.ArgumentParser()
     a.add_argument("--repo", default=".")
     a.add_argument("--private-list", action="append", default=[])

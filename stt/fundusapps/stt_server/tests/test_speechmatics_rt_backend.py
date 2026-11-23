@@ -51,6 +51,41 @@ def test_fragments_become_one_final_per_utterance():
     assert d["backend"] == "speechmatics-rt"
 
 
+def test_speaker_resolver_overrides_the_diarization_label(monkeypatch):
+    # Issue #128: a caller that knows which participant's track actually
+    # carried the energy (fundusapps.bbb_tap.speaker_attribution) can
+    # override the raw Speechmatics label with a real display name --
+    # recognizer_id (the diarization label itself) is untouched.
+    bus = EventBus()
+    sub = bus.subscribe()
+    seen = []
+
+    def resolver(t_start, t_end):
+        seen.append((t_start, t_end))
+        return "Anna"
+
+    col = _UtteranceCollector("0", bus, speaker_resolver=resolver)
+    col.on_final("eins zwei", "S1", 0.2, 0.9)
+    col.on_eou()
+    finals = [e for e in _drain(sub) if e.type == "final"]
+    assert len(finals) == 1
+    f = finals[0]
+    assert f.recognizer_id == "S1"
+    d = f.to_dict()
+    assert d["speaker"] == "Anna"
+    assert seen == [(0.2, 0.9)]
+
+
+def test_speaker_resolver_returning_none_keeps_the_diarization_label():
+    bus = EventBus()
+    sub = bus.subscribe()
+    col = _UtteranceCollector("0", bus, speaker_resolver=lambda t_start, t_end: None)
+    col.on_final("eins", "S1", 0.0, 0.4)
+    col.on_eou()
+    finals = [e for e in _drain(sub) if e.type == "final"]
+    assert finals[0].to_dict()["speaker"] == "S1"
+
+
 def test_speaker_change_splits_without_eou():
     bus = EventBus()
     sub = bus.subscribe()
