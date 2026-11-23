@@ -209,6 +209,49 @@ def test_from_args_reads_key_from_env_only(monkeypatch):
         assert "SM_TEST_KEY" in str(e)
 
 
+def _stub_import_stream(monkeypatch):
+    # shared.speechmatics (the real stream) pulls in a workshop/ package
+    # that is not part of this sandbox; from_args's own argument handling
+    # is what these two tests are after, not the real Speechmatics client.
+    import fundusapps.stt_server.backends.speechmatics_rt_backend as mod
+    monkeypatch.setattr(mod, "_import_stream",
+                        lambda: ("wss://fake.invalid", lambda *a, **kw: None))
+
+
+def test_from_args_leaves_speaker_resolver_none_without_per_track(monkeypatch):
+    # Every input path except the Jitsi/BBB --per-track tap (mic, feed_wav,
+    # other backends) never sets args.per_track_sidecar -- this must stay
+    # the untouched S1/S2 diarization-label behaviour for all of them.
+    _stub_import_stream(monkeypatch)
+    monkeypatch.setenv("SM_TEST_KEY", "k")
+    args = SimpleNamespace(api_key_env="SM_TEST_KEY", language="de", max_delay=0.7,
+                           eou_silence=0.5, max_utt=20.0, url="",
+                           max_speakers=7, prefer_current_speaker=True)
+    be = SpeechmaticsRtBackend.from_args(EventBus(), args)
+    try:
+        assert be._speaker_resolver is None
+    finally:
+        be.close()
+
+
+def test_from_args_builds_speaker_resolver_for_the_per_track_tap(monkeypatch, tmp_path):
+    from fundusapps.stt_server.track_speaker_resolver import TrackSpeakerResolver
+
+    _stub_import_stream(monkeypatch)
+    monkeypatch.setenv("SM_TEST_KEY", "k")
+    sidecar = tmp_path / "bbb-1-tracks.json"
+    sidecar.write_text('{"mixed": "bbb-1.wav", "sample_rate": 16000, "tracks": {}}')
+    args = SimpleNamespace(api_key_env="SM_TEST_KEY", language="de", max_delay=0.7,
+                           eou_silence=0.5, max_utt=20.0, url="",
+                           max_speakers=7, prefer_current_speaker=True,
+                           per_track_sidecar=str(sidecar))
+    be = SpeechmaticsRtBackend.from_args(EventBus(), args)
+    try:
+        assert isinstance(be._speaker_resolver, TrackSpeakerResolver)
+    finally:
+        be.close()
+
+
 def test_meeting_defaults_are_the_measured_ones():
     """26.10. meeting audio (docs/stt.md, "Speechmatics defaults"): max_delay
     2.0, max_speakers 10, prefer_current_speaker off."""
