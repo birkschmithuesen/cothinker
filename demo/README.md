@@ -64,14 +64,15 @@ nobody would get a microphone track); the page sets it in `configOverwrite`.
 
 ```
 python3 make_tts.py --out-dir OUT           # alex.wav, sam.wav, script.json
-python3 participant.py --url-file URLFILE --name Alex --wav OUT/alex.wav --seconds 300
+python3 participant.py --url-file URLFILE --name Alex --wav OUT/alex.wav --seconds 300 --cdp-port 9301
+python3 participant.py --url-file URLFILE --name Sam  --wav OUT/sam.wav  --seconds 300 --cdp-port 9302
 python3 score.py --transcript <project>/sessions/<date>-<project>/protokoll.md --script OUT/script.json
 ```
 
 `score.py` reads the lines `- **HH:MM** *Speaker:* text` of the
 `## Rohtranskript` section and exits 0 when at least 90 % of the lines that
 contain a script keyword carry the right speaker. Start both participants
-at the same moment; the WAVs begin with a silent lead-in for join jitter.
+at the same moment, each with its own `--cdp-port`; the WAVs begin with a silent lead-in for join jitter.
 
 ## Rollback
 

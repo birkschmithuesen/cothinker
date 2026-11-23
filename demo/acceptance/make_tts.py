@@ -9,7 +9,7 @@ between two utterances. Every sentence carries a unique keyword, which is
 what score.py looks for in the transcript.
 
 usage: make_tts.py --out-dir DIR [--espeak espeak-ng] [--ffmpeg ffmpeg]
-                   [--per-speaker 16] [--lead-in 15]
+                   [--per-speaker 24] [--lead-in 15]
 """
 from __future__ import annotations
 
@@ -34,7 +34,10 @@ KEYWORDS = [
     "Schneemann", "Fernseher", "Marmelade", "Computertastatur", "Brunnen",
     "Kirschbaum", "Straßenbahn", "Wandkalender", "Teekanne", "Segelboot",
     "Gartenzaun", "Kaffeemühle", "Taschenlampe", "Fußballplatz", "Glockenspiel",
-    "Holzbrücke", "Pfannkuchen",
+    "Holzbrücke", "Pfannkuchen", "Heißluftballon", "Mühlenrad", "Zahnbürste",
+    "Eisenbahn", "Waschmaschine", "Löwenzahn", "Stundenplan", "Fensterbank",
+    "Dachterrasse", "Notizbuch", "Rucksack", "Blumenwiese", "Schreibtisch",
+    "Feuerwehr", "Baustelle", "Wetterbericht",
 ]
 TEMPLATES = [
     "Wir klären den {kw} bis Freitag.",
@@ -45,6 +48,9 @@ TEMPLATES = [
 
 
 def sentences(n_total: int) -> list[tuple[str, str]]:
+    if n_total > len(KEYWORDS):
+        raise ValueError("at most %d sentences available (%d per speaker), "
+                         "got %d" % (len(KEYWORDS), len(KEYWORDS) // 2, n_total))
     out = []
     for i in range(n_total):
         kw = KEYWORDS[i]
@@ -85,14 +91,21 @@ def main(argv: list[str]) -> int:
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--espeak", default="espeak-ng")
     ap.add_argument("--ffmpeg", default="ffmpeg")
-    ap.add_argument("--per-speaker", type=int, default=16)
+    ap.add_argument("--per-speaker", type=int, default=24,
+                    help="sentences per speaker, max %d (24 gives ~60 s of "
+                         "speech at ~2.5 s per sentence)" % (len(KEYWORDS) // 2))
+    ap.add_argument("--min-speech-s", type=float, default=55.0,
+                    help="fail if a speaker has less speech than this")
     ap.add_argument("--lead-in", type=float, default=15.0,
                     help="silence before the first slot (absorbs join jitter)")
     a = ap.parse_args(argv)
 
     out = Path(a.out_dir)
     out.mkdir(parents=True, exist_ok=True)
-    sents = sentences(2 * a.per_speaker)
+    try:
+        sents = sentences(2 * a.per_speaker)
+    except ValueError as exc:
+        ap.error(str(exc))
     total_s = a.lead_in + 2 * a.per_speaker * SLOT_S
     items: dict[str, list[tuple[float, bytes]]] = {"Alex": [], "Sam": []}
     events = []
@@ -110,6 +123,12 @@ def main(argv: list[str]) -> int:
             speech_s[who] += dur
             events.append({"speaker": who, "start_s": start, "text": text,
                            "keywords": [kw]})
+    for who, secs in speech_s.items():
+        if secs < a.min_speech_s:
+            sys.stderr.write("%s has only %.1f s of speech, need >= %.1f s "
+                             "(raise --per-speaker)\n"
+                             % (who, secs, a.min_speech_s))
+            return 1
     for who in items:
         write_wav(out / (who.lower() + ".wav"), place(total_s, items[who]))
     (out / "script.json").write_text(json.dumps(

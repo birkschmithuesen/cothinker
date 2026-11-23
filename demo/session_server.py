@@ -107,8 +107,8 @@ def make_handler(env: dict):
         server_version = "demo-session"
 
         def log_message(self, fmt, *args):  # never log the query string
-            path = urllib.parse.urlsplit(self.path).path
-            sys.stderr.write("%s %s\n" % (self.command, path))
+            path = urllib.parse.urlsplit(getattr(self, "path", "-")).path
+            sys.stderr.write("%s %s\n" % (getattr(self, "command", "-"), path))
 
         def _send(self, code: int, body: bytes = b"",
                   ctype: str = "application/json") -> None:
