@@ -1,0 +1,28 @@
+[Unit]
+Description=CoThinker demo: STT server (Speechmatics RT, per-track attribution)
+
+[Service]
+Type=simple
+# run.env is written by demo.sh start: DEMO_RUN_TS and DEMO_SIDECAR are
+# computed ONCE so that this unit and the tap unit agree on the sidecar path.
+EnvironmentFile=%h/.config/cothinker-demo/secrets.env
+EnvironmentFile=-%h/.config/cothinker-demo/demo.env
+EnvironmentFile=%t/cothinker-demo/run.env
+Environment=STT_HOST=127.0.0.1
+Environment=STT_PORT=5051
+# The double S is the real variable name.
+Environment=SST_AUDIO_DEVICES=tcp:127.0.0.1:5053
+Environment=STT_AUDIO_DEVICES_SR=16000
+UnsetEnvironment=PYTHONPATH PYTHONHOME
+WorkingDirectory=@REPO@/stt
+ExecStartPre=/bin/mkdir -p @DEMO_HOME@/audio
+ExecStart=@REPO@/stt/.venv/bin/python -m fundusapps.stt_server --host 127.0.0.1 --port 5051 speechmatics-rt --language de --max-delay 2.0 --max-speakers 10 --per-track-sidecar ${DEMO_SIDECAR}
+StandardOutput=append:@DEMO_HOME@/logs/stt.log
+StandardError=inherit
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

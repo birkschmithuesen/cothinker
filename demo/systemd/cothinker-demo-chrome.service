@@ -1,0 +1,18 @@
+[Unit]
+Description=CoThinker demo: headless Chrome for the tap (CDP on 127.0.0.1:9223)
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/cothinker-demo/demo.env
+# CHROME_EXTRA_ARGS (demo.env, optional), e.g. --ignore-certificate-errors
+# while the certificate is self-signed.
+ExecStart=/usr/bin/google-chrome --headless=new --remote-debugging-port=9223 --user-data-dir=@DEMO_HOME@/chrome-tap --use-fake-ui-for-media-stream --autoplay-policy=no-user-gesture-required --no-first-run --no-default-browser-check --mute-audio --no-sandbox $CHROME_EXTRA_ARGS about:blank
+StandardOutput=append:@DEMO_HOME@/logs/chrome.log
+StandardError=inherit
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

@@ -2884,6 +2884,14 @@ def install_sigterm_handler() -> None:
     signal.signal(signal.SIGTERM, _sigterm_to_keyboard_interrupt)
 
 
+def final_speaker(ev: dict) -> str | None:
+    """Speaker name for a `final` event: the attributed `speaker` (e.g. the
+    per-track display name) wins; the raw `recognizer_id` is the fallback.
+    "default"/"mic_gate" are channel names, not people -> None."""
+    spk = ev.get("speaker") or ev.get("recognizer_id")
+    return str(spk) if spk and spk not in ("default", "mic_gate") else None
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--stt", required=True, help="base URL of the STT server")
@@ -4071,8 +4079,7 @@ def main() -> int:
                     text = ("" if text is None else str(text)).strip()
                     if not text:
                         continue
-                    spk = ev.get("recognizer_id")
-                    spk = str(spk) if spk and spk not in ("default", "mic_gate") else None
+                    spk = final_speaker(ev)
                     # Separate from `spk` on purpose: `spk` folds
                     # "default"/"mic_gate" to None for speaker
                     # attribution in the protocol -- timing.jsonl wants
