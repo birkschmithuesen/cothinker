@@ -51,3 +51,8 @@ def test_stt_and_tap_share_run_env_and_consumer_has_lane_commands():
     cons = (d / "cothinker-demo-consumer.service").read_text()
     assert "--lane-call-worker-command" in cons
     assert "--lane-coach-worker-command" in cons
+
+
+def test_start_keeps_run_env_while_stt_runs():
+    text = (ROOT / "demo" / "demo.sh").read_text()
+    assert 'unit_active stt && [ -s "$RUN_DIR/run.env" ]' in text

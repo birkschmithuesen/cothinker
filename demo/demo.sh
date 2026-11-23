@@ -85,13 +85,19 @@ start_all() {
   mkdir -p "$RUN_DIR" "$LOG_DIR" || return 1
   chmod 700 "$RUN_DIR"
   # One timestamp for STT and tap: the sidecar path embeds it.
+  # If STT is already running, keep its run.env: a later restart of STT or tap
+  # must read the same timestamp as the process that is still alive.
   local run_ts d t
-  run_ts=$(date +%Y%m%d-%H%M%S)
-  d="${run_ts:0:4}-${run_ts:4:2}-${run_ts:6:2}"
-  t="${run_ts:9:6}"
-  mkdir -p "$DEMO_HOME/audio/$d" || return 1
-  printf 'DEMO_RUN_TS=%s\nDEMO_SIDECAR=%s\n' "$run_ts" \
-    "$DEMO_HOME/audio/$d/bbb-$t-tracks.json" >"$RUN_DIR/run.env" || return 1
+  if unit_active stt && [ -s "$RUN_DIR/run.env" ]; then
+    echo "stt already running: keeping existing run.env"
+  else
+    run_ts=$(date +%Y%m%d-%H%M%S)
+    d="${run_ts:0:4}-${run_ts:4:2}-${run_ts:6:2}"
+    t="${run_ts:9:6}"
+    mkdir -p "$DEMO_HOME/audio/$d" || return 1
+    printf 'DEMO_RUN_TS=%s\nDEMO_SIDECAR=%s\n' "$run_ts" \
+      "$DEMO_HOME/audio/$d/bbb-$t-tracks.json" >"$RUN_DIR/run.env" || return 1
+  fi
 
   # The bot's join URL is minted now, never kept long-lived.
   (
