@@ -252,6 +252,7 @@ stt/fundusapps/stt_server/events.py                                             
 stt/fundusapps/stt_server/interview_signal.py                                    stt:audio
 stt/fundusapps/stt_server/pcm_source.py                                          stt:audio
 stt/fundusapps/stt_server/settings.py                                            stt:server
+stt/fundusapps/stt_server/track_speaker_resolver.py                             stt:audio
 stt/fundusapps/stt_server/sr.py                                                  stt:audio
 stt/fundusapps/stt_server/test_vosk.py                                           retire
 stt/fundusapps/stt_server/thought_end.py                                         stt:thought-end
