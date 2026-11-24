@@ -1,0 +1,26 @@
+/*
+ * STUB of the CoThinker design tokens (issue #172, ADR 0023) -- fixed names and
+ * values from the token card, 2026-11-24. Replaced by a symlink to
+ * ../design/tokens.css once #172 is on main (plan task T). No @font-face on
+ * purpose: font files come from a deployment, the fallback stack applies here.
+ */
+:root {
+  --ct-surface: #f3f1ea; --ct-sheet: #fbfaf6; --ct-ink: #15171a; --ct-muted: #5b6066;
+  --ct-rule: #c9c6bb; --ct-grid: #e4e1d7; --ct-signal: #d6401c; --ct-accent: #4A3ABF;
+  --ct-accent-tint: #ECE8FB; --ct-ok: #2E5A4C; --ct-warn: #8a5a00; --ct-danger: #b3261e;
+  --ct-font-sans: "Fira Sans", system-ui, sans-serif;
+  --ct-font-mono: "Fira Mono", ui-monospace, monospace;
+  --ct-size-xs: 13px; --ct-size-sm: 15px; --ct-size-md: 17px; --ct-size-lg: 22px;
+  --ct-size-xl: 28px; --ct-size-xxl: 40px;
+  --ct-display-brand: 56px; --ct-display-value: 88px; --ct-display-main: 64px;
+  --ct-display-agenda: 44px; --ct-display-side: 40px; --ct-display-note: 28px;
+  --ct-space-4: 4px; --ct-space-8: 8px; --ct-space-12: 12px; --ct-space-16: 16px;
+  --ct-space-24: 24px; --ct-space-32: 32px; --ct-space-48: 48px; --ct-space-64: 64px;
+  --ct-radius-4: 4px; --ct-radius-8: 8px; --ct-radius-16: 16px; --ct-radius-999: 999px;
+  --ct-motion-150: 150ms; --ct-motion-300: 300ms;
+}
+[data-theme="display"] {
+  --ct-surface: #12101A; --ct-sheet: #1c1a26; --ct-ink: #F1EEFA; --ct-muted: #b9b3cc;
+  --ct-rule: #3a3550; --ct-accent: #A99BF5; --ct-signal: #ff7a52; --ct-ok: #7fd1b0;
+  --ct-warn: #f2c14e; --ct-danger: #ff8a80;
+}

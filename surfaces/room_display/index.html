@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<!--
+  CoThinker room display (issue #173; ADR 0012 external display, ADR 0019
+  surface contract): one 16:9 page, readable from several metres. Uses only
+  GET /snapshot and GET /events (SSE) from the `?api=` base.
+-->
+<html lang="de" data-theme="display" data-state="offline" data-mode="rest">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoThinker</title>
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="top">
+    <span class="brand"></span>
+    <h1 id="headline"></h1>
+    <span id="state" class="state" role="status"></span>
+    <span id="status-line" class="status-line"></span>
+  </header>
+  <aside class="left">
+    <section id="left-agenda"><h2></h2><div class="content"></div><p class="empty" data-empty="left-agenda"></p></section>
+    <section id="left-speaker"><h2></h2><div class="content"></div><p class="empty" data-empty="left-speaker"></p></section>
+    <section id="left-queue"><h2></h2><ol class="content"></ol><p class="empty" data-empty="left-queue"></p></section>
+  </aside>
+  <main class="right">
+    <section data-view="live"><h2></h2><ol class="content"></ol><p class="empty" data-empty="live"></p></section>
+    <section data-view="topics" hidden><h2></h2><ol class="content"></ol><p class="empty" data-empty="topics"></p></section>
+    <section data-view="results" hidden>
+      <h2></h2>
+      <div data-results="decisions"><h3></h3><ul class="content"></ul><p class="empty" data-empty="results-decisions"></p></div>
+      <div data-results="tasks"><h3></h3><ul class="content"></ul><p class="empty" data-empty="results-tasks"></p></div>
+      <div data-results="questions"><h3></h3><ul class="content"></ul><p class="empty" data-empty="results-questions"></p></div>
+      <p class="empty" data-empty="results"></p>
+    </section>
+    <section data-view="queue" hidden><h2></h2><ol class="content"></ol><p class="empty" data-empty="queue"></p></section>
+    <section data-view="share" hidden><h2></h2><ul class="content"></ul><p class="empty" data-empty="share"></p></section>
+    <section data-view="memory" hidden><h2></h2><p class="query"></p><ul class="content"></ul><p class="empty" data-empty="memory"></p></section>
+    <p id="mode" class="mode"></p>
+    <button id="menu-button" class="menu-button" type="button" aria-haspopup="dialog" aria-keyshortcuts="M"></button>
+  </main>
+  <dialog id="menu"><h2></h2><ol id="menu-list"></ol></dialog>
+</body>
+</html>
