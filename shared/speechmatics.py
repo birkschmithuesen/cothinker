@@ -31,7 +31,14 @@ from collections import Counter
 from dataclasses import dataclass
 from typing import AsyncIterator
 
-from workshop.persons import PERSONS
+try:
+    from workshop.persons import PERSONS
+except ImportError:
+    # workshop/ is a private-fork-only module (AGENTS.md rule 7: instances
+    # are private, never in this public repo). MAX_SPEAKERS below only
+    # needs a count; this is a generic upper bound, not any installation's
+    # real seating plan.
+    PERSONS: tuple = tuple(f"P{i}" for i in range(1, 9))
 
 SPEECHMATICS_URL = "wss://eu.rt.speechmatics.com/v2"
 RATE = 16000
