@@ -103,6 +103,11 @@ UNITS = {
         "argv": [sys.executable, "-m", "surfaces.contract", "--help"],
         "cwd": ROOT,
     },
+    "cothinker-demo-operator.service": {
+        "sources": [ROOT / "surfaces/operator/__main__.py"],
+        "argv": [sys.executable, "-m", "surfaces.operator", "--help"],
+        "cwd": ROOT,
+    },
 }
 
 # Not in UNITS, and not expected to be: chrome.service starts an external
