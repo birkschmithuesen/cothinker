@@ -257,6 +257,25 @@ def test_classify_candidate_pair_picks_most_traffic_when_none_nominated():
     assert result["candidate_type"] == "srflx"
 
 
+def test_classify_candidate_pair_prefers_nominated_even_with_fewer_bytes():
+    # The exact race the function's own docstring describes: a pair can
+    # be nominated while another, merely-succeeded pair still carries
+    # more bytes (e.g. retried/stale traffic). Nominated must win anyway.
+    stats = [
+        {"id": "nominated-quiet", "type": "candidate-pair", "state": "succeeded",
+         "nominated": True, "localCandidateId": "local-quiet",
+         "bytesSent": 10, "bytesReceived": 0},
+        {"id": "busy-not-nominated", "type": "candidate-pair", "state": "succeeded",
+         "localCandidateId": "local-busy", "bytesSent": 4389, "bytesReceived": 0},
+        {"id": "local-quiet", "type": "local-candidate", "candidateType": "host",
+         "protocol": "udp"},
+        {"id": "local-busy", "type": "local-candidate", "candidateType": "srflx",
+         "protocol": "udp"},
+    ]
+    result = e2e.classify_candidate_pair(stats)
+    assert result["candidate_type"] == "host"
+
+
 def test_media_check_passes_when_audio_bytes_flow():
     stats = e2e.classify_candidate_pair(_stats("host", "udp", sent=5000, received=5000))
     check = e2e.media_check("Alex", stats)
