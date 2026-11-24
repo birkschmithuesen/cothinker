@@ -44,7 +44,7 @@ from pathlib import Path
 from typing import Callable
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from shared.wake_word import WAKE_NOT  # noqa: E402
+from shared.wake_word import CLAUSE_LEAD, WAKE_NOT, wake_phrase_pattern  # noqa: E402
 
 # Trailing filler after the wake word that still means "heard, not told to
 # do anything yet" -- live incident 2026-10-27: "Robo
@@ -55,44 +55,6 @@ _BARE_WAKE_FILLER = re.compile(r"^(aktiv)$", re.IGNORECASE)
 # Splits an utterance into sentences on a trailing . ! or ? -- used only to
 # find the LAST one (see `_is_bare_wake_tail`), never to re-join them.
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
-
-# Misheard wake word at the START of an utterance. Two incidents:
-#
-# Dress rehearsal 2026-10-20, real audio through Infomaniak Whisper: TTS
-# "Robo, trag in ..." came back as "Bobo, trag in ...". "Bobo"/"Hobo"/
-# "Probo"/"Rubo"/"Roboter" fire unconditionally once followed by a comma
-# or a hyphen -- the address pattern "<name>, <imperative>", accepted
-# utterance-initial (after an optional opening quote). "Roboter" is in
-# the list for the same reason; mid-sentence it stays a false friend
-# (WAKE_NOT above).
-#
-# Live meeting 2026-10-20 20:49: the STT server also misheard "Robo" as
-# "Grobo", "Wo, wo" and "Wobei". "Grobo" joins the unconditional group
-# above. "Wo, wo" and "Wobei" are also real German words/questions
-# ("Wobei ich finde ...", "Wo wohnst du?"), so those two only count as
-# the wake word right at the start (optionally after a short filler like
-# "also,"), AND only when immediately followed by a comma and then an
-# imperative verb or an agenda-address noun ("Wobei, starte ...", "Wo,
-# wo, naechster Punkt."). A continuing sentence ("Wobei ich finde,
-# dass ...") or a question ("Wo, wo war das nochmal?") never has that
-# comma-then-order shape and is left alone.
-_WAKE_VARIANT_START = re.compile(
-    r"^[\s\"'„“‚‘»«(\[]*(?:(?:also|ja|gut|okay|ok)[, ]+)?"
-    r"(?:(?P<unconditional>robo|bobo|hobo|probo|rubo|roboter|grobo)\s*[,\-–]"
-    r"|(?P<ambig>wo,?\s*wo|wobei)\s*,\s*(?P<rest>[a-zäöüß]+))",
-    re.IGNORECASE,
-)
-
-# What counts as "an order" after the ambiguous variants above: a common
-# imperative verb, or a noun that addresses the meeting's structure
-# (jumping to the next agenda point). Deliberately narrow -- this is the
-# second half of the guard against "Wobei ich finde ..." style sentences,
-# not a general imperative detector.
-_WAKE_IMPERATIVE_OR_ADDRESS = re.compile(
-    r"^(?:mach\w*|fass\w*|starte?\w*|sag\w*|zeig\w*|notier\w*|wiederhol\w*|"
-    r"n(?:ä|ae)chste[rs]?|punkt\w*|thema\w*|agenda\w*)\b",
-    re.IGNORECASE,
-)
 
 
 @dataclass
@@ -132,7 +94,7 @@ class BlockBuilder:
         pause_s: float = 2.5,
         max_s: float = 90.0,
         min_chars: int = 25,
-        wake_word: str = "robo",
+        wake_word: str = "hey robo",
         now: Callable[[], float] = time.monotonic,
     ) -> None:
         self.output = output
@@ -140,7 +102,7 @@ class BlockBuilder:
         self.max_s = max_s
         self.min_chars = min_chars
         self.now = now
-        # "Robert" must not trigger -- but "Roboterzeuge" must. Speech
+        # "Roboter" must not trigger -- but "Roboterzeuge" must. Speech
         # recognition welds the wake word onto the next one when it is
         # spoken without a pause: measured 2026-09-21 over 2485 log lines,
         # 91x "Robo" recognised and 2x "Roboterzeuge" for "Robo, erzeuge …".
@@ -149,36 +111,46 @@ class BlockBuilder:
         # wake word is INVISIBLE: the round gives an order, nothing happens,
         # and no trace of the failure exists anywhere.
         #
-        # So the wake word matches as a PREFIX, minus the German words that
+        # So the name matches as a PREFIX, minus the German words that
         # legitimately start the same way. Without that subtraction a
         # conversation ABOUT robots ("Robotik", "ein Roboter") would read as
         # a stream of orders -- a real risk here, where robots are a topic.
         #
-        # Several wake words: comma-separated. An empty one would produce
+        # Several wake phrases: comma-separated. An empty one would produce
         # `\b\b`, which matches EVERY sentence; better none at all.
-        worte = [w.strip() for w in (wake_word or "").split(",") if w.strip()]
+        phrases = [p.strip() for p in (wake_word or "").split(",") if p.strip()]
+        patterns = [wake_phrase_pattern(phrase.split(), f"n{i}")
+                   for i, phrase in enumerate(phrases)]
         self.wake_word_re = (
-            re.compile("|".join(rf"\b{re.escape(w)}[a-zäöüß]*"
-                                for w in worte), re.IGNORECASE)
-            if worte else None)
+            re.compile("|".join(patterns), re.IGNORECASE) if patterns else None)
         self._open = Block()
         self._last_sentence: float = 0.0
         self._lock = threading.Lock()
 
     # ---------------------------------------------------------------- API
+    @staticmethod
+    def _wake_not(m: re.Match) -> bool:
+        """Did `m` match one of the false-friend words (WAKE_NOT) under
+        whichever named group of `wake_word_re` fired?"""
+        name = next((v for v in m.groupdict().values() if v is not None),
+                    None)
+        return bool(name) and bool(WAKE_NOT.match(name))
+
     def _bare_wake_clause(self, clause: str) -> bool:
-        """Is `clause` the wake word (plus pure activation filler, e.g.
+        """Is `clause` the wake phrase (plus pure activation filler, e.g.
         "Aktiv") and NOTHING else?
 
-        Anchored at the very start on purpose: "Robo, mach das" is wake
-        word PLUS order in the same clause and must keep its order.
+        Anchored at the very start on purpose: "Hey Robo, mach das" is the
+        phrase PLUS an order in the same clause and must keep its order.
         """
         if self.wake_word_re is None:
             return False
-        m = self.wake_word_re.match(clause)
-        if not m or WAKE_NOT.match(m.group(0)):
+        stripped = CLAUSE_LEAD.sub("", clause)
+        m = self.wake_word_re.match(stripped)
+        if not m or self._wake_not(m):
             return False
-        rest = re.sub(r"[\s,.!?:;\-–„“\"'»«]+", " ", clause[m.end():]).strip()
+        rest = re.sub(r"[\s,.!?:;\-–„“\"'»«]+", " ",
+                      stripped[m.end():]).strip()
         return not rest or bool(_BARE_WAKE_FILLER.match(rest))
 
     def _is_bare_wake(self, text: str) -> bool:
@@ -210,35 +182,27 @@ class BlockBuilder:
         return bool(clauses) and self._bare_wake_clause(clauses[-1].strip())
 
     def _is_wake(self, text: str) -> bool:
-        """Does `text` address the agent -- prefix match minus false friends.
+        """Does `text` address the agent -- the phrase at the START of a
+        clause (utterance start, or right after `.`/`!`/`?`), minus false
+        friends.
 
-        The prefix is what catches a welded order ("Roboterzeuge"), the
-        subtraction is what keeps a conversation about robots from reading
-        as one. Both halves are needed: the prefix alone produces false
-        alarms, word boundaries alone drop real orders.
+        Clause-start on purpose: a bare name talked ABOUT the assistant
+        ("Robo hat vorhin gesagt ...") or a real word that happens to
+        start the same way ("Wobei ich finde ...") must not fire just
+        because the phrase occurs somewhere in the text -- only an
+        address, at the start of what someone is saying, counts.
         """
         if self.wake_word_re is None:
             return False
-        if any(not WAKE_NOT.match(m.group(0))
-               for m in self.wake_word_re.finditer(text)):
-            return True
-        return self._is_wake_variant_start(text)
-
-    def _is_wake_variant_start(self, text: str) -> bool:
-        """STT mishearings of the wake word at utterance start.
-
-        See `_WAKE_VARIANT_START` for why "Bobo"/"Hobo"/"Probo"/"Rubo"/
-        "Roboter"/"Grobo" fire unconditionally while "Wo, wo" and "Wobei"
-        additionally need the imperative/address check -- they are real
-        German words on their own.
-        """
-        m = _WAKE_VARIANT_START.match(text)
-        if not m:
-            return False
-        if m.group("unconditional"):
-            return True
-        rest = m.group("rest")
-        return bool(rest and _WAKE_IMPERATIVE_OR_ADDRESS.match(rest))
+        for clause in _SENTENCE_SPLIT.split(text):
+            clause = clause.strip()
+            if not clause:
+                continue
+            stripped = CLAUSE_LEAD.sub("", clause)
+            m = self.wake_word_re.match(stripped)
+            if m and not self._wake_not(m):
+                return True
+        return False
 
     def sentence(self, text: str, allow_wake: bool = True) -> None:
         """A `final` from the STT server.
