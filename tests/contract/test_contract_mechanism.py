@@ -5,6 +5,7 @@ running the same contract test as the built-in ones (ADR 0022 rule 3).
 from __future__ import annotations
 
 import os
+import re
 import socket
 import subprocess
 import sys
@@ -77,7 +78,7 @@ def test_an_outside_agent_adapter_runs_the_same_contract(tmp_path):
         "PYTHONPATH": os.pathsep.join([str(tmp_path), str(REPO)]),
     })
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert "7 passed" in proc.stdout, proc.stdout
+    assert re.search(r"(?<![\d])7 passed\b", proc.stdout), proc.stdout
 
 
 def test_a_broken_outside_instance_is_red_for_the_same_contract(tmp_path):
@@ -85,4 +86,4 @@ def test_a_broken_outside_instance_is_red_for_the_same_contract(tmp_path):
     proc = _run_outside("tests/contract/instance/test_instance_contract.py",
                         {"COTHINKER_CONTRACT_INSTANCE": str(tmp_path)})
     assert proc.returncode == 1, proc.stdout + proc.stderr
-    assert "3 failed, 2 passed" in proc.stdout, proc.stdout
+    assert re.search(r"(?<![\d])3 failed, 2 passed\b", proc.stdout), proc.stdout

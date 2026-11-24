@@ -32,7 +32,7 @@ EVENT_KINDS = ("utterance", "block", "phase", "cue")
 
 
 def resolve_outside(value: str) -> Path:
-    return Path(value)
+    return Path(value).resolve()
 
 
 def _manifest(module_dir: Path) -> dict:
@@ -147,10 +147,10 @@ def test_a_failed_write_keeps_the_old_file_and_leaves_no_temp_file(tmp_path, mon
     def boom(*args, **kwargs):
         raise RuntimeError("disk full")
 
-    monkeypatch.setattr(json, "dump", boom)
-    with pytest.raises(RuntimeError):
-        store.write("x.json", {"v": 2})
-    monkeypatch.undo()
+    with monkeypatch.context() as mp:
+        mp.setattr(json, "dump", boom)
+        with pytest.raises(RuntimeError):
+            store.write("x.json", {"v": 2})
     assert store.read("x.json") == {"v": 1}, "STATE-ATOMIC: a failed write damaged the old file"
     assert _files(tmp_path) == ["x.json"], f"STATE-ATOMIC: left {_files(tmp_path)}"
 

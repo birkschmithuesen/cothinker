@@ -26,7 +26,7 @@ RUN_DATA_SUFFIXES = {".wav", ".mp3", ".flac", ".ogg", ".opus", ".m4a", ".webm"}
 
 
 def resolve_outside(value: str) -> Path:
-    return Path(value)
+    return Path(value).resolve()
 
 
 # ---------------------------------------------------------------- contract tests
