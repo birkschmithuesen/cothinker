@@ -10,13 +10,20 @@ Environment=COTHINKER_DECIDER=jev
 # Defaults; override in demo.env. HERMES_PYTHONPATH has no default and must
 # be set in demo.env (the hermes checkout and its site-packages).
 Environment=HERMES_PROFILE_DIR=%h/.hermes/profiles/cothinker-lanes
+# HERMES_PROFILE_DIR_CALL: a second profile for the call lane only (same
+# as HERMES_PROFILE_DIR but with the `file` toolset enabled, so "Hey Robo,
+# note this down" can write to the project repo); the coach lane keeps the
+# tool-free default. Defaults to the same tool-free profile (no file
+# writes); a deployment that wants write-on-request overrides it in
+# demo.env with its own profile directory.
+Environment=HERMES_PROFILE_DIR_CALL=%h/.hermes/profiles/cothinker-lanes
 Environment=LANE_MODEL=claude-sonnet-5
 Environment=LANE_PROVIDER=custom:anthropic_plan
 UnsetEnvironment=PYTHONPATH PYTHONHOME
 WorkingDirectory=@REPO@
 # The default lane workers use profiles that may not exist: BOTH lane worker
 # commands are passed explicitly. ${VAR} is expanded by systemd per argument.
-ExecStart=/usr/bin/python3 @REPO@/gateway/consumer.py --policy --lanes --max-batch 2000 --stt http://127.0.0.1:5051 --project cothinker-demo --title "CoThinker Demo" --participants "" --mode sitzung --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER}" --lane-call-worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --no-history" --lane-coach-worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --no-history"
+ExecStart=/usr/bin/python3 @REPO@/gateway/consumer.py --policy --lanes --max-batch 2000 --stt http://127.0.0.1:5051 --project cothinker-demo --title "CoThinker Demo" --participants "" --mode sitzung --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER}" --lane-call-worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR_CALL} --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --no-history" --lane-coach-worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --no-history"
 StandardOutput=append:@DEMO_HOME@/logs/consumer.log
 StandardError=inherit
 Restart=on-failure
