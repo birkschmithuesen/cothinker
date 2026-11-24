@@ -30,6 +30,9 @@ from surfaces.contract.models import (
     TranscriptLine,
     UserAction,
     ViewIntent,
+    VoiceIntent,
+    VoiceRecentEntry,
+    VoiceSnapshot,
 )
 
 
@@ -133,6 +136,41 @@ def test_stage_state_snapshot_has_tasks_and_transcript_recent_fields():
     )
     assert snapshot.tasks[0].person == "Tamar"
     assert snapshot.transcript_recent[0].speaker == "Mira"
+
+
+def test_stage_state_snapshot_voice_defaults_to_none():
+    """issue #164: `voice` is a separate field from `queue` -- who is
+    talking right now by voice/track attribution, not who holds the
+    floor by tapping to join the speaker queue."""
+    assert StageStateSnapshot.model_fields["voice"].default is None
+
+
+def test_voice_snapshot_matches_the_voice_attribution_block_payload():
+    snapshot = VoiceSnapshot(
+        speaking="Mira",
+        since="2026-11-23T09:12:00+01:00",
+        recent=[VoiceRecentEntry(name="Jonas", last_at="2026-11-23T09:10:00+01:00")],
+    )
+    assert snapshot.model_dump() == {
+        "speaking": "Mira",
+        "since": "2026-11-23T09:12:00+01:00",
+        "recent": [{"name": "Jonas", "last_at": "2026-11-23T09:10:00+01:00"}],
+    }
+
+
+def test_voice_snapshot_defaults_to_nobody_speaking():
+    snapshot = VoiceSnapshot()
+    assert snapshot.speaking is None
+    assert snapshot.since is None
+    assert snapshot.recent == []
+
+
+def test_view_intent_union_accepts_voice_kind():
+    voice_intent = TypeAdapter(ViewIntent).validate_python({
+        "kind": "voice", "id": "voice:room", "speaking": "Mira",
+        "since": "2026-11-23T09:12:00+01:00", "recent": [],
+    })
+    assert isinstance(voice_intent, VoiceIntent)
 
 
 def test_view_intent_union_accepts_graph_kind():
