@@ -1,0 +1,19 @@
+{
+  "version": 7,
+  "updated": "2026-11-23T09:00:00+01:00",
+  "mirror": "",
+  "headline": "Planning round",
+  "main": {
+    "id": "M1",
+    "markdown": "## Opening\n\nWelcome.",
+    "set_at": "2026-11-23T09:00:00+01:00"
+  },
+  "parked": 0,
+  "age_visible_after_s": 20,
+  "follow_up_after_s": 300,
+  "queue": {
+    "mode": "tap",
+    "speaking": {"pid": "p-aya", "name": "Aya"},
+    "waiting": [{"pid": "p-ben", "name": "Ben"}]
+  }
+}
