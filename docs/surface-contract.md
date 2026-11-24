@@ -36,13 +36,22 @@ writes `buehne.json`, the consumer stays its single writer.
 Live mode polls the file every 0.3 s (well under the 2 s acceptance
 bound) and, on every content change, diffs the previous mapped snapshot
 against the new one. A field with an obvious owning view-intent kind
-(`queue`, `share`, `session_graph`) is pushed as that kind's intent
-(`queue:room`, `share:room`, `graph:session`); every other changed field
-(headline, decisions, notices, the question slot, ...) is folded into
-one `status` intent naming the changed fields, since most of the
-snapshot has no view-intent kind of its own. A field the live core does
+(`queue`, `voice`, `share`, `session_graph`) is pushed as that kind's intent
+(`queue:room`, `voice:room`, `share:room`, `graph:session`); every other
+changed field (headline, decisions, notices, the question slot, ...) is
+folded into one `status` intent naming the changed fields, since most of
+the snapshot has no view-intent kind of its own. A field the live core does
 not fill yet stays empty, exactly as in fixture mode (`"x-status":
 "planned"`).
+
+`queue` and `voice` answer different questions and must not be read as
+interchangeable: `queue` (the `speaker-queue` block) is who holds the
+floor by TAPPING to join the queue -- it stays empty all meeting in an
+online session where nobody uses that UI -- while `voice` (the
+`voice-attribution` block) is who is actually talking right now, derived
+from the audio track / STT speaker label, independent of anyone using the
+queue at all. A room display meant to answer "who is speaking" should read
+`voice.speaking`, not `queue.speaking`.
 
 ## Cross-origin access
 
