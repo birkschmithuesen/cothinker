@@ -485,30 +485,41 @@ def start_participant(name: str, wav: Path, url_file: Path, stats_out: Path,
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
 
-def join_participants(base_url: str, token: str, out_dir: Path, chrome: str,
-                       seconds: float) -> tuple[list[Check], dict[str, dict]]:
+def start_participants(base_url: str, token: str, out_dir: Path, chrome: str,
+                        seconds: float) -> dict[str, dict]:
     """Writes each participant's per-user URL to a token-mode (0600) temp
-    file (never printed), joins Alex and Sam at the same moment via the
-    public call-only page, and returns join checks plus each
-    participant's raw getStats() entries for the media check."""
-    checks: list[Check] = []
-    stats: dict[str, dict] = {}
+    file (never printed) and joins Alex and Sam at the same moment via
+    the public call-only page, WITHOUT waiting for them to finish --
+    callers that need stage/monitor to show live activity (point 5: "while
+    audio plays") or poll for a call-lane answer must do so before
+    collect_participants() blocks for the rest of `seconds`."""
     specs = [("Alex", out_dir / "alex.wav", 9301), ("Sam", out_dir / "sam.wav", 9302)]
-    procs = {}
-    url_files = {}
+    procs: dict[str, dict] = {}
     for name, wav, port in specs:
         url_file = out_dir / (".%s.url" % name.lower())
         url_file.write_text(build_public_url(base_url, "/meeting/", token), encoding="utf-8")
         url_file.chmod(0o600)
-        url_files[name] = url_file
         stats_out = out_dir / ("%s-stats.json" % name.lower())
         screenshot = out_dir / ("%s-join.png" % name.lower())
-        procs[name] = (start_participant(name, wav, url_file, stats_out, screenshot,
-                                          port, chrome, seconds), stats_out)
-    for name, (proc, stats_out) in procs.items():
-        out, _ = proc.communicate(timeout=seconds + 60)
+        procs[name] = {
+            "proc": start_participant(name, wav, url_file, stats_out, screenshot,
+                                       port, chrome, seconds),
+            "stats_out": stats_out, "url_file": url_file,
+        }
+    return procs
+
+
+def collect_participants(procs: dict[str, dict], token: str,
+                          seconds: float) -> tuple[list[Check], dict[str, dict]]:
+    """Blocks until every participant process started by start_participants()
+    exits, then returns join checks plus each participant's raw getStats()
+    entries (for the media check)."""
+    checks: list[Check] = []
+    stats: dict[str, dict] = {}
+    for name, info in procs.items():
+        out, _ = info["proc"].communicate(timeout=seconds + 60)
         joined = _JOINED_RE.search(out)
-        if proc.returncode != 0 or not joined:
+        if info["proc"].returncode != 0 or not joined:
             checks.append(Check("join (%s)" % name, "FAIL",
                                  redact(out, token).strip().splitlines()[-1]
                                  if out.strip() else "no output"))
@@ -516,12 +527,12 @@ def join_participants(base_url: str, token: str, out_dir: Path, chrome: str,
         checks.append(Check("join (%s)" % name, "PASS",
                              "joined after %ss" % joined.group(2)))
         try:
-            stats[name] = classify_candidate_pair(json.loads(stats_out.read_text()))
+            stats[name] = classify_candidate_pair(json.loads(info["stats_out"].read_text()))
         except (FileNotFoundError, json.JSONDecodeError) as exc:
             checks.append(Check("media path (%s)" % name, "FAIL",
                                  "no usable stats: %s" % exc))
-    for url_file in url_files.values():
-        url_file.unlink(missing_ok=True)
+    for info in procs.values():
+        info["url_file"].unlink(missing_ok=True)
     return checks, stats
 
 
@@ -600,26 +611,27 @@ def main(argv: list[str]) -> int:
                "engine=%s events=%d total_s=%.1f" % (args.tts, len(timeline["events"]),
                                                        timeline["total_s"]))
 
-    # 3 & 4. Participants join over the public path; media path proof.
-    join_checks, media_stats = join_participants(
-        args.base_url, token, out_dir, args.chrome, args.minutes * 60)
-    report.checks.extend(join_checks)
-    for name, stats in media_stats.items():
-        report.checks.append(media_check(name, stats))
+    # 3. Participants join over the public path. They stay connected at
+    # least through the whole script plus the checks below that need them
+    # still in the call (point 5: "while audio plays"; point 7: the wake
+    # check polls after the probe audio, before anyone has hung up).
+    connect_s = max(args.minutes * 60, timeline["total_s"] + 90)
+    procs = start_participants(args.base_url, token, out_dir, args.chrome, connect_s)
 
-    # 5. Surfaces.
+    # Let the whole script (incl. both wake-line repeats, near its end)
+    # finish playing before reading surfaces or polling for an answer.
+    time.sleep(timeline["total_s"] + 10)
+
+    # 5. Surfaces, opened while the call is still up.
     surface_checks, transcript_bullets = check_surfaces(
         args.base_url, token, ["Alex", "Sam"], AGENDA_LINE, out_dir)
-    report.checks.extend(surface_checks)
 
     # 6. Contract.
     monitor_url = build_public_url(args.base_url, "/monitor/", token)
-    report.checks.append(run_contract_check(monitor_url, token, out_dir))
+    contract_check = run_contract_check(monitor_url, token, out_dir)
 
-    # 7. Results.
-    result = score.score(transcript_bullets, timeline)
-    report.checks.append(score_check(result["ratio"], result["matched"], args.min_score_ratio))
-
+    # 7. Results that depend on the call still being live: the wake check
+    # polls for a call-lane answer with the script's probe audio.
     def poll_snapshot() -> dict:
         try:
             return fetch_snapshot(args.base_url, token)
@@ -627,6 +639,19 @@ def main(argv: list[str]) -> int:
             return {}
 
     lane_answer_seen, elapsed_s = wait_for_call_answer(poll_snapshot)
+
+    # 4. Media path proof, and the rest of point 3: block for the
+    # participants to actually finish (they will have, or will any
+    # moment -- connect_s already covers everything above).
+    join_checks, media_stats = collect_participants(procs, token, connect_s)
+    report.checks.extend(join_checks)
+    for name, stats in media_stats.items():
+        report.checks.append(media_check(name, stats))
+    report.checks.extend(surface_checks)
+    report.checks.append(contract_check)
+
+    result = score.score(transcript_bullets, timeline)
+    report.checks.append(score_check(result["ratio"], result["matched"], args.min_score_ratio))
     report.checks.append(wake_check(args.tts, lane_answer_seen, elapsed_s))
 
     final_snapshot = poll_snapshot()

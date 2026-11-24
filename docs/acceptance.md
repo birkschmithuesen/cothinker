@@ -31,7 +31,10 @@ python -m demo.acceptance.e2e \
 
 Useful flags:
 
-- `--minutes 4` — how long the two participants stay in the call (default 4).
+- `--minutes 4` — a floor on how long the two participants stay in the call
+  (default 4); the actual connect time is whichever is longer, this or the
+  generated script's own length plus the time the checks below need while
+  the call is still up.
 - `--keep-artifacts` — keep the rendered `alex.wav`/`sam.wav` in `--out`
   (deleted by default once the run is done; screenshots and reports are always
   kept).

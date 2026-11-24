@@ -127,7 +127,12 @@ def main(argv: list[str]) -> int:
         url = fh.read().strip()
     origin = "{0.scheme}://{0.netloc}".format(urllib.parse.urlsplit(url))
 
-    with tempfile.TemporaryDirectory(prefix="ct-participant-") as profile:
+    # ignore_cleanup_errors: Chrome can still hold a lock file in its
+    # profile's Default/ dir for a moment after chrome.wait() returns,
+    # which turned a successful join into a crash (ENOTEMPTY) on exit --
+    # found live. A leftover /tmp profile dir is harmless.
+    with tempfile.TemporaryDirectory(prefix="ct-participant-",
+                                      ignore_cleanup_errors=True) as profile:
         cmd = [a.chrome, "--headless=new", "--window-size=1920,1080",
                "--remote-debugging-port=%d" % a.cdp_port,
                "--user-data-dir=" + profile, "--no-first-run",
