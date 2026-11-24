@@ -12,7 +12,9 @@ Reflect is the first template (ADR 0010) and every building block plugs
 into the block host (ADR 0008, `docs/architecture/target.md` §5). There is
 no template flag and no off switch (migration rule, ADR 0018): the
 session host always builds its block host from `REFLECT_TEMPLATE`. The
-template already names all twelve Reflect blocks; `REGISTRY` only grows
+template already names all thirteen Reflect blocks (issue #178 added
+`voice-attribution` as a 13th, against ADR 0010's fixed 12 -- see
+`docs/architecture/blocks-inventory.md`); `REGISTRY` only grows
 one line per block as each one's own pull request lands, so a block id
 the template lists but nobody has registered yet is skipped, with one log
 line, rather than failing the whole session.

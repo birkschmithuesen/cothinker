@@ -17,7 +17,10 @@ from shared import templates as st
 REPO = Path(__file__).resolve().parents[1]
 REFLECT = REPO / "templates" / "reflect" / "template.toml"
 
-REFLECT_12 = (
+# ADR 0010's own 12, plus `voice-attribution` as a 13th (issue #178) --
+# the ADR's text stays as it was, unchanged (it is only ever superseded or
+# amended, never rewritten); see docs/architecture/blocks-inventory.md.
+REFLECT_13 = (
     "capture-bullets",
     "topics",
     "decisions-tasks-questions",
@@ -30,6 +33,7 @@ REFLECT_12 = (
     "speaking-share",
     "status-line",
     "graph",
+    "voice-attribution",
 )
 
 TEMPLATE_HEADER = '[template]\nname = "x"\napi_version = 1\nrules = ["grounding", "add-dont-restructure"]\n'
@@ -59,7 +63,7 @@ def test_reflect_template_loads():
 
 def test_reflect_block_ids_match_adr_0010_order():
     t = st.load_template(REFLECT)
-    assert tuple(b.id for b in t.blocks) == REFLECT_12
+    assert tuple(b.id for b in t.blocks) == REFLECT_13
 
 
 def test_reflect_has_one_session_phase_with_all_blocks():
@@ -67,7 +71,7 @@ def test_reflect_has_one_session_phase_with_all_blocks():
     assert len(t.phases) == 1
     phase = t.phases[0]
     assert phase.id == "session"
-    assert phase.blocks == REFLECT_12
+    assert phase.blocks == REFLECT_13
 
 
 def test_phase_naming_unknown_block_raises(tmp_path):

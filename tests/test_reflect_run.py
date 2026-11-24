@@ -20,13 +20,12 @@ agent turn carry a pre-written `agent_reply` (the capture-bullets JSON
 shape, see `tests/fake_worker.py`) instead of a live model call.
 
 `build_session_blocks`' default `REGISTRY` (`gateway/block_host_wiring.py`)
-is missing three of the Reflect template's twelve blocks today (`timer`,
-`speaker-queue`, `speaking-share`): the comment there says `REGISTRY` only
-grows one line per block as its own wiring lands, so this is a known gap,
-not a bug. This test adds the three real block classes to its own copy of
-the registry so the template actually runs with all twelve -- ADR 0022
-level 3 is about the TEMPLATE, not about which blocks `gateway/consumer.py`
-has been wired to yet.
+registers all thirteen of the Reflect template's blocks (issue #178); this
+test still keeps its own copy (`FULL_REGISTRY`) rather than importing
+`bhw.REGISTRY` directly -- ADR 0022 level 3 is about the TEMPLATE, not
+about which blocks `gateway/consumer.py` happens to be wired to, so this
+test must not go silently stale the next time a block is temporarily
+missing from `REGISTRY`.
 
 python3 -m pytest -q tests/test_reflect_run.py
 """
@@ -53,14 +52,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = REPO_ROOT / "templates" / "reflect" / "template.toml"
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "reflect_meeting.jsonl"
 
-# All twelve Reflect blocks (see the module docstring for the three missing
-# from `bhw.REGISTRY` today).
-FULL_REGISTRY = dict(bhw.REGISTRY)
-FULL_REGISTRY.update({
+# All thirteen Reflect blocks, pinned to the real classes rather than read
+# off `bhw.REGISTRY` (see the module docstring above).
+FULL_REGISTRY = {
+    **bhw.REGISTRY,
     "timer": TimerBlock,
     "speaker-queue": SpeakerQueueBlock,
     "speaking-share": SpeakingShareBlock,
-})
+}
 
 # Invented meeting, invented association (AGENTS.md rule 7: only example
 # data under invented names, never a real deployment's).
@@ -83,7 +82,8 @@ HEAD = dict(title="Werkstatt-Planung", entity="beispielverein",
 #   condense                  -- never sees a second topic, so it never
 #                                closes the first (no LLM call needed either)
 EXPECTED_ACTIVE = {"capture-bullets", "minutes-document", "topics",
-                  "speaker-queue", "speaking-share", "status-line", "graph"}
+                  "speaker-queue", "speaking-share", "status-line", "graph",
+                  "voice-attribution"}
 EXPECTED_SILENT = {"timer", "knowledge-link", "mirroring-coach",
                   "decisions-tasks-questions", "condense"}
 

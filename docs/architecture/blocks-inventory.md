@@ -59,17 +59,24 @@ tables below are built from.
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
 | timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
 | speaker queue | Show + share | `blocks/speaker_queue/__init__.py` 102, `queue.py` 82 — 184 | Reflect | 1× |
-| voice attribution (who is talking right now, by track/STT speaker label) | Show + share | `blocks/voice_attribution/__init__.py` 104, `voice.py` 73 — 177 | core | 1× |
+| voice attribution (who is talking right now, by track/STT speaker label) | Show + share | `blocks/voice_attribution/__init__.py` 104, `voice.py` 73 — 177 | Reflect | 1× |
 
 **Reflect check:** all 12 of the blocks Birk confirmed for Reflect now have
 code in this repository — topic change, capture bullets, condense,
 decisions / tasks / open questions, minutes document, mirroring / coach
 question, knowledge link, status line, session graph, speaking share, timer,
 speaker queue. Voice attribution (issue #164) is a 13th block, registered
-in `gateway/block_host_wiring.py`'s `REGISTRY` but deliberately NOT added to
-`templates/reflect/template.toml`: ADR 0010 fixes Reflect at exactly 12
-blocks, so wiring a 13th into the live template is a template/ADR decision
-for the maintainer, not one this inventory entry makes on its own.
+in `gateway/block_host_wiring.py`'s `REGISTRY`; it was deliberately left out
+of `templates/reflect/template.toml` at first, since ADR 0010 fixes Reflect
+at exactly 12 blocks and wiring a 13th into the live template was a
+template/ADR decision for the maintainer, not one this inventory entry could
+make on its own. Issue #178 (opened by the maintainer, naming `voice`'s
+missing live fill as part of its own acceptance criterion) made that
+decision: `template.toml` now lists `voice-attribution` too, 13 blocks
+against ADR 0010's fixed 12 -- a conflict named here, not silently papered
+over; the ADR's own text is unchanged (it is only ever superseded or
+amended, never rewritten), and a status-line amendment is the maintainer's
+call, not this pull request's.
 
 ## STT module, surfaces, core (not blocks)
 
