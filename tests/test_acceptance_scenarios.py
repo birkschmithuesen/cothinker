@@ -175,6 +175,21 @@ def test_matches_agenda_none_when_absent(sc):
     assert sc.matches_agenda(answer, agenda) is None
 
 
+def test_evaluate_scenario_b_pass(sc):
+    check = sc.evaluate_scenario_b(
+        call_answer="Robo sagt: budget und zeitplan besprechen, wie gewuenscht.",
+        agenda_text="Budget und Zeitplan besprechen\n")
+    assert check.status == "PASS"
+
+
+def test_evaluate_scenario_b_fails_without_agenda_line_in_answer(sc):
+    check = sc.evaluate_scenario_b(
+        call_answer="Robo sagt dazu leider gar nichts Passendes.",
+        agenda_text="Budget und Zeitplan besprechen\n")
+    assert check.status == "FAIL"
+    assert "Robo sagt" in check.text
+
+
 # ------------------------------------------------------------- mid-sentence share
 
 def test_raw_transcript_texts_extracts_rohtranskript(sc):
@@ -200,6 +215,50 @@ def test_mid_sentence_share_empty_is_zero(sc):
     count, share = sc.mid_sentence_share([])
     assert count == 0
     assert share == 0.0
+
+
+def test_evaluate_scenario_c_pass_under_threshold(sc):
+    protocol = (
+        "## Rohtranskript\n"
+        "- **10:00** *Alex:* Ein Satz.\n"
+        "- **10:01** *Sam:* Noch einer!\n"
+        "- **10:02** *Alex:* Und noch einer?\n"
+        "- **10:03** *Sam:* mitten drin\n"
+    )
+    check = sc.evaluate_scenario_c(protocol_text=protocol, mid_sentence_max=0.5)
+    assert check.status == "PASS"
+    assert "count=4" in check.text
+
+
+def test_evaluate_scenario_c_fails_over_threshold(sc):
+    protocol = (
+        "## Rohtranskript\n"
+        "- **10:00** *Alex:* mitten drin eins\n"
+        "- **10:01** *Sam:* mitten drin zwei\n"
+        "- **10:02** *Alex:* Und das hier mit Ende.\n"
+    )
+    check = sc.evaluate_scenario_c(protocol_text=protocol, mid_sentence_max=0.2)
+    assert check.status == "FAIL"
+    assert "count=3" in check.text
+
+
+def test_evaluate_scenario_c_fails_without_finals(sc):
+    check = sc.evaluate_scenario_c(protocol_text="## Rohtranskript\n",
+                                   mid_sentence_max=0.2)
+    assert check.status == "FAIL"
+    assert "no finals" in check.text
+
+
+def test_evaluate_scenario_c_reports_segments_delta_as_info_only(sc):
+    protocol = (
+        "## Rohtranskript\n"
+        "- **10:00** *Alex:* Ein Satz.\n"
+        "- **10:01** *Sam:* Noch einer.\n"
+    )
+    check = sc.evaluate_scenario_c(protocol_text=protocol, mid_sentence_max=0.5,
+                                   segments=5)
+    assert check.status == "PASS"
+    assert "|count-segments|=3" in check.text
 
 
 # --------------------------------------------------------------- headline check
