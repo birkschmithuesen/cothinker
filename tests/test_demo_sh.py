@@ -56,7 +56,10 @@ def test_stt_and_tap_share_run_env_and_consumer_has_lane_commands():
     assert "--record-time" in tap and "DEMO_RUN_TS" in tap
     cons = (d / "cothinker-demo-consumer.service").read_text()
     assert "--lane-call-worker-command" in cons
-    assert "--lane-coach-worker-command" in cons
+    # The coach lane has no CLI flag of its own (gateway/consumer.py reads
+    # its worker command from the mirroring-coach block's config, not a
+    # flag -- see tests/test_demo_unit_flags.py); it must not be passed one.
+    assert "--lane-coach-worker-command" not in cons
 
 
 def test_start_keeps_run_env_while_stt_runs():

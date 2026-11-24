@@ -21,9 +21,12 @@ Environment=LANE_MODEL=claude-sonnet-5
 Environment=LANE_PROVIDER=custom:anthropic_plan
 UnsetEnvironment=PYTHONPATH PYTHONHOME
 WorkingDirectory=@REPO@
-# The default lane workers use profiles that may not exist: BOTH lane worker
-# commands are passed explicitly. ${VAR} is expanded by systemd per argument.
-ExecStart=/usr/bin/python3 @REPO@/gateway/consumer.py --policy --lanes --max-batch 2000 --stt http://127.0.0.1:5051 --project cothinker-demo --title "CoThinker Demo" --participants "" --mode sitzung --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER}" --lane-call-worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR_CALL} --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --no-history" --lane-coach-worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --no-history"
+# The default main and call-lane workers use profiles that may not exist:
+# both are passed explicitly. ${VAR} is expanded by systemd per argument. The
+# coach lane has no CLI flag of its own (gateway/consumer.py reads its worker
+# command from the mirroring-coach block's `lane_coach_worker_command`
+# config key, not a flag) -- it keeps the tool-free default mentioned above.
+ExecStart=/usr/bin/python3 @REPO@/gateway/consumer.py --policy --lanes --max-batch 2000 --stt http://127.0.0.1:5051 --project cothinker-demo --title "CoThinker Demo" --participants "" --mode sitzung --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR} --model ${LANE_MODEL} --provider ${LANE_PROVIDER}" --lane-call-worker-command "env PYTHONPATH=${HERMES_PYTHONPATH} @HERMES_PY@ @REPO@/gateway/worker.py --hermes-home ${HERMES_PROFILE_DIR_CALL} --model ${LANE_MODEL} --provider ${LANE_PROVIDER} --no-history"
 StandardOutput=append:@DEMO_HOME@/logs/consumer.log
 StandardError=inherit
 Restart=on-failure
