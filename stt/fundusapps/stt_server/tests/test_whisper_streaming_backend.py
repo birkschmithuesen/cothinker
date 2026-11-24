@@ -125,6 +125,27 @@ def test_final_event_carries_same_turn_id_as_partials(stub_backend):
         assert finals[0].turn_id == partials[-1].turn_id
 
 
+def test_partial_sequence_for_one_utterance_ends_in_final_with_same_turn_id(stub_backend):
+    """Issue #181 L1: one utterance's partials share a stable turn_id, and
+    the final that closes the utterance carries that same id."""
+    backend, bus = stub_backend
+    sub = bus.subscribe()
+    chunk = (np.ones(3200, dtype=np.float32) * 0.1 * 32767).astype(np.int16)
+    list(backend.process_chunk(chunk, recognizer_id="left"))
+    list(backend.process_chunk(chunk, recognizer_id="left"))
+    silence = np.zeros(16000, dtype=np.int16)
+    list(backend.process_chunk(silence, recognizer_id="left"))
+    events = _drain(sub, deadline_s=3.0)
+    partials = [e for e in events if e.type == "partial" and e.text]
+    finals = [e for e in events if e.type == "final" and e.text]
+    assert len(partials) >= 1, "utterance produced no partials to assert stability over"
+    assert len(finals) == 1
+    turn_ids = {p.turn_id for p in partials}
+    assert None not in turn_ids
+    assert len(turn_ids) == 1, "all partials in one utterance must share one stable turn_id"
+    assert finals[0].turn_id == next(iter(turn_ids))
+
+
 def test_two_utterances_get_distinct_turn_ids():
     bus = EventBus()
     sub = bus.subscribe()
