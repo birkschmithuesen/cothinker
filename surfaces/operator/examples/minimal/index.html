@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<!--
+  Minimal reference surface for the operator console (issue #159, ADR
+  0019 point 4 applied to the operator audience): the operator
+  conformance check's "good" example. Uses only what the operator
+  contract serves -- GET /operator/status, GET /operator/events (SSE,
+  but over `fetch` + a manual line reader, not `EventSource`: the
+  operator token rides as an `Authorization: Bearer` header, which
+  `EventSource` cannot set) -- and renders the full snapshot on every
+  `operator-status` push.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Minimal operator console reference surface</title>
+</head>
+<body>
+  <h1 id="running"></h1>
+  <div id="updates"></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const api = params.get("api") || "/operator/";
+    const token = params.get("token") || "";
+    const authHeaders = { "Authorization": "Bearer " + token };
+
+    const updates = document.getElementById("updates");
+
+    function render(status) {
+      document.getElementById("running").textContent = status.running ? "running" : "stopped";
+      const entry = document.createElement("div");
+      entry.className = "status-update";
+      entry.textContent = "services=" + status.services.length
+        + " participants=" + status.meeting.count
+        + " errors=" + status.errors.length
+        + " disk=" + status.disk.free_percent + "%";
+      updates.appendChild(entry);
+    }
+
+    fetch(api + "status", { headers: authHeaders })
+      .then((response) => response.json())
+      .then(render);
+
+    // No EventSource here: it cannot carry the Authorization header the
+    // operator contract requires, so the push channel is read as a plain
+    // `fetch` stream, split on the SSE "\n\n" event separator by hand.
+    fetch(api + "events", { headers: authHeaders }).then(async (response) => {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) return;
+        buffer += decoder.decode(value, { stream: true });
+        let boundary;
+        while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+          const chunk = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const dataLine = chunk.split("\n").find((line) => line.startsWith("data:"));
+          if (dataLine) {
+            render(JSON.parse(dataLine.slice(5).trim()));
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>
