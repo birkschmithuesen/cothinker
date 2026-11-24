@@ -56,6 +56,7 @@ class SessionAgenda(BaseModel):
 
 class Session(BaseModel):
     project: Project
+    title: str | None = Field(default=None, description="Title of the current session; `None` when none is running.", examples=["Quarterly planning"])
     session_folder: str = Field(description="Name of the current session's folder; empty when none is running.", examples=["2026-11-24-quarterly-planning"])
     agenda: SessionAgenda | None = Field(default=None, description="`None` for a session without an agenda.")
     utterances: int = Field(description="Number of transcript utterances recorded so far.", examples=[12])
@@ -72,6 +73,9 @@ class Call(BaseModel):
     last: CallAttempt | None = Field(default=None, description="The most recent call attempt; `None` before the first one.")
 
 
+ErrorLevel = Literal["info", "warning", "error"]
+
+
 class ErrorEntry(BaseModel):
     at: str = Field(description="Wall-clock label of when the error happened.", examples=["2026-11-24T09:02:00+01:00"])
     service: str = Field(description="Which service raised the error.", examples=["stt"])
@@ -80,10 +84,19 @@ class ErrorEntry(BaseModel):
         " project, no transcript text.",
         examples=["reconnect after timeout"],
     )
+    level: ErrorLevel = Field(description="Severity: a hint, a recoverable warning, or an outage.", examples=["warning"])
 
 
 class Disk(BaseModel):
     free_percent: float = Field(description="Free disk space, as a percentage.", examples=[71.5])
+    free_bytes: int = Field(description="Free disk space, in bytes.", examples=[76_000_000_000])
+    recording_hours_left: float | None = Field(
+        default=None,
+        description="Estimated hours left on free disk space at the current"
+        " session's measured write rate; `None` when no session is recording"
+        " or the rate is not yet measurable.",
+        examples=[6.5],
+    )
 
 
 class OperatorStatus(BaseModel):
