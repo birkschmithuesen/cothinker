@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<!--
+  CoThinker operator console (issue #173): the page for the person running a
+  session, against the operator contract (issue #159, surfaces/operator/).
+  `?api=<base>/operator/&token=<token>`; the token travels only as a Bearer header.
+-->
+<html lang="de" data-running="false">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoThinker – Betrieb</title>
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="top"><span class="brand"></span><h1 id="running-state"></h1></header>
+  <main class="grid">
+    <section data-panel="control">
+      <h2></h2>
+      <form id="start">
+        <label><span data-label="project"></span> <select id="start-project" required></select></label>
+        <label><span data-label="title"></span> <input id="start-title" required autocomplete="off"></label>
+        <button type="submit" id="start-button"></button>
+      </form>
+      <button type="button" id="stop"></button>
+      <div class="switch">
+        <select id="switch-project"></select>
+        <button type="button" id="switch"></button>
+        <p id="switch-hint" class="hint"></p>
+      </div>
+      <p id="command-error" role="alert"></p>
+      <div class="content"></div>
+      <p class="empty" data-empty="control"></p>
+    </section>
+    <section data-panel="services"><h2></h2><ul class="content"></ul><p class="empty" data-empty="services"></p></section>
+    <section data-panel="meeting"><h2></h2><ul class="content"></ul><p class="empty" data-empty="meeting"></p></section>
+    <section data-panel="stt"><h2></h2><dl class="content"></dl><p class="empty" data-empty="stt"></p></section>
+    <section data-panel="session">
+      <h2></h2><dl class="content"></dl><p class="empty" data-empty="session"></p>
+      <div data-part="agenda"><dl class="content"></dl><p class="empty" data-empty="session-agenda"></p></div>
+    </section>
+    <section data-panel="call"><h2></h2><dl class="content"></dl><p class="empty" data-empty="call"></p></section>
+    <section data-panel="errors"><h2></h2><ul class="content"></ul><p class="empty" data-empty="errors"></p></section>
+    <section data-panel="disk"><h2></h2><p class="content"></p></section>
+    <section data-panel="updates"><h2></h2><div id="updates" class="content"></div><p class="empty" data-empty="updates"></p></section>
+  </main>
+  <dialog id="stop-dialog">
+    <h2></h2>
+    <p id="stop-warning"></p>
+    <button type="button" id="stop-cancel"></button>
+    <button type="button" id="stop-confirm"></button>
+  </dialog>
+</body>
+</html>

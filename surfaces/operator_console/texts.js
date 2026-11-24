@@ -1,0 +1,33 @@
+// Every German UI string of the operator console (issue #173: German UI, English keys).
+export const TEXT = {
+  brand: "CoThinker · Betrieb",
+  running: "Sitzung läuft", stopped: "Gestoppt",
+  panels: {
+    control: "Steuerung", services: "Dienste", meeting: "Teilnehmende", stt: "Spracherkennung",
+    session: "Sitzung", call: "Letzter Robo-Aufruf", errors: "Fehler", disk: "Speicher", updates: "Aktualisierungen",
+  },
+  empty: {
+    control: "Keine Projekte freigegeben.", services: "Keine Dienste gemeldet.", meeting: "Niemand im Meeting.",
+    stt: "Spracherkennung nicht verbunden.", session: "Keine laufende Sitzung.",
+    "session-agenda": "Keine Tagesordnung.", call: "Noch kein Aufruf.", errors: "Keine Fehler.",
+    updates: "Noch keine Aktualisierung.",
+  },
+  serviceState: { active: "aktiv", starting: "startet", stopped: "gestoppt", failed: "fehlgeschlagen" },
+  speaking: "spricht", silent: "still",
+  stt: { connected: "verbunden", disconnected: "getrennt", engine: "Dienst", lastLine: "Letzte Zeile vor",
+         minutesToday: "Minuten heute" },
+  session: { project: "Projekt", title: "Titel", folder: "Ordner", item: "Tagesordnungspunkt", remaining: "Rest",
+             utterances: "Äußerungen", lastSaved: "Zuletzt gespeichert" },
+  call: { at: "Zeit", answered: "beantwortet", unanswered: "unbeantwortet", latency: "Latenz" },
+  errorLevel: { info: "Hinweis", warning: "Warnung", error: "Fehler" },
+  disk: { free: "frei", low: "knapp", critical: "kritisch", gigabytes: "GB", recordingLeft: "Aufnahme reicht noch ca.",
+          hours: "h" },
+  label: { project: "Projekt", title: "Titel" },
+  start: "Starten", stop: "Beenden", switch: "Projekt wechseln",
+  switchHint: "Projektwechsel nur im gestoppten Zustand.",
+  stopTitle: "Sitzung beenden?",
+  stopWarning: (count) => `Noch ${count} Teilnehmende im Meeting.`,
+  stopForce: "Trotzdem beenden", stopPlain: "Beenden", cancel: "Abbrechen",
+  seconds: "s",
+  connectionLost: "Verbindung zum Betrieb unterbrochen.",
+};
