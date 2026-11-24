@@ -6,7 +6,7 @@
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
 """The `capture-bullets` block with invented agent replies.
 
-    python3 -m pytest -q tests/test_block_capture_bullets.py
+    python3 -m pytest -q blocks/capture_bullets/tests/test_capture_bullets.py
 """
 from __future__ import annotations
 
@@ -14,7 +14,7 @@ import logging
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 
 from blocks.capture_bullets import CaptureBulletsBlock  # noqa: E402

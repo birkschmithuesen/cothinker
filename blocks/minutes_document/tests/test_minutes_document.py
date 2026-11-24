@@ -4,7 +4,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""python3 -m pytest -q tests/test_block_minutes_document.py"""
+"""python3 -m pytest -q blocks/minutes_document/tests/test_minutes_document.py"""
 from __future__ import annotations
 
 import subprocess
@@ -14,7 +14,7 @@ from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "gateway"))
 
@@ -227,8 +227,10 @@ def test_existing_v2_file_keeps_its_recorded_mode(tmp_path):
 
 
 def test_the_block_package_never_names_the_raw_section():
-    r = subprocess.run(["git", "grep", "-n", "Rohtranskript", "--", "blocks/minutes_document"],
-                       cwd=REPO, capture_output=True, text=True)
+    r = subprocess.run(
+        ["git", "grep", "-n", "Rohtranskript", "--",
+         "blocks/minutes_document", ":(exclude)blocks/minutes_document/tests"],
+        cwd=REPO, capture_output=True, text=True)
     assert r.stdout == ""
     for f in (REPO / "blocks" / "minutes_document").glob("*.py"):
         assert "Rohtranskript" not in f.read_text(encoding="utf-8")

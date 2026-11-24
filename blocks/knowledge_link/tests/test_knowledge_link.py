@@ -5,7 +5,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""python3 -m pytest -q tests/test_block_knowledge_link.py"""
+"""python3 -m pytest -q blocks/knowledge_link/tests/test_knowledge_link.py"""
 from __future__ import annotations
 
 from blocks.knowledge_link import KnowledgeLinkBlock
