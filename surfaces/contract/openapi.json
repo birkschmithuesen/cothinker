@@ -1531,6 +1531,24 @@
             "title": "Kind",
             "type": "string"
           },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Extra data the tap carries, e.g. `{\"op\": \"request\"}` for a `queue:room` floor request (issue #183). `None` for a plain tap.",
+            "examples": [
+              {
+                "op": "request"
+              }
+            ],
+            "title": "Payload"
+          },
           "target": {
             "description": "What was tapped.",
             "examples": [
@@ -1792,7 +1810,7 @@
   "paths": {
     "/actions": {
       "post": {
-        "description": "A user action sent back by a surface (ADR 0006); accepted, not acted on.",
+        "description": "A user action sent back by a surface (ADR 0006).\n\nFixture mode accepts it without acting. Live mode validates it\nagainst the action allowlist and appends it to the session's\naction spool -- the same file the stage's own `/action` writes\n(issue #183) -- under a per-person id this endpoint assigns via an\nHttpOnly cookie the first time it sees a request without one.",
         "operationId": "post_action_actions_post",
         "requestBody": {
           "content": {
