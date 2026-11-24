@@ -232,6 +232,7 @@ surfaces/contract/app.py                                                        
 surfaces/contract/fixtures/__init__.py                                           core:surface-api
 surfaces/contract/fixtures/meeting/__init__.py                                   core:surface-api
 surfaces/contract/generate_spec.py                                               core:surface-api
+surfaces/contract/live_player.py                                                 core:surface-api
 surfaces/contract/models.py                                                      core:surface-api
 surfaces/contract/player.py                                                      core:surface-api
 stt/fundusapps/__init__.py                                                       stt:server
