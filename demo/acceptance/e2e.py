@@ -260,12 +260,21 @@ def render_script(engine: str, timeline: dict, out_dir: Path, *,
 
 
 def classify_candidate_pair(stats: list[dict]) -> dict:
+    """Chrome's RTCIceCandidatePairStats marks the pair actually in use
+    with `nominated: true` (confirmed live: several pairs can reach
+    `state: "succeeded"` during ICE checks, only one gets nominated).
+    Early in a call -- or on a browser/version that is slow to set it --
+    none may be nominated yet; the succeeded pair carrying the most
+    bytes is the best next guess."""
     by_id = {s["id"]: s for s in stats if "id" in s}
     pairs = [s for s in stats if s.get("type") == "candidate-pair"
-             and (s.get("selected") or s.get("state") == "succeeded")]
+             and s.get("state") == "succeeded"]
     candidate_type = protocol = None
     if pairs:
-        local = by_id.get(pairs[0].get("localCandidateId"))
+        best = max(pairs, key=lambda s: (
+            s.get("nominated") is True,
+            s.get("bytesSent", 0) + s.get("bytesReceived", 0)))
+        local = by_id.get(best.get("localCandidateId"))
         if local:
             candidate_type = local.get("candidateType")
             protocol = local.get("protocol")

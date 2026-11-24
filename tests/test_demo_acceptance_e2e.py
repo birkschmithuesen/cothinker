@@ -197,7 +197,8 @@ def test_count_knowledge_hits_is_zero_without_notices():
 def _stats(pair_type: str, protocol: str, sent: int, received: int) -> list[dict]:
     return [
         {"id": "pair1", "type": "candidate-pair", "state": "succeeded",
-         "selected": True, "localCandidateId": "local1"},
+         "nominated": True, "localCandidateId": "local1",
+         "bytesSent": sent, "bytesReceived": received},
         {"id": "local1", "type": "local-candidate", "candidateType": pair_type,
          "protocol": protocol},
         {"id": "out1", "type": "outbound-rtp", "kind": "audio", "bytesSent": sent},
@@ -224,6 +225,25 @@ def test_classify_candidate_pair_with_no_pair_at_all():
     result = e2e.classify_candidate_pair([])
     assert result["candidate_type"] is None
     assert result["audio_bytes_sent"] == 0
+
+
+def test_classify_candidate_pair_picks_most_traffic_when_none_nominated():
+    # Confirmed live: several candidate-pairs can reach state "succeeded"
+    # during ICE checks (one per local/remote combination tried) before
+    # any carries "nominated": true -- the one actually used for media
+    # is the one with real traffic, not whichever sorts first.
+    stats = [
+        {"id": "quiet", "type": "candidate-pair", "state": "succeeded",
+         "localCandidateId": "local-quiet", "bytesSent": 0, "bytesReceived": 0},
+        {"id": "busy", "type": "candidate-pair", "state": "succeeded",
+         "localCandidateId": "local-busy", "bytesSent": 4389, "bytesReceived": 0},
+        {"id": "local-quiet", "type": "local-candidate", "candidateType": "host",
+         "protocol": "udp"},
+        {"id": "local-busy", "type": "local-candidate", "candidateType": "srflx",
+         "protocol": "udp"},
+    ]
+    result = e2e.classify_candidate_pair(stats)
+    assert result["candidate_type"] == "srflx"
 
 
 def test_media_check_passes_when_audio_bytes_flow():
