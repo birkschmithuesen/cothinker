@@ -30,3 +30,4 @@ an entry number of the 2026-11-20 concept-round decision log, or a decision (D1,
 | [0017](0017-network-seams-fastapi-blocks-in-process.md) | Network seams on FastAPI, blocks stay in-process | accepted |
 | [0018](0018-product-names-interaction-migration-rules.md) | Product names, interaction and migration rules | accepted |
 | [0019](0019-surface-contract-for-external-designers.md) | Surface contract for external designers | accepted |
+| [0020](0020-host-names-and-paths-of-a-deployment.md) | Host names and paths of a deployment | accepted |
