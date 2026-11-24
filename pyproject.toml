@@ -1,0 +1,5 @@
+[tool.pytest.ini_options]
+# ADR 0022 level 1: tests live with the code. Collects the central
+# tests/ tree plus every component's own tests/ directory.
+testpaths = ["tests", "blocks", "modules", "templates", "surfaces"]
+addopts = "--import-mode=importlib"
