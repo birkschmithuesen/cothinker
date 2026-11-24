@@ -3,7 +3,9 @@
   Deliberately broken surface (issue #142's mutation proof): otherwise
   identical to surfaces/contract/examples/minimal/index.html, except it
   also fetches a host outside the contract -- the "no own simulation
-  data" rule the check must catch.
+  data" rule the check must catch -- and a path on the contract origin
+  that is outside CONTRACT_PATHS, catching the path-scoping half of the
+  same check.
 -->
 <html lang="en">
 <head>
@@ -25,6 +27,11 @@
     // The bug: a request outside the contract and the surface's own
     // static files -- its own simulation data, fetched from elsewhere.
     fetch("https://example.invalid/own-simulation-data.json").catch(() => {});
+
+    // A second bug: a request to the contract origin, but on a path
+    // that is not in CONTRACT_PATHS -- the path-scoping half of the
+    // same check.
+    fetch(api + "redoc").catch(() => {});
 
     const view = document.getElementById("view");
 
