@@ -71,6 +71,26 @@ def test_meeting_scenario_matches_the_issue_132_beats():
     assert len(speakers) > 1              # the speaker queue turns over
 
 
+def test_meeting_scenario_emits_voice_changes():
+    """issue #164 acceptance: "fixture mode emits voice changes" -- voice
+    is scripted independently of the speaker queue to make the
+    distinction legible (a room display reading voice.speaking must not
+    depend on anyone tapping to join the queue)."""
+    frames = load_scenario("meeting")
+    kinds = {vi.kind for frame in frames for vi in frame.view_intents}
+    assert "voice" in kinds
+
+    voices = [f.snapshot.voice for f in frames if f.snapshot.voice is not None]
+    assert voices, "no frame sets StageStateSnapshot.voice"
+    speakers = {v.speaking for v in voices if v.speaking is not None}
+    assert len(speakers) > 1   # voice.speaking turns over too
+
+    voice_speakers_by_frame = [f.snapshot.voice.speaking for f in frames if f.snapshot.voice is not None]
+    queue_speakers_by_frame = [f.snapshot.queue.speaking.name for f in frames
+                               if f.snapshot.queue is not None and f.snapshot.queue.speaking is not None]
+    assert voice_speakers_by_frame != queue_speakers_by_frame   # independent of the speaker queue
+
+
 def test_meeting_scenario_exercises_the_queue_snapshot_field():
     """issue #132 review finding: StageStateSnapshot.queue must be exercised
     by at least one frame, not left `None` throughout the fixture."""
