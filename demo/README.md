@@ -38,9 +38,11 @@ demo/demo.sh stop   [--all]     # --all also takes the Jitsi containers down
 
 `start` writes `$XDG_RUNTIME_DIR/cothinker-demo/run.env` (one run timestamp
 shared by STT and tap, because the per-track sidecar path embeds it),
-`contract.env` (the current session directory, resolved as the newest
-subfolder of `project/sessions/`, read by the contract unit as
-`DEMO_SESSION_DIR`) and mints Robo's join URL into `robo.env` (mode 0600) at
+`contract.env` (`DEMO_SESSION_POINTER`, the path of the pointer file the
+consumer writes its current session directory into once it opens it; the
+contract unit reads that file, re-reading on change, so it follows the
+consumer's actual session instead of guessing a folder -- issue #161) and
+mints Robo's join URL into `robo.env` (mode 0600) at
 that moment. Units are started in the order session, stage, stt, chrome,
 tap, consumer, contract. The tap only reports `listening` after someone
 unmutes, so the start check waits for the process and the CDP port, not for
