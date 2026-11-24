@@ -5,7 +5,7 @@ plays a WAV into the meeting as its microphone (CDP via websocket-client).
 usage: participant.py --url-file FILE --name Alex --wav alex.wav --seconds 300
          [--screenshot out.png [--screenshot-after 20]]
          [--ignore-certificate-errors] [--host-resolver-rules "MAP a b"]
-         [--cookie-path /demo/] --cdp-port 9301 [--chrome google-chrome]
+         [--cookie-path /meeting/] --cdp-port 9301 [--chrome google-chrome]
          [--stats-out stats.json]
 
 The demo URL (it holds the token) is read from --url-file and never
@@ -109,7 +109,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--screenshot-after", type=float, default=20)
     ap.add_argument("--ignore-certificate-errors", action="store_true")
     ap.add_argument("--host-resolver-rules")
-    ap.add_argument("--cookie-path", default="/demo/")
+    # ADR 0020/0021: the call-only page is /meeting/ (was /demo/).
+    ap.add_argument("--cookie-path", default="/meeting/")
     ap.add_argument("--cdp-port", type=int, required=True,
                     help="remote-debugging port, distinct per participant")
     ap.add_argument("--chrome", default="google-chrome")
