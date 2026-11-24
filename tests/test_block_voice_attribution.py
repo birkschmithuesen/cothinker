@@ -107,3 +107,14 @@ def test_empty_speaker_label_does_not_change_or_emit(tmp_path):
     block, emitted = _new_block(tmp_path)
     block.on_event(_utterance(None, at=0.0))
     assert emitted == []
+
+
+def test_block_is_registered_in_the_block_host_registry():
+    """issue #164: the block host's REGISTRY grows one line per block, same
+    as every other block (gateway/block_host_wiring.py). Not wired into
+    the Reflect template's own block list here -- ADR 0010 fixes Reflect
+    at exactly 12 blocks; adding a 13th is a template/ADR decision for the
+    maintainer, not silently made by this change."""
+    from gateway import block_host_wiring as bhw
+
+    assert bhw.REGISTRY["voice-attribution"] is VoiceAttributionBlock
