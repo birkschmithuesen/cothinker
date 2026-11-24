@@ -7,7 +7,7 @@ Read-only: `gateway.consumer.StageWriter` stays the single writer of
 `StageStateSnapshot`, it never writes it.
 
 Mapping choice (documented in `docs/surface-contract.md`): a change to a
-field with an obvious owning view-intent kind (`queue`, `share`,
+field with an obvious owning view-intent kind (`queue`, `voice`, `share`,
 `session_graph`) is emitted as that kind's intent; every other changed
 field is folded into one `StatusIntent` naming the changed fields, since
 most of the snapshot (headline, history, decisions, ...) has no intent
@@ -27,12 +27,14 @@ from surfaces.contract.models import (
     StatusIntent,
     TasksIntent,
     TranscriptRecentIntent,
+    VoiceIntent,
 )
 
 POLL_INTERVAL_S = 0.3
 
 _OWNED_INTENT = {
     "queue": (QueueIntent, "queue:room"),
+    "voice": (VoiceIntent, "voice:room"),
     "share": (ShareIntent, "share:room"),
     "session_graph": (GraphIntent, "graph:session"),
 }

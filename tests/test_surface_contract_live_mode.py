@@ -19,7 +19,13 @@ from pydantic import TypeAdapter
 
 from surfaces.contract.__main__ import build_app, build_live_app
 from surfaces.contract.live_player import LivePlayer
-from surfaces.contract.models import StageStateSnapshot, Task, TranscriptLine, ViewIntent
+from surfaces.contract.models import (
+    StageStateSnapshot,
+    Task,
+    TranscriptLine,
+    ViewIntent,
+    VoiceSnapshot,
+)
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "live_session"
 STEPS = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(FIXTURE_DIR.glob("step-*.json"))]
@@ -79,6 +85,63 @@ def test_diff_maps_a_tasks_change_to_a_tasks_intent_not_a_status_intent(session_
 
     assert [intent.kind for intent in intents] == ["tasks"]
     assert intents[0].tasks[0].text == "Draft the migration runbook."
+
+
+def test_diff_maps_a_voice_change_to_a_voice_intent_queue_untouched(session_dir):
+    """issue #164: `voice` is an owned field like `queue`, mapped to its own
+    intent kind -- and mapping it must not touch `queue`'s own diff path."""
+    player = LivePlayer(session_dir)
+    before = player.snapshot
+    after = before.model_copy(update={
+        "voice": VoiceSnapshot(speaking="Mira", since="2026-11-23T09:12:00+01:00", recent=[]),
+    })
+
+    intents = player._diff(before, after)
+
+    assert [intent.kind for intent in intents] == ["voice"]
+    assert intents[0].speaking == "Mira"
+    assert before.queue == after.queue   # queue fields unchanged by this diff
+
+
+def test_live_mode_two_alternating_speakers_then_silence(session_dir):
+    """issue #164 acceptance: "live mode test with two attributed speakers
+    alternating sets voice.speaking accordingly and clears it after
+    silence" -- the most load-bearing test of this card."""
+    player = LivePlayer(session_dir)
+    base = player.snapshot
+
+    mira_speaking = base.model_copy(update={
+        "voice": VoiceSnapshot(speaking="Mira", since="2026-11-23T09:12:00+01:00", recent=[]),
+    })
+    intents = player._diff(base, mira_speaking)
+    assert [i.kind for i in intents] == ["voice"]
+    assert intents[0].speaking == "Mira"
+
+    jonas_speaking = mira_speaking.model_copy(update={
+        "voice": VoiceSnapshot(
+            speaking="Jonas", since="2026-11-23T09:12:05+01:00",
+            recent=[{"name": "Mira", "last_at": "2026-11-23T09:12:05+01:00"}],
+        ),
+    })
+    intents = player._diff(mira_speaking, jonas_speaking)
+    assert [i.kind for i in intents] == ["voice"]
+    assert intents[0].speaking == "Jonas"
+    assert intents[0].recent[0].name == "Mira"
+
+    silence = jonas_speaking.model_copy(update={
+        "voice": VoiceSnapshot(
+            speaking=None, since=None,
+            recent=[{"name": "Jonas", "last_at": "2026-11-23T09:12:08+01:00"},
+                    {"name": "Mira", "last_at": "2026-11-23T09:12:05+01:00"}],
+        ),
+    })
+    intents = player._diff(jonas_speaking, silence)
+    assert [i.kind for i in intents] == ["voice"]
+    assert intents[0].speaking is None
+    assert intents[0].since is None
+    assert [r.name for r in intents[0].recent] == ["Jonas", "Mira"]
+
+    assert base.queue == silence.queue   # queue fields unchanged throughout
 
 
 def test_diff_maps_a_transcript_recent_change_to_a_transcript_recent_intent(session_dir):
