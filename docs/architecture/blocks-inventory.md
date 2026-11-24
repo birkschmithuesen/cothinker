@@ -221,6 +221,7 @@ graph/seed_note.py                                                              
 graph/vault_notes.py                                                              core:session
 modules/example_echo/module.py                                                   core:module
 shared/__init__.py                                                               core:session
+shared/actions_spool.py                                                           core:surface-api
 shared/agent.py                                                                   core:agent
 shared/blocks.py                                                                  core:session
 shared/instance.py                                                                core:instance
