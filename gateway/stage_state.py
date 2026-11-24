@@ -406,6 +406,11 @@ class StageState:
         self.queue: dict | None = None
         self.share: dict | None = None
         self.session_graph: dict | None = None
+        # The latest knowledge hits for the current topic, from the
+        # `knowledge-link` block's `knowledge:<topic_id>` view intent
+        # (issue #148). None means the key is left out of `content()`
+        # (key-absent-means-hidden), same as `queue`/`share`/`session_graph`.
+        self.knowledge: dict | None = None
 
     # ------------------------------------------------------------ helpers
     @property
@@ -1121,7 +1126,8 @@ class StageState:
         # Only ADDED, and only when a surface rendered them: key absent
         # means "section hidden" for the page.
         for key, value in (("queue", self.queue), ("share", self.share),
-                           ("session_graph", self.session_graph)):
+                           ("session_graph", self.session_graph),
+                           ("knowledge", self.knowledge)):
             if value is not None:
                 content[key] = value
         return content

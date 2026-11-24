@@ -20,7 +20,8 @@ table of the migration plan:
                                  entry itself, not this row)
     pending:<n>     status    -> announce / settle / warn, via the writer
     status:line     status    -> the operating line, clock stamped here
-    links:<topic>   artefact  -> `links`
+    links:<topic>   artefact  -> `links` (generic sink; no current producer,
+                                 kept for the stage's own "Vertiefen" sidebar)
     mirror:<n>      prompt    -> file the coach's contribution into the
                                  topic history (or the JSONL record when
                                  it did not land), the Nachtrag notice
@@ -29,6 +30,9 @@ table of the migration plan:
     share:room      share     -> content()["share"]
     graph:session   graph     -> content()["session_graph"]
     timer:current   timer     -> content()["agenda"]
+    knowledge:<id>  knowledge -> content()["knowledge"] (issue #148: the
+                                 knowledge-link block's named hit payload,
+                                 replacing the old bare-path `links:` kind)
 
 Rendering is idempotent: an intent whose payload is unchanged since the
 last call is not applied again, so passing the whole snapshot each time is
@@ -50,7 +54,8 @@ from typing import Any, Callable, Iterator, Mapping, Optional, Sequence
 from blocks.mirroring_coach.coach import NACHTRAG_PREFIX  # the block owns the constant
 from shared.surface import UserAction, ViewIntent
 
-KINDS = frozenset({"prompt", "status", "artefact", "graph", "timer", "queue", "share"})
+KINDS = frozenset({"prompt", "status", "artefact", "graph", "timer", "queue",
+                   "share", "knowledge"})
 
 # Keys of the agenda the legacy AgendaController owns and the timer intent
 # does not carry; they survive a timer render.
@@ -94,6 +99,7 @@ class StageSurface:
             "share": ("share", self._region("share")),
             "graph": ("graph", self._region("session_graph")),
             "timer": ("timer", self._timer),
+            "knowledge": ("knowledge", self._region("knowledge")),
         }
 
     # ------------------------------------------------------------ Surface
@@ -299,7 +305,8 @@ class StageSurface:
         for intent_id in [i for i in self._seen if i not in present]:
             del self._seen[intent_id]
             attribute = {"queue": "queue", "share": "share",
-                         "graph": "session_graph"}.get(_prefix(intent_id))
+                         "graph": "session_graph",
+                         "knowledge": "knowledge"}.get(_prefix(intent_id))
             if attribute is not None and getattr(self._state, attribute) is not None:
                 setattr(self._state, attribute, None)
                 changed = True
