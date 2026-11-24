@@ -108,7 +108,7 @@ def test_stop_reaches_blocks(tmp_path):
 def test_reflect_template_loads_with_empty_registry(tmp_path):
     blocks, logs = make_blocks(tmp_path, registry={})
     assert blocks.dispatch("tick", {"at": 0.0, "components": {}}) == 1  # the listener only
-    assert len(logs) == 13  # every Reflect block id is unregistered today
+    assert len(logs) == 14  # every Reflect block id is unregistered today
 
 
 def test_on_output_sees_block_output(tmp_path):
@@ -170,3 +170,60 @@ def test_capture_bullets_gets_the_worker_failure_markers(tmp_path):
         {"text": FAILURE_MARKERS[0] + ' ```json\n{"verlauf": ["x"]}\n```', "turn": 1},
         "capture-bullets")
     assert [(o["kind"], o["failed"]) for o in got] == [("parse_failed", True)]
+
+
+# ----------------------------------------------------------- call window
+class FakeBlockBuilder:
+    """Stands in for `gateway.segmenter.BlockBuilder` (issue #180): records
+    every `open_call`/`close_call` and returns a fixed `state()`."""
+
+    def __init__(self, state: dict) -> None:
+        self.calls: list[tuple[str, str]] = []
+        self._state = state
+
+    def open_call(self, source: str) -> None:
+        self.calls.append(("open", source))
+
+    def close_call(self, source: str) -> None:
+        self.calls.append(("close", source))
+
+    def state(self) -> dict:
+        return self._state
+
+
+def _listen_action(op: str) -> CoreEvent:
+    return CoreEvent("action", {"intent_id": "listen:room", "kind": "tap",
+                                "payload": {"op": op}, "at": 0.0})
+
+
+def test_wire_call_window_binds_the_real_segmenter_handle(tmp_path):
+    from blocks.call_window import CallWindowBlock
+    blocks, _ = make_blocks(tmp_path, registry={"call-window": CallWindowBlock})
+    bb = FakeBlockBuilder({"state": "idle", "since": None, "opened_by": None,
+                          "closes_in_s": None, "last_close": None})
+    bhw.wire_call_window(blocks, bb)
+    block = blocks.get("call-window")
+    assert block.bound
+    block.on_event(_listen_action("open"))
+    assert bb.calls == [("open", "tap")]
+
+
+def test_wire_call_window_is_a_noop_when_the_template_lacks_the_block(tmp_path):
+    blocks, _ = make_blocks(tmp_path, registry={})
+    bb = FakeBlockBuilder({"state": "idle", "since": None, "opened_by": None,
+                          "closes_in_s": None, "last_close": None})
+    bhw.wire_call_window(blocks, bb)  # must not raise
+
+
+def test_dispatch_call_window_state_emits_the_listen_room_intent(tmp_path):
+    from blocks.call_window import CallWindowBlock
+    emitted = []
+    blocks, _ = make_blocks(tmp_path, registry={"call-window": CallWindowBlock},
+                            sink=emitted.append)
+    bb = FakeBlockBuilder({"state": "listening", "since": 1.0, "opened_by": "voice",
+                          "closes_in_s": 3.0, "last_close": None})
+    bhw.wire_call_window(blocks, bb)
+    bhw.dispatch_call_window_state(blocks, bb)
+    assert len(emitted) == 1
+    assert emitted[0].id == "listen:room"
+    assert emitted[0].payload["state"] == "listening"
