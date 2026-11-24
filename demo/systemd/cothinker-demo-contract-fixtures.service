@@ -1,0 +1,23 @@
+[Unit]
+Description=CoThinker demo: contract (fixtures mode, always on for the design partner)
+
+[Service]
+Type=simple
+EnvironmentFile=%h/.config/cothinker-demo/secrets.env
+EnvironmentFile=-%h/.config/cothinker-demo/demo.env
+Environment=PYTHONPATH=@REPO@
+UnsetEnvironment=PYTHONHOME
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/surfaces/.venv/bin/python -m surfaces.contract --fixtures meeting --host 127.0.0.1 --port 8093
+StandardOutput=append:@DEMO_HOME@/logs/contract-fixtures.log
+StandardError=inherit
+# Unlike the other units, this one is never started or stopped by demo.sh:
+# it stays up independent of the demo stack, for the design partner to poke
+# at the fixture scenario at any time. Restart=always keeps it that way.
+Restart=always
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target
