@@ -104,8 +104,8 @@ class Echo:
         self.ctx = ctx
 
     def on_event(self, ev):
-        a = ev.payload["action"]
-        self.ctx.trace("action", {"intent_id": a.intent_id, "kind": a.kind})
+        a = ev.payload
+        self.ctx.trace("action", {"intent_id": a["intent_id"], "kind": a["kind"]})
         return ()
 
     def stop(self):
@@ -126,3 +126,17 @@ def test_names_not_in_trace(tmp_path):
     assert r.poll() == 1
     assert traced and traced[0][0] == "action"
     assert "Testperson" not in json.dumps(traced) + "".join(logs)
+
+
+def test_tap_reaches_the_real_speaker_queue_block(tmp_path):
+    """A stage tap read from actions.jsonl puts the person on the real
+    speaker-queue block's list -- no fake block, production registry."""
+    views = []
+    blocks = build_session_blocks(session_dir=tmp_path, sink=views.append,
+                                  log=lambda m: None)
+    path = tmp_path / "actions.jsonl"
+    path.write_text(line("queue:room", "tap", {"op": "request"}))
+    r = ActionsReader(path, dispatcher_for(blocks), lambda m: None)
+    assert r.poll() == 1
+    queues = [v for v in views if getattr(v, "kind", None) == "queue"]
+    assert queues, "speaker-queue block emitted no queue view for a tap"

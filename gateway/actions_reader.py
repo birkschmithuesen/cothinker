@@ -29,9 +29,19 @@ from typing import Callable
 from shared.surface import ACTION_KINDS, UserAction
 
 
+def action_payload(action: UserAction) -> dict:
+    """The `action` event payload the blocks read: the action's fields at the
+    top level (`intent_id`, `kind`, `person`, `payload`, `at`), plus `op` from
+    the action's own payload for blocks that only need the operation."""
+    inner = action.payload if isinstance(action.payload, dict) else {}
+    return {"intent_id": action.intent_id, "kind": action.kind,
+            "person": action.person, "payload": inner, "at": action.at,
+            "op": inner.get("op")}
+
+
 def dispatcher_for(blocks) -> Callable[[UserAction], object]:
     """The session host's dispatch path: `SessionBlocks.dispatch("action", ...)`."""
-    return lambda action: blocks.dispatch("action", {"action": action})
+    return lambda action: blocks.dispatch("action", action_payload(action))
 
 
 def _parse(raw: bytes) -> UserAction:
