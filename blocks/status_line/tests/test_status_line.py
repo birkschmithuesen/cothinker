@@ -5,7 +5,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""python3 -m pytest -q tests/test_block_status_line.py
+"""python3 -m pytest -q blocks/status_line/tests/test_status_line.py
 
 Ported from the archive `tests/test_status_line.py` (commit 3b4a843b): the
 precedence section only -- `pick()` moved into `blocks/status_line/line.py`

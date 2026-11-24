@@ -2290,7 +2290,7 @@ def test_and_the_new_line_reaches_the_render(protokoll_sitz):
 # `stage/stage.py::session_graph_payload()` only reads it back out, so
 # these fixtures set that field directly instead of synthesising history
 # rows for the stage to build from (that build path no longer exists
-# here -- see tests/test_session_graph.py and tests/test_block_graph.py
+# here -- see tests/test_session_graph.py and blocks/graph/tests/test_graph.py
 # for the block's own build/emit coverage, and
 # tests/test_stage_session_graph.py for the read-back path).
 KANARIE = "KANARIENVOGEL-9c1e"
@@ -2414,7 +2414,7 @@ def test_parts_g1_answers_with_exactly_graph_and_clock(graf_sitz, hole):
 
 def test_parts_g1_echoes_the_session_graph_from_buehne_json(graf_sitz, hole):
     # The graph tab's build/emit side is the `graph` block's own concern
-    # (tests/test_session_graph.py, tests/test_block_graph.py). Here the
+    # (tests/test_session_graph.py, blocks/graph/tests/test_graph.py). Here the
     # stage only has to read `session_graph` back out of `buehne.json` and
     # hand it through unchanged.
     assert _graf(hole) == _PROBE_GRAPH

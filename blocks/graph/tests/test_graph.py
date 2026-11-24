@@ -4,7 +4,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""python3 -m pytest -q tests/test_block_graph.py"""
+"""python3 -m pytest -q blocks/graph/tests/test_graph.py"""
 from __future__ import annotations
 
 from pathlib import Path

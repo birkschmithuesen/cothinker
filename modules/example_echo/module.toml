@@ -4,6 +4,7 @@ version = "0.1.0"
 api_version = 1
 entry = "module:EchoModule"
 profile = "profile"
+tests = "tests"
 
 [state]
 files = ["echo.json"]

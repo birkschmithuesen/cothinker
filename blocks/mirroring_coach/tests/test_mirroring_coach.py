@@ -14,7 +14,7 @@ confirmation, the real `LaneQueuePort` and real worker processes (the fake
 stand-in), never a real agent. The rest drive the block directly with an
 in-process fake `LanePort`.
 
-    python3 -m pytest -q tests/test_block_mirroring_coach.py
+    python3 -m pytest -q blocks/mirroring_coach/tests/test_mirroring_coach.py
 """
 from __future__ import annotations
 
@@ -28,9 +28,12 @@ from types import SimpleNamespace
 
 import pytest  # noqa: E402
 
-sys.path.insert(0, str(Path(__file__).resolve().parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gateway"))
+HERE = Path(__file__).resolve().parent
+ROOT = Path(__file__).resolve().parents[3]
+
+sys.path.insert(0, str(HERE))
+sys.path.insert(0, str(ROOT))
+sys.path.insert(0, str(ROOT / "gateway"))
 from blocks.mirroring_coach import coach as coach_mod  # noqa: E402
 from blocks.mirroring_coach.coach import (  # noqa: E402
     COACH_PAUSE_S, COACH_REQUEST, COACH_REQUEST_END, COACH_REQUEST_START,
@@ -47,8 +50,7 @@ from shared.modules import CoreEvent, StateStore  # noqa: E402
 from shared.surface import ViewIntent  # noqa: E402
 from stage_state import StageState  # noqa: E402
 
-HERE = Path(__file__).resolve().parent
-FAKE = str(HERE / "lane_fake_worker.py")
+FAKE = str(ROOT / "tests" / "lane_fake_worker.py")
 
 
 def forget(session_id: str) -> None:
@@ -133,7 +135,7 @@ def wait_until(cond, timeout: float = 5.0) -> bool:
     return cond()
 
 
-REFLECT = Path(__file__).resolve().parents[1] / "templates" / "reflect" / "template.toml"
+REFLECT = ROOT / "templates" / "reflect" / "template.toml"
 
 
 def _toml(v) -> str:
