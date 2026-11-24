@@ -114,6 +114,9 @@ tests/       python3 tests/all.py -- standard library only
 
 ## License and contributing
 
+Who built what: [`CREDITS.md`](CREDITS.md).
+
+
 **AGPL-3.0-only** (see the `LICENSE` file). The AGPL closes the so-called
 SaaS loophole: anyone who modifies CoThinker and offers it as a network
 service must publish their changes (§13). Anyone who runs it themselves
