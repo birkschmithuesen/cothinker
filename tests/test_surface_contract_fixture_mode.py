@@ -102,7 +102,7 @@ def test_meeting_scenario_exercises_the_queue_snapshot_field():
 
 
 def test_meeting_scenario_shows_one_listening_phase():
-    """issue #180, ADR 0023: the fixture demonstrates the call window
+    """issue #180, ADR 0024: the fixture demonstrates the call window
     opening (voice) and closing at least once, not left idle throughout
     -- so a surface can design the listen:room intent against real data."""
     frames = load_scenario("meeting")

@@ -215,7 +215,7 @@ class ListenClose(BaseModel):
 class ListenSnapshot(BaseModel):
     """`content()["listen"]`: the call-window block's `listen:room`
     view-intent payload, filled by `gateway.segmenter.BlockBuilder.state()`
-    (issue #180, ADR 0023). The window the wake word ("Hey Robo"), a tap,
+    (issue #180, ADR 0024). The window the wake word ("Hey Robo"), a tap,
     or the end phrase ("Robo, Ende") opens and closes; every sentence
     spoken while it is open belongs to the call."""
 
@@ -401,7 +401,7 @@ class StageStateSnapshot(BaseModel):
     listen: ListenSnapshot | None = Field(
         default=None,
         description="The call window's state, from the `call-window` block"
-        " (issue #180, ADR 0023); `None` when that block is absent from"
+        " (issue #180, ADR 0024); `None` when that block is absent from"
         " the session (key-absent-means-hidden, `StageState._content()`).",
     )
 
@@ -543,7 +543,7 @@ class KnowledgeIntent(KnowledgeSnapshot):
 
 class ListenIntent(BaseModel):
     """`listen:room`: the call-window block's view intent (kind `listen`,
-    issue #180, ADR 0023); the same shape as `StageStateSnapshot.listen`."""
+    issue #180, ADR 0024); the same shape as `StageStateSnapshot.listen`."""
 
     kind: Literal["listen"] = "listen"
     id: str = Field(description="Identity a user action refers back to.", examples=["listen:room"])

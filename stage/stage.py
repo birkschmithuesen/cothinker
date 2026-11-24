@@ -1801,7 +1801,7 @@ summary{cursor:pointer;padding:.4rem 0;color:var(--akz);font-size:.94rem}
  border:1px solid #3a4150;border-radius:6px;padding:.45rem .8rem;cursor:pointer}
 #teiln button:disabled{opacity:.5;cursor:default}
 #teiln-status{color:var(--dim);font-size:.8rem}
-/* The call-window toggle (issue #180, ADR 0023): icon plus word, never
+/* The call-window toggle (issue #180, ADR 0024): icon plus word, never
    colour alone -- "Robo hört" green while listening, "Robo" neutral
    while idle. */
 #listen-toggle.listen-on{background:#1d4430;border-color:#3d8b6a;color:#bfe8d4}
@@ -2005,7 +2005,7 @@ sgBlockAnchorJump();
     }
   });
 })();
-// The call-window toggle (issue #180, ADR 0023): sends and reads through
+// The call-window toggle (issue #180, ADR 0024): sends and reads through
 // the surface contract (/api/snapshot, /api/events, /api/actions,
 // ADR 0019), never through buehne.json or this stage's own /action route
 // -- POST /api/actions is a separate card (#183) and may still be a

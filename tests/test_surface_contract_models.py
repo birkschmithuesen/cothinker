@@ -201,7 +201,7 @@ def test_view_intent_union_accepts_knowledge_kind():
 
 
 def test_stage_state_snapshot_listen_defaults_to_none():
-    """issue #180, ADR 0023: the call window's snapshot field, same
+    """issue #180, ADR 0024: the call window's snapshot field, same
     key-absent-means-hidden convention as `queue`/`voice`/`share`."""
     assert StageStateSnapshot.model_fields["listen"].default is None
 

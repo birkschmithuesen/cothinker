@@ -4,7 +4,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""ADR 0022 level 3 for the call window (issue #180, ADR 0023): a recorded
+"""ADR 0022 level 3 for the call window (issue #180, ADR 0024): a recorded
 transcript runs through the REAL `gateway.segmenter.BlockBuilder`, the
 production Reflect template and the production block registry
 (`gateway.block_host_wiring.REGISTRY`, which already carries

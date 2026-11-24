@@ -241,7 +241,7 @@ def test_graph_rule_sets_session_graph_key():
 
 
 def test_listen_rule_sets_listen_key_and_clears_it():
-    """issue #180, ADR 0023: the call-window block's `listen:room` intent
+    """issue #180, ADR 0024: the call-window block's `listen:room` intent
     renders the same way as `queue`/`voice` -- set on an intent, cleared
     when the intent leaves the board -- so `/api/snapshot` (live mode,
     ADR 0019) can serve `listen` straight from `buehne.json` without a

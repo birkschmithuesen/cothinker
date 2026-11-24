@@ -413,7 +413,7 @@ class StageState:
         # (key-absent-means-hidden), same as `queue`/`share`/`session_graph`.
         self.knowledge: dict | None = None
         # The call window's state, from the `call-window` block's
-        # `listen:room` view intent (issue #180, ADR 0023). None means the
+        # `listen:room` view intent (issue #180, ADR 0024). None means the
         # key is left out of `content()` (key-absent-means-hidden), same
         # as `queue`/`share`/`session_graph`/`knowledge`.
         self.listen: dict | None = None

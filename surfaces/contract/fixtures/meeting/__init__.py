@@ -243,7 +243,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
                            recent=[{"name": "Tamar", "last_at": t1}, {"name": "Jonas", "last_at": t0}]),
                 KnowledgeIntent(id="knowledge:M2", topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
                 # Jonas calls Robo to lock the vendor timeline ("Hey Robo,
-                # ..."); the call window opens (issue #180, ADR 0023).
+                # ..."); the call window opens (issue #180, ADR 0024).
                 ListenIntent(id="listen:room", state="listening", since=now + 300.0,
                             opened_by="voice", closes_in_s=8.0),
             ],

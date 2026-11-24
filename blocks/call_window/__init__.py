@@ -4,7 +4,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""Building block `call-window` (issue #180, ADR 0023): the stage-facing
+"""Building block `call-window` (issue #180, ADR 0024): the stage-facing
 side of the call window the wake word opens. The window's state and its
 timers live in `gateway.segmenter.BlockBuilder` (pure, unit-tested there);
 this block owns none of that -- it only turns a tap into a call to the
@@ -15,7 +15,7 @@ Consumes `action` events with `intent_id == "listen:room"` (`op` one of
 `{"call_window": state}` (the host dispatches the segmenter's `state()`
 after every transition, voice-triggered or not). Emits the view intent
 `listen:room` (kind `listen`, audience `room`), payload exactly the
-segmenter's `state()` shape (ADR 0023's `ListenSnapshot`): `state`,
+segmenter's `state()` shape (ADR 0024's `ListenSnapshot`): `state`,
 `since`, `opened_by`, `closes_in_s`, `last_close`.
 
 Interim host handle (same pattern as `blocks/knowledge_link`'s

@@ -305,7 +305,7 @@ components:
     ListenIntent:
       description: '`listen:room`: the call-window block''s view intent (kind `listen`,
 
-        issue #180, ADR 0023); the same shape as `StageStateSnapshot.listen`.'
+        issue #180, ADR 0024); the same shape as `StageStateSnapshot.listen`.'
       properties:
         kind:
           const: listen

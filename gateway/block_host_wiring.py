@@ -307,7 +307,7 @@ def feed_utterance(minutes, blocks: SessionBlocks, text: str,
 # -------------------------------------------------------- call window
 def wire_call_window(blocks: SessionBlocks, bb) -> None:
     """Gives the `call-window` block its host handle onto the session's
-    real `gateway.segmenter.BlockBuilder` (issue #180, ADR 0023) --
+    real `gateway.segmenter.BlockBuilder` (issue #180, ADR 0024) --
     interim host handle, same pattern as `knowledge-link`'s
     `use_project` (see that block's own docstring). A no-op when the
     template does not carry the block (`bb` typed loosely to avoid this

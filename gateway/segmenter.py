@@ -359,7 +359,7 @@ class BlockBuilder:
 
     def state(self) -> dict:
         """The window's current state, for the `call_window` building
-        block to turn into the `listen:room` view intent (ADR 0023)."""
+        block to turn into the `listen:room` view intent (ADR 0024)."""
         with self._lock:
             last_close = dict(self._last_close) if self._last_close else None
             if self._window != "listening":

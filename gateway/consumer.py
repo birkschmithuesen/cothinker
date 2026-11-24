@@ -3999,7 +3999,7 @@ def main() -> int:
     bb = BlockBuilder(output=block_done, pause_s=a.pause,
                       max_s=a.max_block, wake_word=a.wake_word,
                       call_silence_s=a.call_silence_s, call_max_s=a.call_max_s)
-    # The call-window block's host handle (issue #180, ADR 0023): a no-op
+    # The call-window block's host handle (issue #180, ADR 0024): a no-op
     # when the template does not carry the block.
     wire_call_window(session_blocks, bb)
     dispatch_call_window_state(session_blocks, bb)
@@ -4026,7 +4026,7 @@ def main() -> int:
                 # A silence/max timeout closes the call window from here,
                 # not from an action -- the block only reacts to events and
                 # never polls the segmenter, so a voice-triggered
-                # transition is pushed explicitly (issue #180, ADR 0023).
+                # transition is pushed explicitly (issue #180, ADR 0024).
                 dispatch_call_window_state(session_blocks, bb)
                 try:
                     actions_reader.poll()
@@ -4373,7 +4373,7 @@ def main() -> int:
                                         allow_wake=not intro_line)
                         # A wake word or the end phrase can open/close the
                         # call window SYNCHRONOUSLY inside this very call
-                        # (issue #180, ADR 0023) -- pushed right away so a
+                        # (issue #180, ADR 0024) -- pushed right away so a
                         # voice-triggered transition reaches `listen:room`
                         # exactly like a tap-triggered one does.
                         dispatch_call_window_state(session_blocks, bb)

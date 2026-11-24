@@ -36,7 +36,7 @@ table of the migration plan:
     knowledge:<id>  knowledge -> content()["knowledge"] (issue #148: the
                                  knowledge-link block's named hit payload,
                                  replacing the old bare-path `links:` kind)
-    listen:room     listen    -> content()["listen"] (issue #180, ADR 0023:
+    listen:room     listen    -> content()["listen"] (issue #180, ADR 0024:
                                  the call-window block's state)
 
 Rendering is idempotent: an intent whose payload is unchanged since the
