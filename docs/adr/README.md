@@ -36,3 +36,4 @@ an entry number of the 2026-11-20 concept-round decision log, or a decision (D1,
 | [0023](0023-design-tokens.md) | Design tokens — one token file, generated CSS, the CoThinker default look | proposed |
 | [0024](0024-call-window.md) | Call window replaces the instant wake-word cut | accepted |
 | [0025](0025-level-4-tests-what-a-real-participant-hits.md) | Level-4 acceptance tests what a real participant hits | proposed |
+| [0026](0026-level-2-orders-under-lanes.md) | Level-2 orders under `--lanes` run as orders turns on the serial worker | proposed |
