@@ -21,7 +21,7 @@ from surfaces.contract.player import ScenarioPlayer
 SSE_PING_S = 15.0
 
 
-def create_app(player: ScenarioPlayer | None = None) -> FastAPI:
+def create_app(player: ScenarioPlayer | None = None, cors_origins: list[str] | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         task = asyncio.create_task(player.run()) if player is not None else None
@@ -40,16 +40,15 @@ def create_app(player: ScenarioPlayer | None = None) -> FastAPI:
         lifespan=lifespan,
     )
 
-    # This is the fixture-mode contract server (ADR 0019 point 2), built
-    # against from outside the repository and typically on a different
-    # origin than the surface under test -- not yet the live core
-    # endpoint (issue #132), so a permissive CORS policy is safe here.
-    app.add_middleware(
-        CORSMiddleware,
-        allow_origins=["*"],
-        allow_methods=["*"],
-        allow_headers=["*"],
-    )
+    # Same-origin by default; a caller opts a surface served from another
+    # origin into CORS by passing its own origins (issue #147 point 5).
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     @app.get("/snapshot", response_model=StageStateSnapshot, tags=["snapshot"])
     def get_snapshot() -> StageStateSnapshot:
