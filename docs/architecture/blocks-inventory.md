@@ -59,12 +59,17 @@ tables below are built from.
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
 | timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
 | speaker queue | Show + share | `blocks/speaker_queue/__init__.py` 102, `queue.py` 82 — 184 | Reflect | 1× |
+| voice attribution (who is talking right now, by track/STT speaker label) | Show + share | `blocks/voice_attribution/__init__.py` 104, `voice.py` 73 — 177 | core | 1× |
 
 **Reflect check:** all 12 of the blocks Birk confirmed for Reflect now have
 code in this repository — topic change, capture bullets, condense,
 decisions / tasks / open questions, minutes document, mirroring / coach
 question, knowledge link, status line, session graph, speaking share, timer,
-speaker queue.
+speaker queue. Voice attribution (issue #164) is a 13th block, registered
+in `gateway/block_host_wiring.py`'s `REGISTRY` but deliberately NOT added to
+`templates/reflect/template.toml`: ADR 0010 fixes Reflect at exactly 12
+blocks, so wiring a 13th into the live template is a template/ADR decision
+for the maintainer, not one this inventory entry makes on its own.
 
 ## STT module, surfaces, core (not blocks)
 
@@ -120,6 +125,7 @@ block:write-text             block — write text (prologue, scene, script)
 block:speaking-share         block — speaking share (talk share + room talk time)
 block:timer                  block — timer (planned items, drift, projected end)
 block:speaker-queue          block — speaker queue (tap to request/leave the floor)
+block:voice-attribution      block — voice attribution (who is talking right now, by track/STT speaker label)
 retire                       dropped by the target (decision 25 engines)
 ```
 
@@ -148,6 +154,8 @@ blocks/timer/clock.py                                                           
 blocks/decisions_tasks_questions/__init__.py                                      block:decisions-tasks-questions
 blocks/speaker_queue/__init__.py                                                  block:speaker-queue
 blocks/speaker_queue/queue.py                                                     block:speaker-queue
+blocks/voice_attribution/__init__.py                                              block:voice-attribution
+blocks/voice_attribution/voice.py                                                 block:voice-attribution
 blocks/topics/__init__.py                                                         block:topics
 blocks/topics/detect.py                                                           block:topics
 blocks/topics/hysteresis.py                                                       block:topics
