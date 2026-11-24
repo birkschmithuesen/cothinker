@@ -101,6 +101,21 @@ def test_meeting_scenario_exercises_the_queue_snapshot_field():
     assert len(speaking_pids) > 1         # the speaker queue snapshot turns over too
 
 
+def test_meeting_scenario_shows_one_listening_phase():
+    """issue #180, ADR 0023: the fixture demonstrates the call window
+    opening (voice) and closing at least once, not left idle throughout
+    -- so a surface can design the listen:room intent against real data."""
+    frames = load_scenario("meeting")
+    kinds = {vi.kind for frame in frames for vi in frame.view_intents}
+    assert "listen" in kinds
+    states = [f.snapshot.listen.state for f in frames if f.snapshot.listen is not None]
+    assert "listening" in states
+    assert "idle" in states
+    closes = [f.snapshot.listen.last_close for f in frames
+             if f.snapshot.listen is not None and f.snapshot.listen.last_close is not None]
+    assert closes, "no frame shows the call window's last_close"
+
+
 def test_meeting_scenario_agenda_times_are_relative_to_now():
     """issue #147 point 2: a hardcoded epoch (2024-11-23) made the item's
     remaining time overrun by two years. Fixture times must be anchored to

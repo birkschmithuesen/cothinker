@@ -38,6 +38,9 @@ from surfaces.contract.models import (
     KnowledgeHit,
     KnowledgeIntent,
     KnowledgeSnapshot,
+    ListenClose,
+    ListenIntent,
+    ListenSnapshot,
     PromptIntent,
     QueueSeat,
     QueueSnapshot,
@@ -163,6 +166,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
             ),
             queue=_queue("Mira", ["Jonas", "Tamar"]),
             voice=_voice("Jonas", t0, []),
+            listen=ListenSnapshot(),
             tasks=[],
             transcript_recent=[],
         )
@@ -229,6 +233,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 ),
                 queue=_queue("Jonas", ["Tamar", "Mira"]),
                 voice=_voice("Mira", t2, [("Tamar", t1), ("Jonas", t0)]),
+                listen=ListenSnapshot(state="listening", since=now + 300.0, opened_by="voice", closes_in_s=8.0),
                 transcript_recent=transcript_after_jonas,
                 knowledge=KnowledgeSnapshot(topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
             ),
@@ -237,6 +242,10 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 VoiceIntent(id="voice:room", speaking="Mira", since=t2,
                            recent=[{"name": "Tamar", "last_at": t1}, {"name": "Jonas", "last_at": t0}]),
                 KnowledgeIntent(id="knowledge:M2", topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
+                # Jonas calls Robo to lock the vendor timeline ("Hey Robo,
+                # ..."); the call window opens (issue #180, ADR 0023).
+                ListenIntent(id="listen:room", state="listening", since=now + 300.0,
+                            opened_by="voice", closes_in_s=8.0),
             ],
         ),
         # Speaker queue turns over to Tamar; another contribution comes in.
@@ -258,6 +267,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 ),
                 queue=_queue("Tamar", ["Mira", "Jonas"]),
                 voice=_voice("Tamar", t3, [("Mira", t2), ("Jonas", t0)]),
+                listen=ListenSnapshot(last_close=ListenClose(reason="end", at=now + 450.0)),
                 transcript_recent=transcript_after_tamar,
                 knowledge=KnowledgeSnapshot(topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
             ),
@@ -265,6 +275,10 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 TranscriptRecentIntent(id="VI5", lines=transcript_after_tamar),
                 VoiceIntent(id="voice:room", speaking="Tamar", since=t3,
                            recent=[{"name": "Mira", "last_at": t2}, {"name": "Jonas", "last_at": t0}]),
+                # "Robo, Ende" closes the call window the previous frame
+                # opened.
+                ListenIntent(id="listen:room", state="idle",
+                            last_close=ListenClose(reason="end", at=now + 450.0)),
             ],
         ),
         # A short pause.
