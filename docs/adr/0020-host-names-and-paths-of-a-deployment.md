@@ -1,6 +1,6 @@
 # ADR 0020: Host names and paths of a deployment
 
-- **Status:** accepted
+- **Status:** accepted, amended by ADR 0021
 - **Date:** 2026-11-24
 
 ## Context
