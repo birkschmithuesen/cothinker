@@ -5,9 +5,10 @@ Description=CoThinker demo: contract (fixtures mode, always on for the design pa
 Type=simple
 EnvironmentFile=%h/.config/cothinker-demo/secrets.env
 EnvironmentFile=-%h/.config/cothinker-demo/demo.env
-UnsetEnvironment=PYTHONPATH PYTHONHOME
+Environment=PYTHONPATH=@REPO@
+UnsetEnvironment=PYTHONHOME
 WorkingDirectory=@REPO@
-ExecStart=/usr/bin/python3 -m surfaces.contract --fixtures meeting --host 127.0.0.1 --port 8093
+ExecStart=@REPO@/surfaces/.venv/bin/python -m surfaces.contract --fixtures meeting --host 127.0.0.1 --port 8093
 StandardOutput=append:@DEMO_HOME@/logs/contract-fixtures.log
 StandardError=inherit
 # Unlike the other units, this one is never started or stopped by demo.sh:
