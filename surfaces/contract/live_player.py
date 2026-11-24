@@ -25,6 +25,8 @@ from surfaces.contract.models import (
     ShareIntent,
     StageStateSnapshot,
     StatusIntent,
+    TasksIntent,
+    TranscriptRecentIntent,
 )
 
 POLL_INTERVAL_S = 0.3
@@ -33,6 +35,14 @@ _OWNED_INTENT = {
     "queue": (QueueIntent, "queue:room"),
     "share": (ShareIntent, "share:room"),
     "session_graph": (GraphIntent, "graph:session"),
+}
+
+# Fields holding a bare list rather than a single model (issue #147 point 3:
+# tasks/transcript_recent are now owned fields too, like queue/share/
+# session_graph), mapped to the list kwarg their intent class expects.
+_OWNED_LIST_INTENT = {
+    "tasks": (TasksIntent, "tasks:live", "tasks"),
+    "transcript_recent": (TranscriptRecentIntent, "transcript:live", "lines"),
 }
 
 
@@ -77,8 +87,13 @@ class LivePlayer:
             if owned is not None and new is not None:
                 intent_cls, intent_id = owned
                 intents.append(intent_cls(id=intent_id, **new.model_dump()))
-            else:
-                other_changed.append(name)
+                continue
+            owned_list = _OWNED_LIST_INTENT.get(name)
+            if owned_list is not None:
+                intent_cls, intent_id, kwarg = owned_list
+                intents.append(intent_cls(id=intent_id, **{kwarg: new}))
+                continue
+            other_changed.append(name)
         if other_changed:
             self._status_seq += 1
             intents.append(StatusIntent(
