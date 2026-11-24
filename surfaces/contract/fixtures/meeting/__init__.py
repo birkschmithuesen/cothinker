@@ -3,9 +3,10 @@
 Invented data, no real persons. Agenda items advance, utterances carry a
 speaker, a decision and an open question are raised, the speaker queue
 turns over, the meeting takes a pause and tasks are named at the close.
-Two of the pushed view intents (`transcript:recent`, `tasks`) are fields
-the core cannot fill yet (issue #129); this fixture populates them anyway
-so a surface can design against their shape, per ADR 0019 point 3.
+One of the pushed view intents (`transcript:recent`) is a field the core
+cannot fill yet (issue #129); this fixture populates it anyway so a surface
+can design against its shape, per ADR 0019 point 3. `tasks` is filled by
+the core since ADR 0024.
 
 The speaker queue (`StageStateSnapshot.queue`, the speaker-queue block's
 `queue:room` payload) turns over in step with `agenda.speaker` /
@@ -292,8 +293,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
             view_intents=[StatusIntent(id="VI6", text="Pause for coffee", severity="info")],
         ),
         # The meeting resumes at the closing round; the question is resolved
-        # and tasks are named -- the tasks field (planned, issue #129) is
-        # populated for the fixture.
+        # and tasks are named (the `tasks` field, issue #129).
         Frame(
             delay_s=1.5,
             snapshot=snapshot(
