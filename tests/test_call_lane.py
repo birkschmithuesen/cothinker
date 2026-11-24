@@ -1169,3 +1169,15 @@ def test_start_and_stats_are_the_call_lanes_alone():
     assert "cache_read_ratio" in lane.stats() and "jobs_run" in lane.stats()
     assert "call" not in lane.stats() and "coach" not in lane.stats()
     lane.stop()
+
+
+# ------------------------------------------- issue #150: the wake phrase
+# must not reach the call lane's prompt as part of the order.
+def test_handle_block_strips_the_wake_phrase_from_the_call_text():
+    lane, state, writer, rec, clock = _lane("bx14")
+    submitted: list = []
+    original_submit = lane.call_lane.submit
+    lane.call_lane.submit = lambda job: (submitted.append(job), original_submit(job))[1]
+    lane.handle_block("Ann", "Hey Robo, fass zusammen", wake_word=True)
+    assert submitted and submitted[0].meta["calls"][0]["text"] == "fass zusammen"
+    lane.stop()

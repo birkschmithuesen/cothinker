@@ -4221,7 +4221,7 @@ def sec_32(sec_31):
     # is the one live path that shows a `main` announcement start AND end.
     try:
         TROCKEN = ["Erster Satz fuer den Trockenlauf, lang genug zum Schneiden.",
-                   "Robo, fasse den Trockenlauf bitte kurz zusammen.",
+                   "Hey Robo, fasse den Trockenlauf bitte kurz zusammen.",
                    "Dritter Satz fuer den Trockenlauf, damit es weitergeht.",
                    "Vierter Satz fuer den Trockenlauf, zum guten Schluss."]
     except Exception:  # noqa: BLE001
@@ -4907,7 +4907,7 @@ def sec_36(sec_35):
         _blk_cz2 = consumer.Block(
             sentences=["Der Gartenverein diskutiert die Satzung schon seit einer Stunde.",
                        "Dann kommt noch das Sommerfest dazu.",
-                       "Robo, zeig uns die Liste der Beetpaten."],
+                       "Hey Robo, zeig uns die Liste der Beetpaten."],
             start=30.0, end=60.0, reason="wake", wake_word=True)
     except Exception:  # noqa: BLE001
         rec.error += traceback.format_exc()[-1200:]
