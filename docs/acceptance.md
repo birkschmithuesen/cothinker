@@ -135,10 +135,17 @@ rendered or printed.
    heuristic on the raising block's own naming, not a guarantee every
    knowledge block uses that exact word.
 
-8. **Cleanup** — the run's session is marked with the title prefix `e2e-`
-   and the tool prints the exact operator command to remove it afterwards.
-   **This tool never deletes server data itself** — the operator runs that
-   command by hand, on the server, when ready.
+8. **Cleanup** — there is no automated cleanup tool for this deployment, and
+   the tool says so plainly instead of naming one that does not exist: the
+   run's checks exercise the deployment's own live, already-running session
+   (its title is fixed when its consumer process starts, see
+   `demo/systemd/cothinker-demo-consumer.service`), not a separate session
+   created for this run, so there is nothing scoped to just this run to
+   delete. **This tool never deletes server data itself.** If the run's
+   synthetic probe lines ever need removing from the transcript, the
+   operator locates today's session folder (`<date>-<title-slug>` under
+   the deployment's configured sessions directory — see
+   `gateway/consumer.py`'s `slugify()`) and edits or removes it by hand.
 
 9. **Output** — `report.json` and `report.md`, one row per check with its
    status (`PASS`/`FAIL`/`SKIPPED`) and evidence; exit code 0 only if no

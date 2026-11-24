@@ -360,6 +360,12 @@ def test_cleanup_command_names_the_session_prefix_and_no_token():
     cmd = e2e.cleanup_command("e2e-20261124T120000Z")
     assert "e2e-20261124T120000Z" in cmd
     assert "t=" not in cmd
+    # Must not claim a specific CLI tool/subcommand that does not exist
+    # anywhere in this repo (grep -rn "project-cli" only ever finds this
+    # function's own prior, wrong claim).
+    assert "cli" not in cmd.lower()
+    assert "project-cli" not in cmd
+    assert "session delete" not in cmd
 
 
 # --------------------------------------------------------------------------

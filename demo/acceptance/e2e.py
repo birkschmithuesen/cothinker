@@ -365,9 +365,22 @@ def count_knowledge_hits(snapshot: dict) -> int:
 
 
 def cleanup_command(session_title: str) -> str:
-    return ("Session marked '%s'. To remove it, run on the server: "
-            "project-cli session delete --title-prefix '%s'"
-            % (session_title, session_title))
+    """No tool removes just this run's data: the run exercises the
+    deployment's own already-running, already-named session (its title is
+    fixed when its consumer process starts, see
+    demo/systemd/cothinker-demo-consumer.service), not a separate session
+    created for this run -- there is nothing scoped to `session_title`
+    alone to delete. Say so honestly instead of naming a delete command
+    that does not exist anywhere in this repo."""
+    return ("Acceptance run '%s' finished. No automated cleanup tool exists "
+            "for this deployment: its checks ran against the deployment's "
+            "own live session, not an isolated one of this run's own, so "
+            "there is nothing scoped to just this run to delete. If the "
+            "synthetic probe lines ever need removing from the transcript, "
+            "locate today's session folder (named <date>-<title-slug>, see "
+            "gateway/consumer.py's slugify()) under this deployment's "
+            "configured sessions directory and edit or remove it by hand."
+            % session_title)
 
 
 # --------------------------------------------------------------------------
