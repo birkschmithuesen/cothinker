@@ -17,7 +17,15 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from gateway.segmenter import BlockBuilder  # noqa: E402
-from shared.wake_word import strip_wake  # noqa: E402
+from shared.wake_word import END_PHRASE_RE, WAKE_NOT, strip_wake  # noqa: E402
+
+
+def _end_fires(text: str) -> bool:
+    m = END_PHRASE_RE.match(text)
+    if not m:
+        return False
+    name = next((v for v in m.groupdict().values() if v is not None), None)
+    return not (name and WAKE_NOT.match(name))
 
 
 def make_bb(wake_word: str = "hey robo") -> BlockBuilder:
@@ -109,3 +117,21 @@ def test_strip_wake_keeps_text_without_a_leading_phrase():
 
 def test_strip_wake_keeps_a_false_friend():
     assert strip_wake("Hey Robert, mach das") == "Hey Robert, mach das"
+
+
+# ------------------------------------------------------------ END_PHRASE_RE
+END_FIRES = ["Robo, Ende", "Robo Ende", "Danke, Robo", "Danke Robo",
+             "Bobo, Ende", "Robo-Ende"]
+END_DOES_NOT_FIRE = ["Roboter, Ende", "Hey Roboter, Ende", "Ende der Diskussion",
+                     "Danke, Robert", "Danke schoen"]
+
+
+def test_end_phrase_fires():
+    for text in END_FIRES:
+        assert _end_fires(text), f"expected end phrase to fire on: {text!r}"
+
+
+def test_end_phrase_does_not_fire_on_false_friends():
+    for text in END_DOES_NOT_FIRE:
+        assert not _end_fires(text), \
+            f"expected end phrase NOT to fire on: {text!r}"
