@@ -138,6 +138,8 @@ export function logUpdate(status) {
   document.querySelector('[data-empty="updates"]').hidden = true;
 }
 
+export function showConnection(text) { document.getElementById("connection-state").textContent = text || ""; }
+
 export function showError(text) { document.getElementById("command-error").textContent = text || ""; }
 
 export function openStopDialog(count) {

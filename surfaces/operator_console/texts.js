@@ -29,5 +29,8 @@ export const TEXT = {
   stopWarning: (count) => `Noch ${count} Teilnehmende im Meeting.`,
   stopForce: "Trotzdem beenden", stopPlain: "Beenden", cancel: "Abbrechen",
   seconds: "s",
-  connectionLost: "Verbindung zum Betrieb unterbrochen.",
+  connectionLost: "Verbindung zum Betrieb unterbrochen. Neuer Versuch folgt.",
+  authFailed: "Zugang abgelehnt: Token fehlt oder ist ungültig.",
+  statusFailed: "Verbindung zum Betrieb fehlgeschlagen.",
+  commandFailed: "Befehl fehlgeschlagen.",
 };

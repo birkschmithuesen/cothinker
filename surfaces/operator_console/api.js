@@ -1,5 +1,7 @@
-// Operator contract client (issue #159): Bearer token header on every call,
-// never in a URL; the push channel is read with fetch + a stream reader,
+// Operator contract client (issue #159): the token is sent as a Bearer header on
+// every call and never put into a request URL (the page itself receives it as
+// the `?token=` query parameter, which is how the contract check passes it);
+// the push channel is read with fetch + a stream reader,
 // because EventSource cannot carry the header (as surfaces/operator/examples/minimal).
 const params = new URLSearchParams(location.search);
 const base = params.get("api") || "/operator/";
@@ -7,7 +9,11 @@ const headers = { Authorization: "Bearer " + (params.get("token") || "") };
 
 export async function getJson(path) {
   const response = await fetch(base + path, { headers });
-  if (!response.ok) throw new Error(`${path} ${response.status}`);
+  if (!response.ok) {
+    const error = new Error(`${path} ${response.status}`);
+    error.code = response.status;
+    throw error;
+  }
   return response.json();
 }
 
@@ -15,12 +21,25 @@ export async function post(path, body) {
   const response = await fetch(base + path, {
     method: "POST", headers: { ...headers, "Content-Type": "application/json" }, body: JSON.stringify(body),
   });
-  return { ok: response.ok, code: response.status, body: await response.json() };
+  let parsed = {};
+  try { parsed = await response.json(); } catch (err) { /* non-JSON body, e.g. a proxy error page */ }
+  const answerBody = parsed && typeof parsed === "object" ? parsed : {};
+  return { ok: response.ok, code: response.status, body: answerBody, message: response.ok ? "" : detailText(answerBody.detail) };
+}
+
+// FastAPI sends `detail` as a string, or as a list of validation errors.
+function detailText(detail) {
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail.map((item) => (item && typeof item.msg === "string" ? item.msg : "")).filter(Boolean).join("; ");
+  }
+  return "";
 }
 
 export async function stream(onStatus, onDown) {
   try {
     const response = await fetch(base + "events", { headers });
+    if (!response.ok) throw new Error(`events ${response.status}`);
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";

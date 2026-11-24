@@ -2,7 +2,7 @@
 <!--
   CoThinker operator console (issue #173): the page for the person running a
   session, against the operator contract (issue #159, surfaces/operator/).
-  `?api=<base>/operator/&token=<token>`; the token travels only as a Bearer header.
+  `?api=<base>/operator/&token=<token>`; the token is read from the query and sent only as a Bearer header.
 -->
 <html lang="de" data-running="false">
 <head>
@@ -24,12 +24,13 @@
         <label><span data-label="title"></span> <input id="start-title" required autocomplete="off"></label>
         <button type="submit" id="start-button"></button>
       </form>
-      <button type="button" id="stop"></button>
+      <button type="button" id="stop" disabled></button>
       <div class="switch">
         <select id="switch-project"></select>
         <button type="button" id="switch"></button>
         <p id="switch-hint" class="hint"></p>
       </div>
+      <p id="connection-state" role="status"></p>
       <p id="command-error" role="alert"></p>
       <div class="content"></div>
       <p class="empty" data-empty="control"></p>

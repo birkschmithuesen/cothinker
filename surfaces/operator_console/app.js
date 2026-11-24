@@ -18,10 +18,41 @@ function onPush(next) {
 }
 
 async function command(path, body) {
-  const answer = await post(path, body);
-  views.showError(answer.ok ? "" : answer.body.detail);
+  let answer;
+  try {
+    answer = await post(path, body);
+  } catch (err) {
+    views.showError(TEXT.commandFailed);
+    return { ok: false, code: 0, body: {} };
+  }
+  views.showError(answer.ok ? "" : answer.message || TEXT.commandFailed);
   if (answer.body.status) render(answer.body.status);
   return answer;
+}
+
+const RECONNECT_MS = 3000;
+
+function statusFailure(err) {
+  views.showConnection(err && (err.code === 401 || err.code === 403) ? TEXT.authFailed : TEXT.statusFailed);
+}
+
+async function loadStatus() {
+  try {
+    onPush(await getJson("status"));
+    return true;
+  } catch (err) {
+    statusFailure(err);
+    return false;
+  }
+}
+
+function connect() {
+  stream((next) => { views.showConnection(""); onPush(next); }, async () => {
+    views.showConnection(TEXT.connectionLost);
+    await new Promise((resolve) => setTimeout(resolve, RECONNECT_MS));
+    connect();
+    await loadStatus();
+  });
 }
 
 views.applyLabels();
@@ -34,7 +65,9 @@ document.getElementById("start").addEventListener("submit", (event) => {
   });
 });
 
-document.getElementById("stop").addEventListener("click", () => views.openStopDialog(status.meeting.count));
+document.getElementById("stop").addEventListener("click", () => {
+  if (status) views.openStopDialog(status.meeting.count);
+});
 document.getElementById("stop-cancel").addEventListener("click", () => document.getElementById("stop-dialog").close());
 document.getElementById("stop-confirm").addEventListener("click", async (event) => {
   const force = event.currentTarget.dataset.force === "true";
@@ -45,8 +78,8 @@ document.getElementById("stop-confirm").addEventListener("click", async (event) 
 document.getElementById("switch").addEventListener("click", () =>
   command("project", { project_id: document.getElementById("switch-project").value }));
 
-Promise.all([getJson("status"), getJson("projects").catch(() => [])]).then(([first, list]) => {
+getJson("projects").catch(() => []).then(async (list) => {
   projects = list;
-  onPush(first);
+  await loadStatus();
 });
-stream(onPush, () => views.showError(TEXT.connectionLost));
+connect();
