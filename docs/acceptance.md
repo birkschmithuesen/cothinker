@@ -92,13 +92,25 @@ rendered or printed.
    audio *quality* — byte counters are blind to packet loss or jitter.
 
 5. **Surfaces** — Playwright opens stage and monitor at 1920×1080 against
-   `?api=` on the public contract route, while the call plays. Asserts the
-   two participants' real names appear (never a generic "Speaker N"), the
-   live snapshot's current agenda item (`agenda.current_text`, from the
-   project's own `agenda.md` -- unrelated to the spoken script's probe
-   lines; `SKIPPED` when no agenda is configured) is visible, and no
+   `?api=` on the public contract route, connecting before the script
+   finishes so their SSE subscriptions are live through the rest of it,
+   then asserts: the two participants' real names appear on each surface
+   (never a generic "Speaker N"), monitor's current agenda item
+   (`agenda.current_text`, from the project's own `agenda.md` -- unrelated
+   to the spoken script's probe lines; `SKIPPED` when no agenda is
+   configured; stage was never expected to show it, see below), and no
    console errors were logged; screenshots are saved. Does not prove the
    layout is usable at other viewport sizes.
+
+   Two things this check can legitimately report FAIL for today, not
+   because the check is wrong but because the feature behind it is not
+   wired up yet: monitor's own markup renders participant names from the
+   `transcript:recent` view-intent (last three contributions), which
+   `surfaces/contract/live_player.py` does not yet derive for a live
+   session (only `StatusIntent` is); and `stage/stage.py`'s own protocol
+   rendering never includes `agenda.current_text` as a label, only the
+   written protocol's own topics -- the current agenda item is monitor's
+   job (ADR 0012), not stage's.
 
 6. **Contract** — `surfaces/contract/check.py`'s own conformance check
    (ADR 0019) runs against the live monitor URL, exactly as

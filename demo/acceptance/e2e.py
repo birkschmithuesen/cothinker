@@ -465,15 +465,21 @@ def check_surfaces(base_url: str, token: str, names: list[str], out_dir: Path,
                                  "PASS" if not missing_names else "FAIL",
                                  "missing: %s" % ", ".join(missing_names) if missing_names
                                  else "all of %s present" % ", ".join(names)))
-            if current_item is None:
-                checks.append(Check("%s shows the current agenda item" % surface_name,
-                                     "SKIPPED", "no agenda configured for this deployment"))
-            else:
-                found = current_item in body_text
-                checks.append(Check("%s shows the current agenda item" % surface_name,
-                                     "PASS" if found else "FAIL",
-                                     "current agenda item %r %s" % (
-                                         current_item, "found" if found else "not found")))
+            # Only monitor is the room-display surface the current agenda
+            # item is meant for (ADR 0012); stage renders the written
+            # protocol's own topics instead (confirmed live, reading
+            # stage/stage.py's render_protocol_v2: no agenda.current_text
+            # anywhere in its output) and was never expected to show it.
+            if surface_name == "monitor":
+                if current_item is None:
+                    checks.append(Check("monitor shows the current agenda item",
+                                         "SKIPPED", "no agenda configured for this deployment"))
+                else:
+                    found = current_item in body_text
+                    checks.append(Check("monitor shows the current agenda item",
+                                         "PASS" if found else "FAIL",
+                                         "current agenda item %r %s" % (
+                                             current_item, "found" if found else "not found")))
             page.screenshot(path=str(out_dir / ("%s.png" % surface_name)), full_page=True)
             checks.append(Check("%s has no console errors" % surface_name,
                                  "PASS" if not console_errors else "FAIL",
