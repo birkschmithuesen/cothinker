@@ -1,0 +1,308 @@
+"""Standard end-to-end acceptance run (ADR 0022 level 4, issue #153).
+
+Covers the parts of `demo.acceptance.e2e` that do not need a network, a
+browser or `piper`/`espeak` installed: report building and token
+redaction, the preflight matrix (mocked HTTP), SKIPPED-not-PASS for the
+espeak fallback, the WebRTC stats classifier, and the probe script
+builder. The participant/surfaces/contract orchestration itself is only
+exercised by the real run documented in `docs/acceptance.md`.
+"""
+from __future__ import annotations
+
+import json
+
+import pytest
+
+from demo.acceptance import e2e
+
+
+# --------------------------------------------------------------------------
+# Report / Check / redaction
+# --------------------------------------------------------------------------
+
+
+def test_report_redacts_token_from_check_detail():
+    report = e2e.Report(base_url="https://example.org", token="s3cr3t-token")
+    report.add("preflight stage", "PASS", "GET https://example.org/stage/?t=s3cr3t-token -> 200")
+    assert "s3cr3t-token" not in json.dumps(report.to_dict())
+    assert "s3cr3t-token" not in report.to_markdown()
+    assert "<redacted>" in report.to_markdown()
+
+
+def test_report_passed_is_false_with_any_fail():
+    report = e2e.Report(base_url="https://example.org", token="x")
+    report.add("a", "PASS")
+    report.add("b", "SKIPPED")
+    assert report.passed
+    report.add("c", "FAIL")
+    assert not report.passed
+
+
+def test_report_to_markdown_lists_every_check_with_its_status():
+    report = e2e.Report(base_url="https://example.org", token="x")
+    report.add("a", "PASS", "detail a")
+    report.add("b", "FAIL", "detail b")
+    md = report.to_markdown()
+    assert "PASS" in md and "a" in md and "detail a" in md
+    assert "FAIL" in md and "b" in md and "detail b" in md
+
+
+def test_redact_leaves_text_unchanged_without_a_match():
+    assert e2e.redact("no secret here", "s3cr3t-token") == "no secret here"
+
+
+def test_redact_handles_empty_token():
+    assert e2e.redact("https://example.org/?t=", "") == "https://example.org/?t="
+
+
+# --------------------------------------------------------------------------
+# Preflight matrix (point 1), mocked HTTP
+# --------------------------------------------------------------------------
+
+
+def test_preflight_passes_when_token_gates_every_route():
+    def fetch(url: str) -> int:
+        return 200 if "t=good-token" in url else 404
+
+    checks = e2e.preflight("https://example.org", "good-token", fetch=fetch)
+    assert checks
+    assert all(c.status == "PASS" for c in checks)
+    assert {c.name for c in checks} == {"preflight " + name for name in e2e.DEFAULT_ROUTES}
+
+
+def test_preflight_fails_a_route_that_ignores_the_token():
+    def fetch(url: str) -> int:
+        return 200  # always 200, token or not -- the route is not gated
+
+    checks = e2e.preflight("https://example.org", "good-token", fetch=fetch)
+    assert all(c.status == "FAIL" for c in checks)
+
+
+def test_preflight_fails_a_route_that_404s_even_with_the_token():
+    def fetch(url: str) -> int:
+        return 404
+
+    checks = e2e.preflight("https://example.org", "good-token", fetch=fetch)
+    assert all(c.status == "FAIL" for c in checks)
+
+
+def test_check_tls_reports_fail_on_certificate_error():
+    import ssl
+
+    def fetch(url: str) -> int:
+        raise ssl.SSLCertVerificationError("self-signed certificate")
+
+    check = e2e.check_tls("https://example.org", fetch=fetch)
+    assert check.status == "FAIL"
+    assert "certificate" in check.detail.lower()
+
+
+def test_check_tls_reports_pass_when_fetch_succeeds():
+    check = e2e.check_tls("https://example.org", fetch=lambda url: 200)
+    assert check.status == "PASS"
+
+
+# --------------------------------------------------------------------------
+# Results (point 7): wake check is SKIPPED, never PASS, for the espeak
+# fallback.
+# --------------------------------------------------------------------------
+
+
+def test_wake_check_is_skipped_for_espeak_even_with_a_fast_answer():
+    check = e2e.wake_check("espeak", lane_answer_seen=True, elapsed_s=3.0)
+    assert check.status == "SKIPPED"
+    assert "espeak" in check.detail.lower()
+
+
+def test_wake_check_passes_for_piper_within_timeout():
+    check = e2e.wake_check("piper", lane_answer_seen=True, elapsed_s=12.0)
+    assert check.status == "PASS"
+
+
+def test_wake_check_fails_for_piper_without_an_answer():
+    check = e2e.wake_check("piper", lane_answer_seen=False, elapsed_s=60.0)
+    assert check.status == "FAIL"
+
+
+def test_wake_check_fails_for_piper_answer_too_slow():
+    check = e2e.wake_check("piper", lane_answer_seen=True, elapsed_s=61.0)
+    assert check.status == "FAIL"
+
+
+def test_score_check_passes_at_or_above_min_ratio():
+    assert e2e.score_check(ratio=0.9, matched=20, min_ratio=0.9).status == "PASS"
+
+
+def test_score_check_fails_below_min_ratio():
+    assert e2e.score_check(ratio=0.5, matched=20, min_ratio=0.9).status == "FAIL"
+
+
+def test_score_check_fails_when_nothing_matched():
+    check = e2e.score_check(ratio=0.0, matched=0, min_ratio=0.9)
+    assert check.status == "FAIL"
+    assert "no" in check.detail.lower() or "0" in check.detail
+
+
+def test_knowledge_check_skipped_without_wiki_dir():
+    assert e2e.knowledge_check(wiki_dir_configured=False, hits=0).status == "SKIPPED"
+
+
+def test_knowledge_check_passes_with_a_hit():
+    assert e2e.knowledge_check(wiki_dir_configured=True, hits=2).status == "PASS"
+
+
+def test_knowledge_check_fails_with_no_hits():
+    assert e2e.knowledge_check(wiki_dir_configured=True, hits=0).status == "FAIL"
+
+
+def test_events_check_reports_pass_or_fail():
+    assert e2e.events_check("topic", seen=True).status == "PASS"
+    assert e2e.events_check("view-intent", seen=False).status == "FAIL"
+
+
+# --------------------------------------------------------------------------
+# Media path proof (point 4): classify the selected candidate pair and the
+# audio byte counters from a raw `RTCPeerConnection.getStats()` dump.
+# --------------------------------------------------------------------------
+
+
+def _stats(pair_type: str, protocol: str, sent: int, received: int) -> list[dict]:
+    return [
+        {"id": "pair1", "type": "candidate-pair", "state": "succeeded",
+         "selected": True, "localCandidateId": "local1"},
+        {"id": "local1", "type": "local-candidate", "candidateType": pair_type,
+         "protocol": protocol},
+        {"id": "out1", "type": "outbound-rtp", "kind": "audio", "bytesSent": sent},
+        {"id": "in1", "type": "inbound-rtp", "kind": "audio", "bytesReceived": received},
+    ]
+
+
+def test_classify_candidate_pair_reads_type_protocol_and_bytes():
+    stats = _stats("srflx", "udp", sent=12000, received=34000)
+    result = e2e.classify_candidate_pair(stats)
+    assert result == {"candidate_type": "srflx", "protocol": "udp",
+                       "audio_bytes_sent": 12000, "audio_bytes_received": 34000}
+
+
+def test_classify_candidate_pair_with_relay_tcp_and_no_media():
+    stats = _stats("relay", "tcp", sent=0, received=0)
+    result = e2e.classify_candidate_pair(stats)
+    assert result["candidate_type"] == "relay"
+    assert result["protocol"] == "tcp"
+    assert result["audio_bytes_sent"] == 0
+
+
+def test_classify_candidate_pair_with_no_pair_at_all():
+    result = e2e.classify_candidate_pair([])
+    assert result["candidate_type"] is None
+    assert result["audio_bytes_sent"] == 0
+
+
+def test_media_check_passes_when_audio_bytes_flow():
+    stats = e2e.classify_candidate_pair(_stats("host", "udp", sent=5000, received=5000))
+    check = e2e.media_check("Alex", stats)
+    assert check.status == "PASS"
+    assert "host" in check.detail and "udp" in check.detail
+
+
+def test_media_check_fails_when_no_audio_bytes_flow():
+    stats = e2e.classify_candidate_pair(_stats("relay", "tcp", sent=0, received=0))
+    check = e2e.media_check("Sam", stats)
+    assert check.status == "FAIL"
+
+
+# --------------------------------------------------------------------------
+# Speech (point 2): the probe timeline reuses make_tts.sentences() for the
+# scoreable keyword content and adds the fixed probe lines.
+# --------------------------------------------------------------------------
+
+
+def test_build_timeline_contains_the_wake_line_exactly_twice():
+    timeline = e2e.build_timeline(per_speaker=2, lead_in=5.0)
+    wake_events = [e for e in timeline["events"] if e["text"] == e2e.WAKE_LINE]
+    assert len(wake_events) == 2
+
+
+def test_build_timeline_contains_one_agenda_and_one_decision_line():
+    timeline = e2e.build_timeline(per_speaker=2, lead_in=5.0)
+    texts = [e["text"] for e in timeline["events"]]
+    assert e2e.AGENDA_LINE in texts
+    assert e2e.DECISION_LINE in texts
+
+
+def test_build_timeline_keeps_the_keyword_events_from_make_tts():
+    timeline = e2e.build_timeline(per_speaker=3, lead_in=5.0)
+    from demo.acceptance import make_tts
+    expected_sentences = {text for text, _kw in make_tts.sentences(6)}
+    texts = {e["text"] for e in timeline["events"]}
+    assert expected_sentences <= texts
+
+
+def test_build_timeline_events_do_not_overlap():
+    from demo.acceptance import make_tts
+
+    timeline = e2e.build_timeline(per_speaker=2, lead_in=5.0)
+    by_speaker: dict[str, list[float]] = {}
+    for ev in timeline["events"]:
+        by_speaker.setdefault(ev["speaker"], []).append(ev["start_s"])
+    for starts in by_speaker.values():
+        starts.sort()
+        for a, b in zip(starts, starts[1:]):
+            assert b - a >= make_tts.SLOT_S
+
+
+# --------------------------------------------------------------------------
+# Cleanup (point 8): the tool never deletes data, it prints the command.
+# --------------------------------------------------------------------------
+
+
+def test_cleanup_command_names_the_session_prefix_and_no_token():
+    cmd = e2e.cleanup_command("e2e-20261124T120000Z")
+    assert "e2e-20261124T120000Z" in cmd
+    assert "t=" not in cmd
+
+
+# --------------------------------------------------------------------------
+# Voice download (point 2): auto-download with a checksum.
+# --------------------------------------------------------------------------
+
+
+def test_download_voice_writes_file_on_matching_checksum(tmp_path):
+    payload = b"fake-onnx-voice-bytes"
+    import hashlib
+    digest = hashlib.sha256(payload).hexdigest()
+    dest = tmp_path / "voice.onnx"
+    e2e.download_voice("https://example.org/voice.onnx", dest, digest,
+                        fetch=lambda url: payload)
+    assert dest.read_bytes() == payload
+
+
+def test_download_voice_rejects_a_checksum_mismatch(tmp_path):
+    dest = tmp_path / "voice.onnx"
+    with pytest.raises(ValueError, match="checksum"):
+        e2e.download_voice("https://example.org/voice.onnx", dest, "0" * 64,
+                            fetch=lambda url: b"other-bytes")
+    assert not dest.exists()
+
+
+# --------------------------------------------------------------------------
+# CLI argument parsing
+# --------------------------------------------------------------------------
+
+
+def test_arg_parser_requires_base_url_token_file_and_out():
+    with pytest.raises(SystemExit):
+        e2e.build_arg_parser().parse_args([])
+
+
+def test_arg_parser_defaults_tts_to_piper():
+    args = e2e.build_arg_parser().parse_args(
+        ["--base-url", "https://example.org", "--token-file", "t", "--out", "o"])
+    assert args.tts == "piper"
+
+
+def test_arg_parser_rejects_an_unknown_tts_engine():
+    with pytest.raises(SystemExit):
+        e2e.build_arg_parser().parse_args(
+            ["--base-url", "https://example.org", "--token-file", "t",
+             "--out", "o", "--tts", "siri"])
