@@ -1,0 +1,4 @@
+{"t_start": 0.0, "t_end": 6.0, "speaker": "Alex", "text": "Lasst uns kurz die Werkstatt besprechen, bevor wir Schluss machen.", "actions": [{"intent_id": "participant:name", "kind": "edit", "person": "p-alex", "payload": {"name": "Alex"}}, {"intent_id": "participant:name", "kind": "edit", "person": "p-sam", "payload": {"name": "Sam"}}, {"intent_id": "queue:room", "kind": "tap", "person": "p-alex", "payload": {"op": "request"}}]}
+{"t_start": 10.0, "t_end": 16.0, "speaker": "Alex", "text": "Wir machen das so: Werkstatt am Freitag."}
+{"t_start": 20.0, "t_end": 28.0, "speaker": "Sam", "text": "Sam, bis Donnerstag Material bestellen.", "actions": [{"intent_id": "queue:room", "kind": "tap", "person": "p-alex", "payload": {"op": "done"}}, {"intent_id": "queue:room", "kind": "tap", "person": "p-sam", "payload": {"op": "request"}}]}
+{"t_start": 32.0, "t_end": 33.0, "speaker": "Sam", "text": "Gut, dann ist das geklaert, ich kuemmere mich darum."}
