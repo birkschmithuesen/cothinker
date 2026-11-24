@@ -37,6 +37,9 @@ from blocks.mirroring_coach.coach import MirroringCoach, resolve_config
 from blocks.topics import TopicsBlock
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
 from blocks.minutes_document import MinutesDocumentBlock
+from blocks.speaker_queue import SpeakerQueueBlock
+from blocks.speaking_share import SpeakingShareBlock
+from blocks.timer import TimerBlock
 from blocks.voice_attribution import VoiceAttributionBlock
 from gateway.sync_safe import atomic_write_text
 from gateway.worker import FAILURE_MARKERS
@@ -61,6 +64,9 @@ REGISTRY: dict[str, Callable[[], Block]] = {
     "mirroring-coach": MirroringCoach,
     "graph": GraphBlock,
     "voice-attribution": VoiceAttributionBlock,
+    "timer": TimerBlock,
+    "speaker-queue": SpeakerQueueBlock,
+    "speaking-share": SpeakingShareBlock,
 }
 
 REGISTRY["condense"] = CondenseBlock
