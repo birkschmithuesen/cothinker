@@ -19,7 +19,7 @@ from pydantic import TypeAdapter
 
 from surfaces.contract.__main__ import build_app, build_live_app
 from surfaces.contract.live_player import LivePlayer
-from surfaces.contract.models import StageStateSnapshot, ViewIntent
+from surfaces.contract.models import StageStateSnapshot, Task, TranscriptLine, ViewIntent
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "live_session"
 STEPS = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(FIXTURE_DIR.glob("step-*.json"))]
@@ -65,6 +65,33 @@ def test_diff_maps_a_non_owned_field_change_to_a_status_intent(session_dir):
 
     assert [intent.kind for intent in intents] == ["queue", "status"]
     assert "headline" in intents[1].text
+
+
+def test_diff_maps_a_tasks_change_to_a_tasks_intent_not_a_status_intent(session_dir):
+    """issue #147 point 3: tasks is now an owned field, like queue/share."""
+    player = LivePlayer(session_dir)
+    before = player.snapshot
+    after = before.model_copy(update={
+        "tasks": [Task(text="Draft the migration runbook.", person="Tamar", due="")],
+    })
+
+    intents = player._diff(before, after)
+
+    assert [intent.kind for intent in intents] == ["tasks"]
+    assert intents[0].tasks[0].text == "Draft the migration runbook."
+
+
+def test_diff_maps_a_transcript_recent_change_to_a_transcript_recent_intent(session_dir):
+    player = LivePlayer(session_dir)
+    before = player.snapshot
+    after = before.model_copy(update={
+        "transcript_recent": [TranscriptLine(speaker="Mira", started_at="2026-11-23T09:00:00+01:00", text="hi")],
+    })
+
+    intents = player._diff(before, after)
+
+    assert [intent.kind for intent in intents] == ["transcript:recent"]
+    assert intents[0].lines[0].speaker == "Mira"
 
 
 def test_live_mode_snapshot_endpoint_serves_the_mapped_state(session_dir):
