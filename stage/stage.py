@@ -1801,6 +1801,11 @@ summary{cursor:pointer;padding:.4rem 0;color:var(--akz);font-size:.94rem}
  border:1px solid #3a4150;border-radius:6px;padding:.45rem .8rem;cursor:pointer}
 #teiln button:disabled{opacity:.5;cursor:default}
 #teiln-status{color:var(--dim);font-size:.8rem}
+/* The call-window toggle (issue #180, ADR 0023): icon plus word, never
+   colour alone -- "Robo hört" green while listening, "Robo" neutral
+   while idle. */
+#listen-toggle.listen-on{background:#1d4430;border-color:#3d8b6a;color:#bfe8d4}
+#listen-toggle.listen-off{background:#1d2128;border-color:#3a4150;color:#e8e8e8}
 #join-dlg,#share-dlg{position:fixed;top:0;left:0;width:100vw;height:100vh;
  z-index:60;background:rgba(10,12,14,.94);display:flex;align-items:center;
  justify-content:center;padding:2vmin;box-sizing:border-box}
@@ -1998,6 +2003,48 @@ sgBlockAnchorJump();
       shareShut();
       if(!dlg.hasAttribute('hidden')) dismissDlg();
     }
+  });
+})();
+// The call-window toggle (issue #180, ADR 0023): sends and reads through
+// the surface contract (/api/snapshot, /api/events, /api/actions,
+// ADR 0019), never through buehne.json or this stage's own /action route
+// -- POST /api/actions is a separate card (#183) and may still be a
+// no-op, but the shape sent here is already the final contract shape.
+(function(){
+  var btn=document.getElementById('listen-toggle');
+  if(!btn) return;
+  var icon=btn.querySelector('.listen-icon'), label=btn.querySelector('.listen-label');
+  function render(state){
+    var an=(state==='listening');
+    btn.classList.toggle('listen-on', an);
+    btn.classList.toggle('listen-off', !an);
+    btn.setAttribute('aria-pressed', an ? 'true' : 'false');
+    if(icon) icon.textContent=an ? '🟢' : '⚪';
+    if(label) label.textContent=an ? 'Robo hört' : 'Robo';
+  }
+  render('idle');
+  fetch('/api/snapshot').then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(snap){ if(snap && snap.listen) render(snap.listen.state); })
+    .catch(function(){});
+  try{
+    var es=new EventSource('/api/events');
+    es.addEventListener('view-intent', function(ev){
+      try{
+        var intent=JSON.parse(ev.data);
+        if(intent && intent.id==='listen:room') render(intent.state);
+      }catch(e){}
+    });
+  }catch(e){}
+  var busy=false;
+  btn.addEventListener('click', function(){
+    if(busy) return;
+    busy=true;
+    fetch('/api/actions',{method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({kind:'tap', intent_id:'listen:room',
+                           target:'listen-toggle', payload:{op:'toggle'}})})
+      .catch(function(){})
+      .then(function(){ busy=false; });
   });
 })();
 (function(){
@@ -2743,6 +2790,9 @@ sgBlockAnchorJump();
 # share view. Static; the script above the page script drives it.
 PARTICIPATE_HTML = """
 <div id="teiln"><span id="teiln-status" aria-live="polite"></span>
+<button type="button" id="listen-toggle" class="listen-off" aria-pressed="false">
+<span class="listen-icon" aria-hidden="true">⚪</span>
+<span class="listen-label">Robo</span></button>
 <button type="button" id="teiln-wort">Wortmeldung</button>
 <button type="button" id="teiln-fertig">Fertig</button>
 <button type="button" id="teiln-teilen">Link teilen</button></div>
