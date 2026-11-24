@@ -6,6 +6,7 @@ separate simulation.
 from __future__ import annotations
 
 import json
+import time
 
 from fastapi.testclient import TestClient
 
@@ -78,3 +79,31 @@ def test_meeting_scenario_exercises_the_queue_snapshot_field():
     assert queues, "no frame sets StageStateSnapshot.queue"
     speaking_pids = {q.speaking.pid for q in queues if q.speaking is not None}
     assert len(speaking_pids) > 1         # the speaker queue snapshot turns over too
+
+
+def test_meeting_scenario_agenda_times_are_relative_to_now():
+    """issue #147 point 2: a hardcoded epoch (2024-11-23) made the item's
+    remaining time overrun by two years. Fixture times must be anchored to
+    the moment the scenario is loaded, not to a fixed past date."""
+    before = time.time()
+    frames = load_scenario("meeting")
+    after = time.time()
+
+    first_agenda = frames[0].snapshot.agenda
+    assert before <= first_agenda.item_started_at <= after
+    assert first_agenda.meeting_deadline > after   # still ahead, not overrun
+
+
+def test_meeting_scenario_fills_the_whole_agenda_items_list():
+    """issue #147 point 4: fixture mode must fill `agenda.items`, not leave
+    it empty, so a surface can design against the whole-agenda shape."""
+    frames = load_scenario("meeting")
+    agendas = [f.snapshot.agenda for f in frames if f.snapshot.agenda is not None]
+    assert agendas
+    for agenda in agendas:
+        assert agenda.items, "agenda.items must be filled, not empty"
+        assert len(agenda.items) == agenda.total
+
+    timer_intents = [vi for f in frames for vi in f.view_intents if vi.kind == "timer"]
+    assert timer_intents
+    assert all(ti.items for ti in timer_intents), "timer intents must carry agenda.items too"
