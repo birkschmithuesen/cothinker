@@ -1,0 +1,357 @@
+asyncapi: 3.0.0
+info:
+  title: CoThinker operator console -- push channel
+  version: 0.1.0
+  description: 'The full operator status snapshot, pushed over server-sent events
+    on change, at most once a second (ADR 0019 style, issue #159).'
+channels:
+  operatorStatus:
+    address: /operator/events
+    messages:
+      operatorStatus:
+        $ref: '#/components/messages/operatorStatus'
+operations:
+  sendOperatorStatus:
+    action: send
+    channel:
+      $ref: '#/channels/operatorStatus'
+    summary: The server sends the full operator status snapshot on every change, at
+      most once a second.
+    messages:
+    - $ref: '#/channels/operatorStatus/messages/operatorStatus'
+components:
+  messages:
+    operatorStatus:
+      name: operatorStatus
+      title: Operator status
+      payload:
+        $ref: '#/components/schemas/OperatorStatus'
+  schemas:
+    Call:
+      properties:
+        last:
+          anyOf:
+          - $ref: '#/components/schemas/CallAttempt'
+          - type: 'null'
+          default: null
+          description: The most recent call attempt; `None` before the first one.
+      title: Call
+      type: object
+    CallAttempt:
+      properties:
+        at:
+          description: Wall-clock label of this call attempt.
+          examples:
+          - '2026-11-24T09:01:00+01:00'
+          title: At
+          type: string
+        answered:
+          description: Whether the call was answered.
+          examples:
+          - true
+          title: Answered
+          type: boolean
+        latency_s:
+          description: Seconds between dialling and the call being answered.
+          examples:
+          - 1.2
+          title: Latency S
+          type: number
+      required:
+      - at
+      - answered
+      - latency_s
+      title: CallAttempt
+      type: object
+    Disk:
+      properties:
+        free_percent:
+          description: Free disk space, as a percentage.
+          examples:
+          - 71.5
+          title: Free Percent
+          type: number
+      required:
+      - free_percent
+      title: Disk
+      type: object
+    ErrorEntry:
+      properties:
+        at:
+          description: Wall-clock label of when the error happened.
+          examples:
+          - '2026-11-24T09:02:00+01:00'
+          title: At
+          type: string
+        service:
+          description: Which service raised the error.
+          examples:
+          - stt
+          title: Service
+          type: string
+        message:
+          description: 'A redacted error message: no tokens, no paths outside the
+            project, no transcript text.'
+          examples:
+          - reconnect after timeout
+          title: Message
+          type: string
+      required:
+      - at
+      - service
+      - message
+      title: ErrorEntry
+      type: object
+    Meeting:
+      properties:
+        participants:
+          description: Everyone currently in the meeting.
+          items:
+            $ref: '#/components/schemas/Participant'
+          title: Participants
+          type: array
+        count:
+          description: Number of participants currently in the meeting.
+          examples:
+          - 1
+          title: Count
+          type: integer
+      required:
+      - count
+      title: Meeting
+      type: object
+    Participant:
+      properties:
+        name:
+          description: Display name of the participant.
+          examples:
+          - Mira
+          title: Name
+          type: string
+        speaking:
+          description: Whether this participant currently holds the floor.
+          examples:
+          - true
+          title: Speaking
+          type: boolean
+        level_dbfs:
+          description: Current audio level in dBFS.
+          examples:
+          - -18.0
+          title: Level Dbfs
+          type: number
+      required:
+      - name
+      - speaking
+      - level_dbfs
+      title: Participant
+      type: object
+    Project:
+      properties:
+        id:
+          description: Identity of this working folder; never a free path.
+          examples:
+          - quarterly-planning
+          title: Id
+          type: string
+        label:
+          description: Display label for this working folder.
+          examples:
+          - Quarterly planning
+          title: Label
+          type: string
+      required:
+      - id
+      - label
+      title: Project
+      type: object
+    Service:
+      properties:
+        name:
+          description: Which part of the stack this entry reports on.
+          enum:
+          - meeting
+          - stt
+          - audio-tap
+          - minutes
+          - stage
+          - contract
+          examples:
+          - stt
+          title: Name
+          type: string
+        state:
+          description: The service's current lifecycle state.
+          enum:
+          - active
+          - starting
+          - stopped
+          - failed
+          examples:
+          - active
+          title: State
+          type: string
+        since:
+          description: Wall-clock label of when this service entered `state`.
+          examples:
+          - '2026-11-24T09:00:00+01:00'
+          title: Since
+          type: string
+      required:
+      - name
+      - state
+      - since
+      title: Service
+      type: object
+    Session:
+      properties:
+        project:
+          $ref: '#/components/schemas/Project'
+        session_folder:
+          description: Name of the current session's folder; empty when none is running.
+          examples:
+          - 2026-11-24-quarterly-planning
+          title: Session Folder
+          type: string
+        agenda:
+          anyOf:
+          - $ref: '#/components/schemas/SessionAgenda'
+          - type: 'null'
+          default: null
+          description: '`None` for a session without an agenda.'
+        utterances:
+          description: Number of transcript utterances recorded so far.
+          examples:
+          - 12
+          title: Utterances
+          type: integer
+        last_saved_at:
+          description: Wall-clock label of the last save; empty when nothing was saved
+            yet.
+          examples:
+          - '2026-11-24T09:05:00+01:00'
+          title: Last Saved At
+          type: string
+      required:
+      - project
+      - session_folder
+      - utterances
+      - last_saved_at
+      title: Session
+      type: object
+    SessionAgenda:
+      properties:
+        current_item:
+          description: Title of the current agenda item.
+          examples:
+          - Opening round
+          title: Current Item
+          type: string
+        remaining_s:
+          description: Seconds remaining on the current item.
+          examples:
+          - 240.0
+          title: Remaining S
+          type: number
+        index:
+          description: 1-based position of the current item.
+          examples:
+          - 1
+          title: Index
+          type: integer
+        total:
+          description: Total number of agenda items.
+          examples:
+          - 3
+          title: Total
+          type: integer
+      required:
+      - current_item
+      - remaining_s
+      - index
+      - total
+      title: SessionAgenda
+      type: object
+    Stt:
+      properties:
+        connected:
+          description: Whether the speech-to-text engine is connected.
+          examples:
+          - true
+          title: Connected
+          type: boolean
+        engine:
+          description: Name of the speech-to-text engine in use.
+          examples:
+          - speechmatics
+          title: Engine
+          type: string
+        seconds_since_last_final:
+          description: Seconds since the last final transcript line.
+          examples:
+          - 1.5
+          title: Seconds Since Last Final
+          type: number
+        minutes_today:
+          description: Minutes of audio transcribed today.
+          examples:
+          - 12.0
+          title: Minutes Today
+          type: number
+      required:
+      - connected
+      - engine
+      - seconds_since_last_final
+      - minutes_today
+      title: Stt
+      type: object
+    OperatorStatus:
+      description: 'The full snapshot `GET /operator/status` returns and `GET
+
+        /operator/events` pushes (event `operator-status`) on change, at most
+
+        once a second.'
+      properties:
+        services:
+          items:
+            $ref: '#/components/schemas/Service'
+          title: Services
+          type: array
+        meeting:
+          $ref: '#/components/schemas/Meeting'
+        stt:
+          $ref: '#/components/schemas/Stt'
+        session:
+          $ref: '#/components/schemas/Session'
+        call:
+          $ref: '#/components/schemas/Call'
+        errors:
+          description: The last 10 errors, oldest first.
+          items:
+            $ref: '#/components/schemas/ErrorEntry'
+          title: Errors
+          type: array
+        disk:
+          $ref: '#/components/schemas/Disk'
+        running:
+          description: Whether a meeting is currently running.
+          examples:
+          - true
+          title: Running
+          type: boolean
+        can_switch_project:
+          description: Whether `POST /operator/project` would be accepted right now.
+          examples:
+          - false
+          title: Can Switch Project
+          type: boolean
+      required:
+      - meeting
+      - stt
+      - session
+      - call
+      - disk
+      - running
+      - can_switch_project
+      title: OperatorStatus
+      type: object
