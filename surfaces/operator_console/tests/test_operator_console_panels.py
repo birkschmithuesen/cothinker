@@ -3,7 +3,7 @@ fixture's own frames; produces the PR screenshots:
 COTHINKER_SHOT_DIR=pr-shots python -m pytest -q surfaces/operator_console/tests/test_operator_console_panels.py"""
 from __future__ import annotations
 
-from surfaces.operator.fixtures import build_frames
+from surfaces.operator.fixtures import TOTAL_DISK_BYTES, OperatorFrame, build_frames
 from surfaces.operator_console.tests.helpers import TOKEN
 
 
@@ -45,3 +45,23 @@ def test_stopped_state_offers_start(operator, surface_url, page, shot_dir):
     assert page.locator("#stop").is_disabled()
     assert page.locator("#switch").is_enabled()
     page.screenshot(path=str(shot_dir / "stopped.png"), full_page=True)
+
+
+def _with_disk(frame: OperatorFrame, *, free_percent: float) -> OperatorFrame:
+    free_bytes = int(free_percent * TOTAL_DISK_BYTES // 100)
+    disk = frame.status.disk.model_copy(update={"free_percent": free_percent, "free_bytes": free_bytes})
+    return OperatorFrame(delay_s=0.0, status=frame.status.model_copy(update={"disk": disk}))
+
+
+def test_disk_panel_warns_below_fifteen_percent_free(operator, surface_url, page, shot_dir):
+    api, _ = operator([_with_disk(build_frames()[0], free_percent=10.0)])
+    page.goto(f"{surface_url}?api={api}&token={TOKEN}")
+    page.wait_for_selector('[data-panel="disk"] .content.warn')
+    assert "knapp" in page.locator('[data-panel="disk"] .content').inner_text()
+
+
+def test_disk_panel_flags_danger_below_five_percent_free(operator, surface_url, page, shot_dir):
+    api, _ = operator([_with_disk(build_frames()[0], free_percent=4.5)])
+    page.goto(f"{surface_url}?api={api}&token={TOKEN}")
+    page.wait_for_selector('[data-panel="disk"] .content.danger')
+    assert "kritisch" in page.locator('[data-panel="disk"] .content').inner_text()
