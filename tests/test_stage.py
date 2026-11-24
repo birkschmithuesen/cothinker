@@ -42,6 +42,12 @@ sys.path.insert(0, str(ROOT / "gateway"))
 
 import stage as b  # noqa: E402
 
+from blocks.knowledge_link import KnowledgeLinkBlock  # noqa: E402
+from gateway.stage_state import StageState  # noqa: E402
+from gateway.stage_surface import StageSurface  # noqa: E402
+from shared.blocks import BlockContext  # noqa: E402
+from shared.modules import CoreEvent, StateStore  # noqa: E402
+
 
 # ------------------------------------------------------------------ helpers
 def setze(daten) -> None:
@@ -89,6 +95,14 @@ def switch_project(path: Path) -> Path:
     b.clear_cache()
     b._last_good = None
     return path
+
+
+class _NoopWriter:
+    """A `StageSurface` writer stub for tests that only need `content()`,
+    not a real `buehne.json` write -- the test writes that file itself."""
+
+    def write(self) -> None:
+        pass
 
 
 @pytest.fixture(autouse=True)
@@ -750,6 +764,51 @@ def test_the_link_points_at_the_file_view(p):
 
 def test_the_sidebar_label_is_german(p):
     assert "Vertiefen" in p["links"]
+
+
+def test_the_sidebar_shows_knowledge_hits_through_the_real_path(tmp_path):
+    """Issue #148 retired the knowledge-link block's old `links:` emitter
+    for a named `knowledge:<topic_id>` view intent, but never updated the
+    sidebar's own consumer -- it kept reading `b.get("links")`, which no
+    producer has written since. This goes through the REAL path (the
+    knowledge-link block, `StageSurface`, `StageState`, the same one
+    tests/test_block_knowledge_link.py exercises up to `content()`) one
+    step further, into the rendered "Vertiefen" HTML."""
+    project = switch_project(tmp_path / "wiki-project")
+    (project / "hintergrund").mkdir()
+    (project / "hintergrund" / "klimaplan.md").write_text(
+        "---\ntype: finance\ntitle: Klimaplan\n---\n# Klimaplan\n",
+        encoding="utf-8")
+
+    emitted: list = []
+    session_dir = tmp_path / "session"
+    session_dir.mkdir()
+    ctx = BlockContext(
+        instance=None, session_dir=session_dir,
+        state=StateStore(session_dir / ".blocks" / "knowledge-link"),
+        agent=None, llm=None, language="de", clock=lambda: 0.0,
+        emit=emitted.append, artefact=lambda name, text: None)
+    block = KnowledgeLinkBlock()
+    block.start(ctx, {"project_dir": str(project)})
+    block.on_event(CoreEvent("block_output", {
+        "from": "topics", "output": "topic", "topic_id": "t1",
+        "title": "Klimaplan"}))
+    assert emitted, "the block must emit a knowledge intent for this to be a real test"
+
+    state = StageState()
+    surface = StageSurface(writer=_NoopWriter(), state=state, log=lambda line: None)
+    surface.render(emitted)
+
+    content = state.content()
+    content["status"] = {"state": "listening", "text": "", "ticking": False}
+    (project / "buehne.json").write_text(
+        json.dumps(content, ensure_ascii=False), encoding="utf-8")
+    b.clear_cache()
+
+    parts = b.stage_parts()
+    assert "Vertiefen" in parts["links"]
+    assert "Klimaplan" in parts["links"]
+    assert 'href="file/hintergrund%2Fklimaplan.md"' in parts["links"]
 
 
 # A settled entry becomes a receipt in the same slot -- it does not vanish.
