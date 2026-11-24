@@ -203,7 +203,7 @@ def run_check(surface: str, token: str = DEFAULT_TOKEN, out: str | Path | None =
     token_in_url = any(f"token={token}" in urlsplit(r["url"]).query for r in operator_requests)
     report.checks.append(CheckResult(
         "sends the operator token as a Bearer header", header_ok and not token_in_url,
-        "every /operator/ request carried Authorization: Bearer <token>, never a query parameter" if header_ok and not token_in_url
+        "every /operator/ request carried the token as an authorization header, never a query parameter" if header_ok and not token_in_url
         else "a request to /operator/ was missing the Authorization header or carried the token in its URL",
     ))
 

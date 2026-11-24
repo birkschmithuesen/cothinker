@@ -5,7 +5,7 @@
   conformance check's "good" example. Uses only what the operator
   contract serves -- GET /operator/status, GET /operator/events (SSE,
   but over `fetch` + a manual line reader, not `EventSource`: the
-  operator token rides as an `Authorization: Bearer` header, which
+  operator token rides as an authorization header value, which
   `EventSource` cannot set) -- and renders the full snapshot on every
   `operator-status` push.
 -->
