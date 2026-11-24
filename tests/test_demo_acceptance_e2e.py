@@ -108,6 +108,25 @@ def test_check_tls_reports_pass_when_fetch_succeeds():
 # --------------------------------------------------------------------------
 
 
+def test_wait_for_call_answer_detects_a_non_empty_call_answer():
+    snapshots = iter([{"call_answer": ""}, {"call_answer": ""}, {"call_answer": "Hier die Zusammenfassung."}])
+    ticks = iter([0.0, 0.0, 2.0, 2.0, 4.0, 4.0])
+    seen, elapsed = e2e.wait_for_call_answer(
+        lambda: next(snapshots), timeout_s=60.0, poll_interval=2.0,
+        clock=lambda: next(ticks), sleep=lambda _s: None)
+    assert seen is True
+    assert elapsed == 4.0
+
+
+def test_wait_for_call_answer_times_out_without_an_answer():
+    ticks = iter([0.0, 10.0, 70.0])
+    seen, elapsed = e2e.wait_for_call_answer(
+        lambda: {"call_answer": ""}, timeout_s=60.0, poll_interval=2.0,
+        clock=lambda: next(ticks), sleep=lambda _s: None)
+    assert seen is False
+    assert elapsed == 60.0
+
+
 def test_wake_check_is_skipped_for_espeak_even_with_a_fast_answer():
     check = e2e.wake_check("espeak", lane_answer_seen=True, elapsed_s=3.0)
     assert check.status == "SKIPPED"
@@ -158,6 +177,15 @@ def test_knowledge_check_fails_with_no_hits():
 def test_events_check_reports_pass_or_fail():
     assert e2e.events_check("topic", seen=True).status == "PASS"
     assert e2e.events_check("view-intent", seen=False).status == "FAIL"
+
+
+def test_count_knowledge_hits_matches_knowledge_or_wiki_notices():
+    snapshot = {"notices": [{"kind": "risk"}, {"kind": "knowledge"}, {"kind": "wiki-hit"}]}
+    assert e2e.count_knowledge_hits(snapshot) == 2
+
+
+def test_count_knowledge_hits_is_zero_without_notices():
+    assert e2e.count_knowledge_hits({}) == 0
 
 
 # --------------------------------------------------------------------------
@@ -256,10 +284,51 @@ def test_build_timeline_events_do_not_overlap():
 # --------------------------------------------------------------------------
 
 
+def test_run_contract_check_redacts_token_from_its_own_subreport(tmp_path, monkeypatch):
+    contract_dir = tmp_path / "contract"
+    contract_dir.mkdir()
+
+    def fake_run(cmd, capture_output, text):
+        (contract_dir / "report.json").write_text(
+            json.dumps({"surface": "https://example.org/monitor/?t=s3cr3t", "pass": True}))
+
+        class _Result:
+            returncode = 0
+            stdout = "PASS: overall"
+            stderr = ""
+        return _Result()
+
+    monkeypatch.setattr(e2e.subprocess, "run", fake_run)
+    check = e2e.run_contract_check("https://example.org/monitor/?t=s3cr3t", "s3cr3t", tmp_path)
+    assert check.status == "PASS"
+    sub_report = (contract_dir / "report.json").read_text()
+    assert "s3cr3t" not in sub_report
+    assert "<redacted>" in sub_report
+
+
 def test_cleanup_command_names_the_session_prefix_and_no_token():
     cmd = e2e.cleanup_command("e2e-20261124T120000Z")
     assert "e2e-20261124T120000Z" in cmd
     assert "t=" not in cmd
+
+
+# --------------------------------------------------------------------------
+# Stage transcript extraction (point 7): the stage's own `.roh` section
+# renders each markdown bullet `- **HH:MM** *Speaker:* text` as an `<li>`;
+# its innerText reads "HH:MM Speaker: text". Turn that back into the
+# bullet score.py already parses, so scoring is reused, not duplicated.
+# --------------------------------------------------------------------------
+
+
+def test_stage_transcript_line_to_bullet_round_trips_through_score():
+    from demo.acceptance import score
+    bullet = e2e.stage_transcript_line_to_bullet("16:28 Alex: Wir klären den Apfelbaum bis Freitag.")
+    assert bullet == "- **16:28** *Alex:* Wir klären den Apfelbaum bis Freitag."
+    assert score.parse_line(bullet) == ("Alex", "Wir klären den Apfelbaum bis Freitag.")
+
+
+def test_stage_transcript_line_to_bullet_rejects_unrecognised_text():
+    assert e2e.stage_transcript_line_to_bullet("Rohtranskript (12 Zeilen)") is None
 
 
 # --------------------------------------------------------------------------

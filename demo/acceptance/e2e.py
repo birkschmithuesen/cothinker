@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import ssl
 import subprocess
 import sys
@@ -289,6 +290,28 @@ def media_check(name: str, stats: dict) -> Check:
 # --------------------------------------------------------------------------
 
 
+def fetch_snapshot(base_url: str, token: str) -> dict:
+    url = base_url.rstrip("/") + "/api/snapshot?t=" + token
+    with urllib.request.urlopen(url, timeout=10) as resp:
+        return json.loads(resp.read())
+
+
+def wait_for_call_answer(fetch: Callable[[], dict], timeout_s: float = 60.0,
+                          poll_interval: float = 2.0,
+                          clock: Callable[[], float] = time.time,
+                          sleep: Callable[[float], None] = time.sleep) -> tuple[bool, float]:
+    """Polls the live contract snapshot's `call_answer` field (`StageStateSnapshot`
+    in surfaces/contract/models.py: "The last call-and-answer line, if any.")
+    until it is non-empty or `timeout_s` elapses."""
+    start = clock()
+    while clock() - start < timeout_s:
+        snapshot = fetch() or {}
+        if snapshot.get("call_answer"):
+            return True, clock() - start
+        sleep(poll_interval)
+    return False, timeout_s
+
+
 def wake_check(tts_engine: str, lane_answer_seen: bool, elapsed_s: float,
                timeout_s: float = 60.0) -> Check:
     if tts_engine == "espeak":
@@ -317,6 +340,15 @@ def events_check(kind: str, seen: bool) -> Check:
                  "observed" if seen else "not observed")
 
 
+def count_knowledge_hits(snapshot: dict) -> int:
+    """Heuristic: a notice whose `kind` (chosen by the raising block,
+    surfaces/contract/models.py Notice.kind) names knowledge or wiki."""
+    notices = snapshot.get("notices") or []
+    return sum(1 for n in notices
+               if "knowledge" in n.get("kind", "").lower()
+               or "wiki" in n.get("kind", "").lower())
+
+
 # --------------------------------------------------------------------------
 # Cleanup (point 8): the tool marks its session and prints the cleanup
 # command; it never deletes server data itself.
@@ -327,6 +359,161 @@ def cleanup_command(session_title: str) -> str:
     return ("Session marked '%s'. To remove it, run on the server: "
             "project-cli session delete --title-prefix '%s'"
             % (session_title, session_title))
+
+
+# --------------------------------------------------------------------------
+# Surfaces (point 5): the stage's own "Rohtranskript" section renders each
+# markdown bullet score.py expects (`- **HH:MM** *Speaker:* text`) as an
+# `<li>`; its innerText reads "HH:MM Speaker: text". Converting it back
+# lets score.score() run unchanged against the live stage.
+# --------------------------------------------------------------------------
+
+_STAGE_ROH_LINE_RE = re.compile(r"^\s*(\d{1,2}:\d{2})\s+([^:]+):\s*(.*)$")
+
+
+def stage_transcript_line_to_bullet(text: str) -> str | None:
+    m = _STAGE_ROH_LINE_RE.match(text.strip())
+    if not m:
+        return None
+    time_s, speaker, rest = m.groups()
+    return "- **%s** *%s:* %s" % (time_s, speaker.strip(), rest)
+
+
+def build_public_url(base_url: str, path: str, token: str) -> str:
+    return base_url.rstrip("/") + path + "?t=" + token
+
+
+def check_surfaces(base_url: str, token: str, names: list[str], agenda_hint: str,
+                    out_dir: Path) -> tuple[list[Check], list[str]]:
+    """Opens stage and monitor at 1920x1080 via the public contract route,
+    asserts named transcript lines, the current agenda item, and no
+    console errors; returns the checks plus the raw stage transcript
+    bullets (for score_check) collected along the way."""
+    from playwright.sync_api import sync_playwright
+
+    checks: list[Check] = []
+    transcript_bullets: list[str] = []
+    api_url = base_url.rstrip("/") + "/api/"
+
+    with sync_playwright() as pw:
+        browser = pw.chromium.launch(headless=True)
+        for surface_name, path in (("stage", "/stage/"), ("monitor", "/monitor/")):
+            context = browser.new_context(viewport={"width": 1920, "height": 1080})
+            page = context.new_page()
+            console_errors = []
+            page.on("console", lambda msg: console_errors.append(msg.text)
+                     if msg.type == "error" else None)
+            url = build_public_url(base_url, path, token) + "&api=" + api_url
+            page.goto(url, wait_until="load")
+            page.wait_for_timeout(2000)
+
+            if surface_name == "stage":
+                roh_summary = page.locator("details.roh summary")
+                if roh_summary.count():
+                    roh_summary.click()
+                    page.wait_for_timeout(300)
+                    for li in page.locator("details.roh li").all_inner_texts():
+                        bullet = stage_transcript_line_to_bullet(li)
+                        if bullet:
+                            transcript_bullets.append(bullet)
+
+            body_text = page.locator("body").inner_text()
+            missing_names = [n for n in names if n not in body_text]
+            checks.append(Check("%s shows participant names" % surface_name,
+                                 "PASS" if not missing_names else "FAIL",
+                                 "missing: %s" % ", ".join(missing_names) if missing_names
+                                 else "all of %s present" % ", ".join(names)))
+            checks.append(Check("%s shows the current agenda item" % surface_name,
+                                 "PASS" if agenda_hint in body_text else "FAIL",
+                                 "agenda hint %r %s" % (
+                                     agenda_hint, "found" if agenda_hint in body_text
+                                     else "not found")))
+            page.screenshot(path=str(out_dir / ("%s.png" % surface_name)), full_page=True)
+            checks.append(Check("%s has no console errors" % surface_name,
+                                 "PASS" if not console_errors else "FAIL",
+                                 "; ".join(console_errors) if console_errors else "none"))
+            context.close()
+        browser.close()
+    return checks, transcript_bullets
+
+
+def run_contract_check(monitor_url: str, token: str, out_dir: Path) -> Check:
+    """Runs the live conformance check (point 6). `monitor_url` carries the
+    token so the page is reachable; check.py's own report.json records
+    the surface URL verbatim, so it is redacted here right after the
+    subprocess returns, before anything else can read that file."""
+    contract_dir = out_dir / "contract"
+    result = subprocess.run(
+        [sys.executable, "-m", "surfaces.contract.check", "--surface", monitor_url,
+         "--out", str(contract_dir)],
+        capture_output=True, text=True)
+    sub_report = contract_dir / "report.json"
+    if sub_report.exists():
+        sub_report.write_text(redact(sub_report.read_text(encoding="utf-8"), token),
+                               encoding="utf-8")
+    detail = redact(result.stdout + result.stderr, token).strip().splitlines()
+    tail = " / ".join(detail[-3:]) if detail else "no output"
+    return Check("contract conformance (live monitor)",
+                 "PASS" if result.returncode == 0 else "FAIL", tail)
+
+
+# --------------------------------------------------------------------------
+# Participants (point 3): two headless Chrome participants join the call
+# page via the public URL -- no host-resolver mapping, no localhost.
+# --------------------------------------------------------------------------
+
+PARTICIPANT_PY = Path(__file__).resolve().parent / "participant.py"
+_JOINED_RE = re.compile(r"^joined name=(\S+) after ([\d.]+)s")
+
+
+def start_participant(name: str, wav: Path, url_file: Path, stats_out: Path,
+                       screenshot: Path, cdp_port: int, chrome: str,
+                       seconds: float) -> subprocess.Popen:
+    cmd = [sys.executable, str(PARTICIPANT_PY), "--url-file", str(url_file),
+           "--name", name, "--wav", str(wav), "--seconds", str(seconds),
+           "--cdp-port", str(cdp_port), "--chrome", chrome,
+           "--stats-out", str(stats_out), "--screenshot", str(screenshot)]
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+
+
+def join_participants(base_url: str, token: str, out_dir: Path, chrome: str,
+                       seconds: float) -> tuple[list[Check], dict[str, dict]]:
+    """Writes each participant's per-user URL to a token-mode (0600) temp
+    file (never printed), joins Alex and Sam at the same moment via the
+    public call-only page, and returns join checks plus each
+    participant's raw getStats() entries for the media check."""
+    checks: list[Check] = []
+    stats: dict[str, dict] = {}
+    specs = [("Alex", out_dir / "alex.wav", 9301), ("Sam", out_dir / "sam.wav", 9302)]
+    procs = {}
+    url_files = {}
+    for name, wav, port in specs:
+        url_file = out_dir / (".%s.url" % name.lower())
+        url_file.write_text(build_public_url(base_url, "/meeting/", token), encoding="utf-8")
+        url_file.chmod(0o600)
+        url_files[name] = url_file
+        stats_out = out_dir / ("%s-stats.json" % name.lower())
+        screenshot = out_dir / ("%s-join.png" % name.lower())
+        procs[name] = (start_participant(name, wav, url_file, stats_out, screenshot,
+                                          port, chrome, seconds), stats_out)
+    for name, (proc, stats_out) in procs.items():
+        out, _ = proc.communicate(timeout=seconds + 60)
+        joined = _JOINED_RE.search(out)
+        if proc.returncode != 0 or not joined:
+            checks.append(Check("join (%s)" % name, "FAIL",
+                                 redact(out, token).strip().splitlines()[-1]
+                                 if out.strip() else "no output"))
+            continue
+        checks.append(Check("join (%s)" % name, "PASS",
+                             "joined after %ss" % joined.group(2)))
+        try:
+            stats[name] = classify_candidate_pair(json.loads(stats_out.read_text()))
+        except (FileNotFoundError, json.JSONDecodeError) as exc:
+            checks.append(Check("media path (%s)" % name, "FAIL",
+                                 "no usable stats: %s" % exc))
+    for url_file in url_files.values():
+        url_file.unlink(missing_ok=True)
+    return checks, stats
 
 
 # --------------------------------------------------------------------------
@@ -359,6 +546,21 @@ def build_arg_parser() -> argparse.ArgumentParser:
     return ap
 
 
+def resolve_piper_voice(label: str, path_arg: str | None, url_arg: str | None,
+                         sha_arg: str | None, voices_dir: Path) -> Path:
+    if path_arg:
+        return Path(path_arg)
+    if url_arg and sha_arg:
+        dest = voices_dir / ("%s.onnx" % label)
+        if not dest.exists():
+            voices_dir.mkdir(parents=True, exist_ok=True)
+            download_voice(url_arg, dest, sha_arg)
+        return dest
+    raise SystemExit(
+        "--piper-voice-%s or --piper-voice-url-%s/--piper-voice-sha256-%s is required "
+        "for --tts piper" % (label, label, label))
+
+
 def main(argv: list[str]) -> int:
     args = build_arg_parser().parse_args(argv)
     token = Path(args.token_file).read_text(encoding="utf-8").strip()
@@ -366,14 +568,79 @@ def main(argv: list[str]) -> int:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     report = Report(base_url=args.base_url, token=token)
+    session_title = "e2e-" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+
+    # 1. Preflight.
     report.checks.extend(preflight(args.base_url, token))
     report.checks.append(check_tls(args.base_url))
 
-    report_path_json = out_dir / "report.json"
-    report_path_md = out_dir / "report.md"
-    report_path_json.write_text(json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
-    report_path_md.write_text(report.to_markdown() + "\n", encoding="utf-8")
+    # 2. Speech.
+    timeline = build_timeline(per_speaker=args.per_speaker)
+    render_kwargs = {"espeak": args.espeak, "ffmpeg": args.ffmpeg}
+    if args.tts == "piper":
+        voices_dir = out_dir / "voices"
+        render_kwargs["piper_cmd"] = args.piper_cmd
+        render_kwargs["piper_voice_alex"] = resolve_piper_voice(
+            "alex", args.piper_voice_alex, args.piper_voice_url_alex,
+            args.piper_voice_sha256_alex, voices_dir)
+        render_kwargs["piper_voice_sam"] = resolve_piper_voice(
+            "sam", args.piper_voice_sam, args.piper_voice_url_sam,
+            args.piper_voice_sha256_sam, voices_dir)
+    render_script(args.tts, timeline, out_dir, **render_kwargs)
+    report.add("speech generated", "PASS",
+               "engine=%s events=%d total_s=%.1f" % (args.tts, len(timeline["events"]),
+                                                       timeline["total_s"]))
+
+    # 3 & 4. Participants join over the public path; media path proof.
+    join_checks, media_stats = join_participants(
+        args.base_url, token, out_dir, args.chrome, args.minutes * 60)
+    report.checks.extend(join_checks)
+    for name, stats in media_stats.items():
+        report.checks.append(media_check(name, stats))
+
+    # 5. Surfaces.
+    surface_checks, transcript_bullets = check_surfaces(
+        args.base_url, token, ["Alex", "Sam"], AGENDA_LINE, out_dir)
+    report.checks.extend(surface_checks)
+
+    # 6. Contract.
+    monitor_url = build_public_url(args.base_url, "/monitor/", token)
+    report.checks.append(run_contract_check(monitor_url, token, out_dir))
+
+    # 7. Results.
+    result = score.score(transcript_bullets, timeline)
+    report.checks.append(score_check(result["ratio"], result["matched"], args.min_score_ratio))
+
+    def poll_snapshot() -> dict:
+        try:
+            return fetch_snapshot(args.base_url, token)
+        except Exception:
+            return {}
+
+    lane_answer_seen, elapsed_s = wait_for_call_answer(poll_snapshot)
+    report.checks.append(wake_check(args.tts, lane_answer_seen, elapsed_s))
+
+    final_snapshot = poll_snapshot()
+    topic_keywords = {kw for ev in timeline["events"] for kw in ev["keywords"]}
+    history_text = " ".join(h.get("markdown", "") for h in final_snapshot.get("history", []))
+    report.checks.append(events_check(
+        "topic", any(kw in history_text for kw in topic_keywords)))
+    report.checks.append(events_check(
+        "view-intent", bool(final_snapshot.get("history") or final_snapshot.get("main"))))
+    report.checks.append(knowledge_check(
+        bool(args.wiki_dir), count_knowledge_hits(final_snapshot)))
+
+    # 8. Cleanup.
+    print(cleanup_command(session_title))
+
+    # 9. Output.
+    (out_dir / "report.json").write_text(
+        json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
+    (out_dir / "report.md").write_text(report.to_markdown() + "\n", encoding="utf-8")
     print(report.to_markdown())
+    if not args.keep_artifacts:
+        for name in ("alex.wav", "sam.wav"):
+            (out_dir / name).unlink(missing_ok=True)
     return 0 if report.passed else 1
 
 
