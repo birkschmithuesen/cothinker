@@ -36,3 +36,14 @@ def test_broken_example_fails_with_the_extra_host_reason(tmp_path):
         if not check.passed and "example.invalid" in check.reason
     ]
     assert network_failures, [c.to_dict() for c in report.checks]
+
+
+def test_broken_example_fails_with_the_outside_contract_path_reason(tmp_path):
+    report = run_check(str(BROKEN_SURFACE), scenario="meeting", out=tmp_path)
+
+    assert not report.passed
+    path_failures = [
+        check for check in report.checks
+        if not check.passed and "redoc" in check.reason
+    ]
+    assert path_failures, [c.to_dict() for c in report.checks]
