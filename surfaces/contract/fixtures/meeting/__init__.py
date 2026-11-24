@@ -12,6 +12,13 @@ The speaker queue (`StageStateSnapshot.queue`, the speaker-queue block's
 `agenda.next_speaker` -- it is the same queue, viewed through the
 `speaker-queue` block's own wire shape rather than the agenda's.
 
+`StageStateSnapshot.voice` (the voice-attribution block's `voice:room`
+payload, issue #164) turns over on its OWN schedule, deliberately out of
+step with the queue: `voice.speaking` is who is actually talking right
+now, by track/STT attribution, independent of who holds the floor by
+tapping to join the queue -- the point the fixture is meant to make
+legible.
+
 All wall-clock labels and epoch times are built relative to the moment
 the scenario is loaded (`build_frames`'s `now`, default `time.time()`),
 not to a fixed past date -- a hardcoded date drifts out of the future
@@ -40,6 +47,8 @@ from surfaces.contract.models import (
     TimerIntent,
     TranscriptLine,
     TranscriptRecentIntent,
+    VoiceIntent,
+    VoiceSnapshot,
 )
 
 PEOPLE = ["Mira", "Jonas", "Tamar"]
@@ -78,6 +87,13 @@ def _seat(person: str) -> QueueSeat:
 
 def _queue(speaking: str, waiting: list[str]) -> QueueSnapshot:
     return QueueSnapshot(speaking=_seat(speaking), waiting=[_seat(p) for p in waiting])
+
+
+def _voice(speaking: str | None, since: str | None, recent: list[tuple[str, str]]) -> VoiceSnapshot:
+    return VoiceSnapshot(
+        speaking=speaking, since=since,
+        recent=[{"name": name, "last_at": last_at} for name, last_at in recent],
+    )
 
 
 def build_frames(now: float | None = None) -> list[Frame]:
@@ -134,6 +150,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 items=_agenda_items(1),
             ),
             queue=_queue("Mira", ["Jonas", "Tamar"]),
+            voice=_voice("Jonas", t0, []),
             tasks=[],
             transcript_recent=[],
         )
@@ -163,6 +180,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
             view_intents=[
                 PromptIntent(id="VI1", to_person="Mira", text="What is one expectation for today?"),
                 TimerIntent(id="VI2", label="Opening round", remaining_s=300.0, budget_s=300.0, items=_agenda_items(1)),
+                VoiceIntent(id="voice:room", speaking="Jonas", since=t0, recent=[]),
             ],
         ),
         # Mira's contribution comes in; the recent-transcript field (planned,
@@ -172,10 +190,12 @@ def build_frames(now: float | None = None) -> list[Frame]:
             snapshot=snapshot(
                 mirror="Mira: I'd like us to leave with one clear owner per open risk.",
                 transcript_recent=transcript_after_mira,
+                voice=_voice("Tamar", t1, [("Jonas", t0)]),
             ),
             view_intents=[
                 TranscriptRecentIntent(id="VI3", lines=transcript_after_mira),
                 TimerIntent(id="VI2", label="Opening round", remaining_s=180.0, budget_s=300.0, items=_agenda_items(1)),
+                VoiceIntent(id="voice:room", speaking="Tamar", since=t1, recent=[{"name": "Jonas", "last_at": t0}]),
             ],
         ),
         # Agenda advances to item 2; a decision and an open question land.
@@ -196,10 +216,13 @@ def build_frames(now: float | None = None) -> list[Frame]:
                     items=_agenda_items(2),
                 ),
                 queue=_queue("Jonas", ["Tamar", "Mira"]),
+                voice=_voice("Mira", t2, [("Tamar", t1), ("Jonas", t0)]),
                 transcript_recent=transcript_after_jonas,
             ),
             view_intents=[
                 TranscriptRecentIntent(id="VI4", lines=transcript_after_jonas),
+                VoiceIntent(id="voice:room", speaking="Mira", since=t2,
+                           recent=[{"name": "Tamar", "last_at": t1}, {"name": "Jonas", "last_at": t0}]),
             ],
         ),
         # Speaker queue turns over to Tamar; another contribution comes in.
@@ -220,10 +243,13 @@ def build_frames(now: float | None = None) -> list[Frame]:
                     items=_agenda_items(2),
                 ),
                 queue=_queue("Tamar", ["Mira", "Jonas"]),
+                voice=_voice("Tamar", t3, [("Mira", t2), ("Jonas", t0)]),
                 transcript_recent=transcript_after_tamar,
             ),
             view_intents=[
                 TranscriptRecentIntent(id="VI5", lines=transcript_after_tamar),
+                VoiceIntent(id="voice:room", speaking="Tamar", since=t3,
+                           recent=[{"name": "Mira", "last_at": t2}, {"name": "Jonas", "last_at": t0}]),
             ],
         ),
         # A short pause.
@@ -244,6 +270,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
                     items=_agenda_items(2),
                 ),
                 queue=_queue("Tamar", ["Mira", "Jonas"]),
+                voice=_voice("Tamar", t3, [("Mira", t2), ("Jonas", t0)]),
                 transcript_recent=transcript_after_tamar,
             ),
             view_intents=[StatusIntent(id="VI6", text="Pause for coffee", severity="info")],
@@ -269,9 +296,13 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 ),
                 transcript_recent=transcript_after_tamar,
                 tasks=tasks_named,
+                voice=_voice(None, None, [("Tamar", t3), ("Mira", t2), ("Jonas", t0)]),
             ),
             view_intents=[
                 TasksIntent(id="VI7", tasks=tasks_named),
+                VoiceIntent(id="voice:room", speaking=None, since=None,
+                           recent=[{"name": "Tamar", "last_at": t3}, {"name": "Mira", "last_at": t2},
+                                   {"name": "Jonas", "last_at": t0}]),
             ],
         ),
     ]
