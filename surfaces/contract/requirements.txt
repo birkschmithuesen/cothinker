@@ -3,7 +3,6 @@ fastapi
 uvicorn
 pydantic
 PyYAML
-httpx2
 
 # surfaces/contract/check.py (ADR 0019 point 4, issue #142): the
 # conformance check's headless Chromium. Run `playwright install

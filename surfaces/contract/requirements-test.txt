@@ -1,0 +1,4 @@
+# surfaces/contract: test-only dependencies, not needed to run the app.
+# httpx is the package fastapi.testclient.TestClient imports (not the
+# unrelated look-alike package "httpx2").
+httpx
