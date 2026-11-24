@@ -429,6 +429,11 @@ class StageState:
         # progress (key-absent-means-hidden); an intent with empty `text`
         # (its final landed) clears it.
         self.transcript_partial: dict | None = None
+        # The tasks the meeting named, from the decisions-tasks-questions
+        # block's `tasks:room` view intent (issue #129): a LIST, like the
+        # contract's `StageStateSnapshot.tasks`. None until the first task
+        # -- the key is left out of `content()` until then.
+        self.tasks: list | None = None
 
     # ------------------------------------------------------------ helpers
     @property
@@ -1148,7 +1153,8 @@ class StageState:
                            ("session_graph", self.session_graph),
                            ("knowledge", self.knowledge),
                            ("listen", self.listen),
-                           ("transcript_partial", self.transcript_partial)):
+                           ("transcript_partial", self.transcript_partial),
+                           ("tasks", self.tasks)):
             if value is not None:
                 content[key] = value
         return content
