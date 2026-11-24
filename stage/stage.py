@@ -60,7 +60,6 @@ applies it on every poll, before it ever looks at the fingerprint.
 from __future__ import annotations
 
 import argparse
-import fcntl
 import hashlib
 import html
 import json
@@ -78,6 +77,7 @@ from urllib.parse import parse_qs, quote, unquote
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from graph.vault_notes import DEFAULT_EXCLUDE, scan_vault   # noqa: E402
+from shared.actions_spool import append_action as _spool_append_action  # noqa: E402
 from shared.minutes_format import is_v2, parse_topics         # noqa: E402
 from gateway import stage_image                              # noqa: E402
 
@@ -103,7 +103,6 @@ STATIC = Path(__file__).resolve().parent / "static"
 # consumer reads it. The stage never writes `buehne.json`.
 DEFAULT_SPOOL_DIR = "~/.local/state/cothinker/spool"
 SPOOL_DIR: Path = Path(DEFAULT_SPOOL_DIR).expanduser()
-ACTIONS_FILE = "actions.jsonl"
 COOKIE_NAME = "cothinker_pid"
 MAX_POST_BYTES = 2048
 MIN_ACTION_GAP_S = 0.5           # per participant
@@ -132,30 +131,14 @@ def clean_name(raw: object) -> str | None:
 
 
 def append_action(pid: str, intent_id: str, kind: str, payload: dict) -> None:
-    """Appends one JSON line to `<SPOOL_DIR>/<session folder>/actions.jsonl`.
+    """Appends one JSON line to `<SPOOL_DIR>/<session folder>/actions.jsonl`
+    (`shared.actions_spool.append_action`, issue #183's one write path).
 
     The session folder is the one holding the `buehne.json` the stage is
-    showing (`stage_file().parent`). Line: `{"v": 1, "at", "person",
-    "intent_id", "kind", "payload"}`; `at` is ISO-8601 UTC with
-    milliseconds and a `Z` suffix, e.g. `2026-09-08T19:12:04.123Z`. The
-    append happens under an exclusive `flock` as a single write.
+    showing (`stage_file().parent`).
     """
-    at = datetime.now(timezone.utc).isoformat(timespec="milliseconds")
-    at = at.replace("+00:00", "Z")
-    line = json.dumps({"v": 1, "at": at, "person": pid,
-                       "intent_id": intent_id, "kind": kind,
-                       "payload": payload}, ensure_ascii=False) + "\n"
-    folder = SPOOL_DIR / stage_file().parent.name
-    folder.mkdir(mode=0o700, parents=True, exist_ok=True)
-    fd = os.open(folder / ACTIONS_FILE,
-                 os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
-    with os.fdopen(fd, "a", encoding="utf-8") as f:
-        fcntl.flock(f, fcntl.LOCK_EX)
-        try:
-            f.write(line)
-            f.flush()
-        finally:
-            fcntl.flock(f, fcntl.LOCK_UN)
+    _spool_append_action(SPOOL_DIR, stage_file().parent.name, pid,
+                         intent_id, kind, payload)
 # Read once, at import: the list is a deployment fact, and a directory
 # listing per request would be a file system call in front of a room.
 VENDOR_FILES = ("cytoscape.min.js", "layout-base.js", "cose-base.js",
