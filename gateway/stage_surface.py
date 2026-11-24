@@ -29,6 +29,7 @@ table of the migration plan:
                                  it did not land), the Nachtrag notice
     condense:<id>   artefact  -> none (the minutes block writes the text)
     queue:room      queue     -> content()["queue"]
+    voice:room      voice     -> content()["voice"]
     share:room      share     -> content()["share"]
     graph:session   graph     -> content()["session_graph"]
     timer:current   timer     -> content()["agenda"]
@@ -57,7 +58,7 @@ from blocks.mirroring_coach.coach import NACHTRAG_PREFIX  # the block owns the c
 from shared.surface import UserAction, ViewIntent
 
 KINDS = frozenset({"prompt", "status", "artefact", "graph", "timer", "queue",
-                   "share", "knowledge"})
+                   "voice", "share", "knowledge"})
 
 # Keys of the agenda the legacy AgendaController owns and the timer intent
 # does not carry; they survive a timer render.
@@ -98,6 +99,7 @@ class StageSurface:
             "mirror": ("prompt", self._mirror),
             "condense": ("artefact", self._condense),
             "queue": ("queue", self._region("queue")),
+            "voice": ("voice", self._region("voice")),
             "share": ("share", self._region("share")),
             "graph": ("graph", self._region("session_graph")),
             "timer": ("timer", self._timer),
@@ -311,7 +313,7 @@ class StageSurface:
         changed = False
         for intent_id in [i for i in self._seen if i not in present]:
             del self._seen[intent_id]
-            attribute = {"queue": "queue", "share": "share",
+            attribute = {"queue": "queue", "voice": "voice", "share": "share",
                          "graph": "session_graph",
                          "knowledge": "knowledge"}.get(_prefix(intent_id))
             if attribute is not None and getattr(self._state, attribute) is not None:

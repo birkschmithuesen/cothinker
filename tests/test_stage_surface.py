@@ -113,7 +113,7 @@ def test_status_rule_sets_operating_line():
     surface, _, writer, _ = make()
     assert surface.name == "stage" and list(surface.actions()) == []
     assert surface.kinds == {"prompt", "status", "artefact", "graph", "timer",
-                             "queue", "share", "knowledge"}
+                             "queue", "voice", "share", "knowledge"}
     surface.render([intent("status:line", "status",
                            {"state": "working", "detail": {"count": 3, "failed": False}})])
     assert len(writer.statuses) == 1
@@ -213,6 +213,17 @@ def test_queue_rule_sets_queue_key_and_clears_it():
     assert state.content()["queue"] == queue
     surface.render([])
     assert "queue" not in state.content()
+
+
+def test_voice_rule_sets_voice_key_and_clears_it():
+    """issue #164: `voice` is a separate region from `queue`, rendered the
+    same way (set on an intent, cleared when the intent leaves the board)."""
+    surface, state, _, _ = make()
+    voice = {"speaking": "Mira", "since": "2026-11-23T09:12:00+01:00", "recent": []}
+    surface.render([intent("voice:room", "voice", voice)])
+    assert state.content()["voice"] == voice
+    surface.render([])
+    assert "voice" not in state.content()
 
 
 def test_share_rule_sets_share_key():

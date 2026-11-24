@@ -199,6 +199,25 @@ class QueueSnapshot(BaseModel):
     round: None = Field(default=None, description="Reserved for a future round-based queue mode; always `None` today.")
 
 
+class VoiceRecentEntry(BaseModel):
+    """One entry of `voice.recent`: a distinct past speaker and when they
+    were last heard."""
+
+    name: str = Field(description="Display name of a past speaker.", examples=["Jonas"])
+    last_at: str = Field(description="Wall-clock label of when this person was last heard speaking.", examples=["2026-11-23T09:10:00+01:00"])
+
+
+class VoiceSnapshot(BaseModel):
+    """`content()["voice"]`: who is talking right now, attributed from the
+    audio track / STT speaker label (`blocks/voice_attribution/`) -- NOT
+    who holds the floor by tapping to join the speaker queue (`queue`).
+    `None` fields mean nobody is currently attributed as speaking."""
+
+    speaking: str | None = Field(default=None, description="Display name of the participant whose track is currently active; `None` when nobody is.", examples=["Mira"])
+    since: str | None = Field(default=None, description="Wall-clock label of when `speaking` started; `None` when `speaking` is `None`.", examples=["2026-11-23T09:12:00+01:00"])
+    recent: list[VoiceRecentEntry] = Field(default_factory=list, description="The last 5 distinct speakers before `speaking`, newest first.")
+
+
 class ShareRow(BaseModel):
     """One row of `blocks/speaking_share/talk_share.py`'s `talk_share` event."""
 
@@ -290,6 +309,17 @@ class StageStateSnapshot(BaseModel):
         description="The speaker queue, from the `speaker-queue` block; `None`"
         " when that block is absent from the session, not merely empty of"
         " seats (key-absent-means-hidden, `StageState._content()`).",
+    )
+    voice: VoiceSnapshot | None = Field(
+        default=None,
+        description="Who is talking right now, from the `voice-attribution`"
+        " block's per-track/STT speaker attribution; `None` when that"
+        " block is absent from the session (key-absent-means-hidden,"
+        " `StageState._content()`). Separate from `queue`: `queue`"
+        " describes who holds the floor by TAPPING to join the speaker"
+        " queue, `voice` describes who is actually talking, independent"
+        " of anyone using the queue at all -- an online meeting where"
+        " nobody taps still has a non-empty `voice.speaking`.",
     )
     share: ShareSnapshot | None = Field(
         default=None,
@@ -395,6 +425,18 @@ class QueueIntent(BaseModel):
     round: None = Field(default=None, description="Reserved for a future round-based queue mode; always `None` today.")
 
 
+class VoiceIntent(BaseModel):
+    """`voice:room`: the voice-attribution block's view intent (kind
+    `voice`, `blocks/voice_attribution/__init__.py`); the same shape as
+    `StageStateSnapshot.voice`."""
+
+    kind: Literal["voice"] = "voice"
+    id: str = Field(description="Identity a user action refers back to.", examples=["voice:room"])
+    speaking: str | None = Field(default=None, description="Display name of the participant whose track is currently active; `None` when nobody is.", examples=["Mira"])
+    since: str | None = Field(default=None, description="Wall-clock label of when `speaking` started; `None` when `speaking` is `None`.", examples=["2026-11-23T09:12:00+01:00"])
+    recent: list[VoiceRecentEntry] = Field(default_factory=list, description="The last 5 distinct speakers before `speaking`, newest first.")
+
+
 class ShareIntent(BaseModel):
     """`share:room`: the speaking-share block's view intent (kind `share`,
     `blocks/speaking_share/__init__.py::_on_tick()`); the same shape as
@@ -482,6 +524,7 @@ ViewIntent = Annotated[
         StatusIntent,
         ArtefactIntent,
         QueueIntent,
+        VoiceIntent,
         ShareIntent,
         GraphIntent,
         KnowledgeIntent,
