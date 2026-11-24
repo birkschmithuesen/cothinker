@@ -29,6 +29,9 @@ ALLOWLIST = frozenset({
     "templates/reflect",   # issue #153
     "templates/inscribe",  # issue #153
     "surfaces/contract",   # issue #153
+    "surfaces/operator",   # issue #153 -- landed (issue #159) before ADR 0022
+                            # level 1 (issue #155); its tests live in the
+                            # repo-level tests/test_operator_*.py layout.
 })
 
 
