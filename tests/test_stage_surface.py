@@ -113,7 +113,7 @@ def test_status_rule_sets_operating_line():
     surface, _, writer, _ = make()
     assert surface.name == "stage" and list(surface.actions()) == []
     assert surface.kinds == {"prompt", "status", "artefact", "graph", "timer",
-                             "queue", "voice", "share", "knowledge"}
+                             "queue", "voice", "share", "knowledge", "listen"}
     surface.render([intent("status:line", "status",
                            {"state": "working", "detail": {"count": 3, "failed": False}})])
     assert len(writer.statuses) == 1
@@ -238,6 +238,21 @@ def test_graph_rule_sets_session_graph_key():
     graph = {"nodes": [{"id": "n1"}], "edges": []}
     surface.render([intent("graph:session", "graph", graph)])
     assert state.content()["session_graph"] == graph
+
+
+def test_listen_rule_sets_listen_key_and_clears_it():
+    """issue #180, ADR 0023: the call-window block's `listen:room` intent
+    renders the same way as `queue`/`voice` -- set on an intent, cleared
+    when the intent leaves the board -- so `/api/snapshot` (live mode,
+    ADR 0019) can serve `listen` straight from `buehne.json` without a
+    stage-specific special case."""
+    surface, state, _, _ = make()
+    listen = {"state": "listening", "since": 12.0, "opened_by": "voice",
+              "closes_in_s": 8.0, "last_close": None}
+    surface.render([intent("listen:room", "listen", listen)])
+    assert state.content()["listen"] == listen
+    surface.render([])
+    assert "listen" not in state.content()
 
 
 def test_knowledge_rule_sets_knowledge_key_and_clears_it():

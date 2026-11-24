@@ -36,6 +36,8 @@ table of the migration plan:
     knowledge:<id>  knowledge -> content()["knowledge"] (issue #148: the
                                  knowledge-link block's named hit payload,
                                  replacing the old bare-path `links:` kind)
+    listen:room     listen    -> content()["listen"] (issue #180, ADR 0023:
+                                 the call-window block's state)
 
 Rendering is idempotent: an intent whose payload is unchanged since the
 last call is not applied again, so passing the whole snapshot each time is
@@ -58,7 +60,7 @@ from blocks.mirroring_coach.coach import NACHTRAG_PREFIX  # the block owns the c
 from shared.surface import UserAction, ViewIntent
 
 KINDS = frozenset({"prompt", "status", "artefact", "graph", "timer", "queue",
-                   "voice", "share", "knowledge"})
+                   "voice", "share", "knowledge", "listen"})
 
 # Keys of the agenda the legacy AgendaController owns and the timer intent
 # does not carry; they survive a timer render.
@@ -104,6 +106,7 @@ class StageSurface:
             "graph": ("graph", self._region("session_graph")),
             "timer": ("timer", self._timer),
             "knowledge": ("knowledge", self._region("knowledge")),
+            "listen": ("listen", self._region("listen")),
         }
 
     # ------------------------------------------------------------ Surface
@@ -315,7 +318,8 @@ class StageSurface:
             del self._seen[intent_id]
             attribute = {"queue": "queue", "voice": "voice", "share": "share",
                          "graph": "session_graph",
-                         "knowledge": "knowledge"}.get(_prefix(intent_id))
+                         "knowledge": "knowledge",
+                         "listen": "listen"}.get(_prefix(intent_id))
             if attribute is not None and getattr(self._state, attribute) is not None:
                 setattr(self._state, attribute, None)
                 changed = True
