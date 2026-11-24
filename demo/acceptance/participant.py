@@ -6,11 +6,19 @@ usage: participant.py --url-file FILE --name Alex --wav alex.wav --seconds 300
          [--screenshot out.png [--screenshot-after 20]]
          [--ignore-certificate-errors] [--host-resolver-rules "MAP a b"]
          [--cookie-path /demo/] --cdp-port 9301 [--chrome google-chrome]
+         [--stats-out stats.json]
 
 The demo URL (it holds the token) is read from --url-file and never
 printed. The cookie ct_demo_name is set before navigation so the page
 skips its name form. The WAV starts playing when the page grabs the
 microphone at join, so start all participants at the same moment.
+
+--stats-out writes the raw `RTCPeerConnection.getStats()` entries of
+every peer connection the page creates (captured via an init script
+installed before navigation) as a JSON array, once at least one
+connection exists -- proof of which transport actually carried the
+call's media (demo/acceptance/e2e.py's media path check, issue #153
+point 4).
 """
 from __future__ import annotations
 
@@ -25,6 +33,33 @@ import urllib.parse
 import urllib.request
 
 import websocket  # websocket-client
+
+# Installed before navigation (Page.addScriptToEvaluateOnNewDocument) so it
+# runs before any page script, including Jitsi's: every RTCPeerConnection
+# the page creates is captured into window.__pcs for later getStats() reads.
+CAPTURE_PEER_CONNECTIONS_SCRIPT = """
+(() => {
+  window.__pcs = [];
+  const Real = window.RTCPeerConnection;
+  window.RTCPeerConnection = function(...args) {
+    const pc = new Real(...args);
+    window.__pcs.push(pc);
+    return pc;
+  };
+  window.RTCPeerConnection.prototype = Real.prototype;
+})();
+"""
+
+GATHER_STATS_SCRIPT = """
+(async () => {
+  const out = [];
+  for (const pc of (window.__pcs || [])) {
+    const stats = await pc.getStats();
+    for (const entry of stats.values()) out.push(entry);
+  }
+  return JSON.stringify(out);
+})()
+"""
 
 
 class Cdp:
@@ -43,9 +78,9 @@ class Cdp:
                     raise RuntimeError("%s: %s" % (method, msg["error"]))
                 return msg.get("result", {})
 
-    def eval(self, expr: str):
+    def eval(self, expr: str, await_promise: bool = False):
         r = self.call("Runtime.evaluate", expression=expr,
-                      returnByValue=True)
+                      returnByValue=True, awaitPromise=await_promise)
         return r.get("result", {}).get("value")
 
 
@@ -64,7 +99,7 @@ def wait_cdp(port: int, timeout: float = 30.0) -> str:
     raise SystemExit("Chrome CDP did not come up")
 
 
-def main(argv: list[str]) -> int:
+def build_arg_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser()
     ap.add_argument("--url-file", required=True)
     ap.add_argument("--name", required=True)
@@ -79,7 +114,13 @@ def main(argv: list[str]) -> int:
                     help="remote-debugging port, distinct per participant")
     ap.add_argument("--chrome", default="google-chrome")
     ap.add_argument("--join-timeout", type=float, default=90)
-    a = ap.parse_args(argv)
+    ap.add_argument("--stats-out")
+    ap.add_argument("--stats-timeout", type=float, default=15)
+    return ap
+
+
+def main(argv: list[str]) -> int:
+    a = build_arg_parser().parse_args(argv)
 
     with open(a.url_file, encoding="utf-8") as fh:
         url = fh.read().strip()
@@ -109,6 +150,9 @@ def main(argv: list[str]) -> int:
             cdp.call("Network.setCookie", name="ct_demo_name", value=a.name,
                      url=origin, path=a.cookie_path, secure=True,
                      sameSite="Lax")
+            if a.stats_out:
+                cdp.call("Page.addScriptToEvaluateOnNewDocument",
+                         source=CAPTURE_PEER_CONNECTIONS_SCRIPT)
             cdp.call("Page.navigate", url=url)
             t0 = time.time()
             while not cdp.eval(
@@ -124,6 +168,20 @@ def main(argv: list[str]) -> int:
                 with open(a.screenshot, "wb") as fh:
                     fh.write(base64.b64decode(shot["data"]))
                 print("screenshot written")
+            if a.stats_out:
+                t1 = time.time()
+                while not cdp.eval("(window.__pcs || []).length > 0"):
+                    if time.time() - t1 > a.stats_timeout:
+                        print("FAIL: no RTCPeerConnection appeared for stats",
+                              file=sys.stderr)
+                        return 1
+                    time.sleep(0.5)
+                raw = cdp.eval(GATHER_STATS_SCRIPT, await_promise=True)
+                with open(a.stats_out, "w", encoding="utf-8") as fh:
+                    fh.write(raw)
+                entries = len(json.loads(raw))
+                print("stats written pcs=%d entries=%d"
+                      % (cdp.eval("(window.__pcs || []).length"), entries))
             time.sleep(max(0.0, a.seconds - (time.time() - t0)))
             return 0
         finally:
