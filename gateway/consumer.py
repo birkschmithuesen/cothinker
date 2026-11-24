@@ -2548,6 +2548,20 @@ class StageWriter:
         except Exception as e:            # noqa: BLE001 -- agent thread
             self.log("policy delivered failed:", repr(e))
 
+    def _task_filed(self, oid: str, action: dict) -> None:
+        """Hand a filed `tag_entry` that answered order `oid` to level 2,
+        which turns an `aufgabe` into a task (issue #129). Only a policy
+        that has the `task_filed` hook gets it. Never under
+        `StageState._lock`: the task goes out as a view intent and the
+        stage surface writes the stage, writer lock first."""
+        hook = getattr(self.policy, "task_filed", None)
+        if not oid or hook is None:
+            return
+        try:
+            hook(oid, action)
+        except Exception as e:            # noqa: BLE001 -- agent thread
+            self.log("policy task_filed failed:", repr(e))
+
     def _protocol_step(self, action: dict, mark: str = "") -> tuple | None:
         """What an ACCEPTED surface action means for the v2 protocol.
 
@@ -2619,6 +2633,7 @@ class StageWriter:
                                      stamp=action.get("time"), mark=mark)
         if reason in ("", "duplicate"):
             # A duplicate is in the protocol already: the order is answered.
+            self._task_filed(oid, action)
             self._delivered(oid)
         if reason:
             self.log("proposal rejected:", reason, str(action)[:120])

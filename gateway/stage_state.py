@@ -412,6 +412,11 @@ class StageState:
         # (issue #148). None means the key is left out of `content()`
         # (key-absent-means-hidden), same as `queue`/`share`/`session_graph`.
         self.knowledge: dict | None = None
+        # The tasks the meeting named, from the decisions-tasks-questions
+        # block's `tasks:room` view intent (issue #129): a LIST, like the
+        # contract's `StageStateSnapshot.tasks`. None until the first task
+        # -- the key is left out of `content()` until then.
+        self.tasks: list | None = None
 
     # ------------------------------------------------------------ helpers
     @property
@@ -1129,7 +1134,8 @@ class StageState:
         for key, value in (("queue", self.queue), ("voice", self.voice),
                            ("share", self.share),
                            ("session_graph", self.session_graph),
-                           ("knowledge", self.knowledge)):
+                           ("knowledge", self.knowledge),
+                           ("tasks", self.tasks)):
             if value is not None:
                 content[key] = value
         return content

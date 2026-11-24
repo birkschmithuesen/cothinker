@@ -397,11 +397,21 @@ ORDER_RULES = ("  Fuer alle Auftraege: nichts loeschen, nichts umsortieren, "
                "kopieren, keine Datei ausserhalb von {ordner} schreiben.\n")
 
 
+# Issue #129: a task on the stage carries who and by when -- named by the
+# meeting, never guessed. Appended to an `aufgabe` order only.
+TASK_FIELDS_NOTE = (' Setze bei jeder dieser Aktionen zusaetzlich "person" '
+                    '(wer es macht) und "due" (bis wann), beides so, wie die '
+                    'Runde es genannt hat, sonst "".')
+
+
 def order_text(action: Action, order_id: str, anchor_text: str, *,
                target: str = "", stem: str = "") -> str:
-    return ORDER_TEXTS[action.kind].format(
+    text = ORDER_TEXTS[action.kind].format(
         id=order_id, anker=anchor_text, tag=action.tag, ziel=target,
         stamm=stem)
+    if action.kind == "tag_entry" and action.tag == "aufgabe":
+        text += TASK_FIELDS_NOTE
+    return text
 
 
 def orders_note(lines: Sequence[str], folder) -> str:

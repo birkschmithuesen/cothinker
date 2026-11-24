@@ -50,6 +50,18 @@ from .questions import CONFIRM_ID, CONFIRM_QUESTIONS, MODE_ID, MODE_QUESTIONS
 # The signal token of a page ordered by Zuruf (MM-G D7), for the trace.
 ZURUF_SIGNAL = "zuruf_seite"
 
+# A task's fields on the stage (issue #129): one line each, cut here.
+TASK_TEXT_MAX = 300
+TASK_FIELD_MAX = 60
+
+
+def _one_line(value, limit: int) -> str:
+    """`value` as one stripped line of at most `limit` characters; "" for
+    anything that is not a string."""
+    if not isinstance(value, str):
+        return ""
+    return " ".join(value.split())[:limit].rstrip()
+
 
 @dataclass
 class Order:
@@ -434,6 +446,31 @@ class PolicyRunner:
         that snapshot is used -- the decider thread may swap it any time."""
         ask = self.policy.ask
         return ask.stage_id if ask is not None else ""
+
+    def orders_waiting(self) -> bool:
+        """True while orders wait for a turn to take them (`take_turn`).
+        Any thread; takes only this runner's own lock (a leaf)."""
+        with self._lock:
+            return bool(self._queued)
+
+    def task_for(self, order_id, action) -> Optional[dict]:
+        """The task an accepted `tag_entry` proposal carries when it answers
+        one of the RUNNING turn's `aufgabe` orders: `{"text", "person",
+        "due"}` (issue #129; `person` / `due` are "" when the meeting did
+        not name them). None for every other proposal or order id."""
+        if not isinstance(action, dict) or action.get("tag") != "aufgabe":
+            return None
+        with self._lock:
+            o = self._current(order_id)
+            if (o is None or o.action.kind != "tag_entry"
+                    or o.action.tag != "aufgabe"):
+                return None
+        text = _one_line(action.get("text"), TASK_TEXT_MAX)
+        if not text:
+            return None
+        return {"text": text,
+                "person": _one_line(action.get("person"), TASK_FIELD_MAX),
+                "due": _one_line(action.get("due"), TASK_FIELD_MAX)}
 
     def take_turn(self) -> TurnOrders:
         with self._lock:

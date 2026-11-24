@@ -36,6 +36,8 @@ table of the migration plan:
     knowledge:<id>  knowledge -> content()["knowledge"] (issue #148: the
                                  knowledge-link block's named hit payload,
                                  replacing the old bare-path `links:` kind)
+    tasks:room      tasks     -> content()["tasks"] (issue #129: the
+                                 decisions-tasks-questions block's list)
 
 Rendering is idempotent: an intent whose payload is unchanged since the
 last call is not applied again, so passing the whole snapshot each time is
@@ -58,7 +60,7 @@ from blocks.mirroring_coach.coach import NACHTRAG_PREFIX  # the block owns the c
 from shared.surface import UserAction, ViewIntent
 
 KINDS = frozenset({"prompt", "status", "artefact", "graph", "timer", "queue",
-                   "voice", "share", "knowledge"})
+                   "voice", "share", "knowledge", "tasks"})
 
 # Keys of the agenda the legacy AgendaController owns and the timer intent
 # does not carry; they survive a timer render.
@@ -104,6 +106,7 @@ class StageSurface:
             "graph": ("graph", self._region("session_graph")),
             "timer": ("timer", self._timer),
             "knowledge": ("knowledge", self._region("knowledge")),
+            "tasks": ("tasks", self._tasks),
         }
 
     # ------------------------------------------------------------ Surface
@@ -297,6 +300,12 @@ class StageSurface:
             return True
         return rule
 
+    def _tasks(self, intent: ViewIntent) -> bool:
+        """`tasks:room`: the list itself is `content()["tasks"]` (the
+        snapshot's `tasks` is a list, never an object)."""
+        self._state.tasks = [dict(t) for t in intent.payload["tasks"]]
+        return True
+
     def _timer(self, intent: ViewIntent) -> bool:
         # Until D.4 replaces AgendaRuntime, the legacy AgendaController still
         # sets state.agenda and can overwrite this intent's agenda.
@@ -315,7 +324,8 @@ class StageSurface:
             del self._seen[intent_id]
             attribute = {"queue": "queue", "voice": "voice", "share": "share",
                          "graph": "session_graph",
-                         "knowledge": "knowledge"}.get(_prefix(intent_id))
+                         "knowledge": "knowledge",
+                         "tasks": "tasks"}.get(_prefix(intent_id))
             if attribute is not None and getattr(self._state, attribute) is not None:
                 setattr(self._state, attribute, None)
                 changed = True
