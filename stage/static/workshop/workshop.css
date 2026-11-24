@@ -23,9 +23,15 @@
      Accent hue shifted toward the designer's "Lavendel" style
      (design mockup code-v0.4/proposals/ds-lav.css) -- darkened from
      the designer's #6B5BD6 (5.13:1 on white, below R5's 7:1) to #4A3ABF (7.93:1). */
-  --accent: #4A3ABF;
+  /* ADR 0023 (issue #172): this literal is also the ct-accent/ct-accent-tint
+     token value (the token took its colour from here), so reading it
+     through var() changes nothing today -- it only lets a page that also
+     loads tokens.css (default or instance-overridden) repaint this skin's
+     accent without a code change here. No @import: this file is served
+     standalone and may not reach outside its own folder (R3 above). */
+  --accent: var(--ct-accent, #4A3ABF);
   --accent-edge: #362B8C;
-  --accent-tint: #ECE8FB;
+  --accent-tint: var(--ct-accent-tint, #ECE8FB);
   --accent-ink: #ffffff;
   --bg: #EEECE9;
   --card-bg: #FAF9F7;
