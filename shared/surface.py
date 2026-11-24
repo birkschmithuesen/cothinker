@@ -25,6 +25,7 @@ INTENT_KINDS = frozenset(
         "status",
         "artefact",
         "queue",
+        "voice",
         "share",
         "graph",
     }

@@ -89,6 +89,13 @@ def test_view_intent_rejects_audience_not_matching_pattern():
         make_intent("a", audience="everyone")
 
 
+def test_view_intent_accepts_voice_kind():
+    """issue #164: `voice` is the voice-attribution block's own intent
+    kind, separate from `queue`."""
+    intent = make_intent("voice:room", kind="voice")
+    assert intent.kind == "voice"
+
+
 def test_view_intent_accepts_person_audience():
     intent = make_intent("a", audience="person:P3")
     assert intent.audience == "person:P3"
