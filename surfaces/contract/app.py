@@ -12,6 +12,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from surfaces.contract.models import StageStateSnapshot, UserAction
@@ -37,6 +38,17 @@ def create_app(player: ScenarioPlayer | None = None) -> FastAPI:
         "channel and user actions.",
         version="0.1.0",
         lifespan=lifespan,
+    )
+
+    # This is the fixture-mode contract server (ADR 0019 point 2), built
+    # against from outside the repository and typically on a different
+    # origin than the surface under test -- not yet the live core
+    # endpoint (issue #132), so a permissive CORS policy is safe here.
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_methods=["*"],
+        allow_headers=["*"],
     )
 
     @app.get("/snapshot", response_model=StageStateSnapshot, tags=["snapshot"])
