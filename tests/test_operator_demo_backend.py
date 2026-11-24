@@ -8,6 +8,7 @@ injected runner spy, not a parse of the shell script.
 from __future__ import annotations
 
 import subprocess
+import time
 from pathlib import Path
 
 from surfaces.operator.backend import AlreadyRunningError, NotRunningError, UnknownProjectError
@@ -160,6 +161,162 @@ def test_disk_free_percent_is_a_real_measurement_of_disk_path(tmp_path):
     )
     status = backend.status()
     assert 0.0 < status.disk.free_percent <= 100.0
+
+
+def test_disk_free_bytes_is_a_real_measurement_of_disk_path(tmp_path):
+    calls: list[list[str]] = []
+    state = {"running": False}
+    backend = DemoKitOperatorBackend(
+        demo_sh=DEMO_SH, projects=PROJECTS, runner=_spy(calls, state), disk_path=tmp_path,
+    )
+    status = backend.status()
+    assert status.disk.free_bytes > 0
+
+
+def test_recording_hours_left_is_none_while_not_running(tmp_path):
+    calls: list[list[str]] = []
+    state = {"running": False}
+    backend = DemoKitOperatorBackend(
+        demo_sh=DEMO_SH, projects=PROJECTS, runner=_spy(calls, state), disk_path=tmp_path,
+    )
+    status = backend.status()
+    assert status.disk.recording_hours_left is None
+
+
+def test_recording_hours_left_is_none_right_after_recording_starts(tmp_path, monkeypatch):
+    run_dir = tmp_path / "xdg-runtime"
+    session_dir = tmp_path / "session"
+    (run_dir / "cothinker-demo").mkdir(parents=True)
+    session_dir.mkdir()
+    (run_dir / "cothinker-demo" / "contract.env").write_text(
+        f"DEMO_SESSION_DIR={session_dir}\n", encoding="utf-8",
+    )
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run_dir))
+    (session_dir / "audio.wav").write_bytes(b"x" * 1000)
+
+    calls: list[list[str]] = []
+    state = {"running": True}
+    backend = DemoKitOperatorBackend(
+        demo_sh=DEMO_SH, projects=PROJECTS, runner=_spy(calls, state), disk_path=tmp_path,
+    )
+    status = backend.status()
+    assert status.disk.recording_hours_left is None   # only one sample so far: no rate yet
+
+
+def test_recording_hours_left_is_a_positive_number_once_the_session_folder_is_growing(tmp_path, monkeypatch):
+    run_dir = tmp_path / "xdg-runtime"
+    session_dir = tmp_path / "session"
+    (run_dir / "cothinker-demo").mkdir(parents=True)
+    session_dir.mkdir()
+    (run_dir / "cothinker-demo" / "contract.env").write_text(
+        f"DEMO_SESSION_DIR={session_dir}\n", encoding="utf-8",
+    )
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run_dir))
+    (session_dir / "audio.wav").write_bytes(b"x" * 1000)
+
+    calls: list[list[str]] = []
+    state = {"running": True}
+    backend = DemoKitOperatorBackend(
+        demo_sh=DEMO_SH, projects=PROJECTS, runner=_spy(calls, state), disk_path=tmp_path,
+    )
+    backend.status()   # first sample
+    time.sleep(0.05)
+    (session_dir / "audio.wav").write_bytes(b"x" * 2000)
+    status = backend.status()   # second sample: a rate is now measurable
+    assert status.disk.recording_hours_left is not None
+    assert status.disk.recording_hours_left > 0.0
+
+
+def test_recording_hours_left_resets_when_the_session_folder_changes(tmp_path, monkeypatch):
+    run_dir = tmp_path / "xdg-runtime"
+    session_dir = tmp_path / "session"
+    (run_dir / "cothinker-demo").mkdir(parents=True)
+    session_dir.mkdir()
+    env_file = run_dir / "cothinker-demo" / "contract.env"
+    env_file.write_text(f"DEMO_SESSION_DIR={session_dir}\n", encoding="utf-8")
+    monkeypatch.setenv("XDG_RUNTIME_DIR", str(run_dir))
+    (session_dir / "audio.wav").write_bytes(b"x" * 1000)
+
+    calls: list[list[str]] = []
+    state = {"running": True}
+    backend = DemoKitOperatorBackend(
+        demo_sh=DEMO_SH, projects=PROJECTS, runner=_spy(calls, state), disk_path=tmp_path,
+    )
+    backend.status()
+    time.sleep(0.05)
+    (session_dir / "audio.wav").write_bytes(b"x" * 2000)
+    backend.status()   # a rate is measurable for the first session
+
+    other_session_dir = tmp_path / "other-session"
+    other_session_dir.mkdir()
+    (other_session_dir / "audio.wav").write_bytes(b"x" * 1000)
+    env_file.write_text(f"DEMO_SESSION_DIR={other_session_dir}\n", encoding="utf-8")
+    status = backend.status()   # new session folder: only one sample again
+    assert status.disk.recording_hours_left is None
+
+
+def test_start_sets_the_session_title(tmp_path):
+    calls: list[list[str]] = []
+    state = {"running": False}
+    backend = DemoKitOperatorBackend(
+        demo_sh=DEMO_SH, projects=PROJECTS, runner=_spy(calls, state), disk_path=tmp_path,
+    )
+    status = backend.start("quarterly-planning", "Quarterly planning")
+    assert status.session.title == "Quarterly planning"
+
+
+def test_session_title_is_none_until_a_session_starts(tmp_path):
+    calls: list[list[str]] = []
+    state = {"running": False}
+    backend = DemoKitOperatorBackend(
+        demo_sh=DEMO_SH, projects=PROJECTS, runner=_spy(calls, state), disk_path=tmp_path,
+    )
+    status = backend.status()
+    assert status.session.title is None
+
+
+def test_a_failed_unit_produces_an_error_entry_at_error_level(tmp_path):
+    def runner(args: list[str]) -> subprocess.CompletedProcess:
+        lines = [f"{unit:<10} {'failed' if unit == 'stt' else 'active'}"
+                  for unit in ("session", "stage", "stt", "chrome", "tap", "consumer", "contract")]
+        lines.append("stt /status: down")
+        lines.append("jitsi web: ok")
+        lines.append("listening:")
+        return subprocess.CompletedProcess(args, 0, stdout="\n".join(lines) + "\n", stderr="")
+
+    backend = DemoKitOperatorBackend(
+        demo_sh=DEMO_SH, projects=PROJECTS, runner=runner, disk_path=tmp_path,
+    )
+    status = backend.status()
+    assert any(e.service == "stt" and e.level == "error" for e in status.errors)
+
+
+def test_a_failed_unit_is_only_recorded_once_per_transition(tmp_path):
+    def runner(args: list[str]) -> subprocess.CompletedProcess:
+        lines = [f"{unit:<10} {'failed' if unit == 'stt' else 'active'}"
+                  for unit in ("session", "stage", "stt", "chrome", "tap", "consumer", "contract")]
+        lines.append("stt /status: down")
+        lines.append("jitsi web: ok")
+        lines.append("listening:")
+        return subprocess.CompletedProcess(args, 0, stdout="\n".join(lines) + "\n", stderr="")
+
+    backend = DemoKitOperatorBackend(
+        demo_sh=DEMO_SH, projects=PROJECTS, runner=runner, disk_path=tmp_path,
+    )
+    backend.status()
+    status = backend.status()
+    stt_errors = [e for e in status.errors if e.service == "stt"]
+    assert len(stt_errors) == 1
+
+
+def test_no_errors_when_every_unit_is_active(tmp_path):
+    calls: list[list[str]] = []
+    state = {"running": True}
+    backend = DemoKitOperatorBackend(
+        demo_sh=DEMO_SH, projects=PROJECTS, runner=_spy(calls, state), disk_path=tmp_path,
+    )
+    status = backend.status()
+    assert status.errors == []
 
 
 def test_session_folder_is_read_from_the_contract_env_file(tmp_path, monkeypatch):

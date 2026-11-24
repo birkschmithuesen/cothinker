@@ -49,6 +49,11 @@ def test_fixture_serves_every_field_across_its_scripted_timeline():
     assert any(s.running for s in statuses)
     assert any(not s.running for s in statuses)
     assert any(s.services and all(svc.state == "active" for svc in s.services) for s in statuses)
+    assert any(s.session.title for s in statuses)
+    assert all(e.level in ("info", "warning", "error") for s in statuses for e in s.errors)
+    assert any(s.disk.free_bytes > 0 for s in statuses)
+    assert any(s.disk.recording_hours_left is not None for s in statuses)
+    assert any(s.disk.recording_hours_left is None for s in statuses)
 
 
 def test_timeline_spans_about_two_minutes():
@@ -63,6 +68,7 @@ def test_start_from_stopped_is_accepted_and_reflected():
     status = backend.start(project_id, "Quarterly planning")
     assert status.running is True
     assert status.session.project.id == project_id
+    assert status.session.title == "Quarterly planning"
     assert backend.status().running is True   # reflected in the next read
 
 

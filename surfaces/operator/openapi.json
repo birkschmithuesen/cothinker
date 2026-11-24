@@ -55,6 +55,14 @@
       },
       "Disk": {
         "properties": {
+          "free_bytes": {
+            "description": "Free disk space, in bytes.",
+            "examples": [
+              76000000000
+            ],
+            "title": "Free Bytes",
+            "type": "integer"
+          },
           "free_percent": {
             "description": "Free disk space, as a percentage.",
             "examples": [
@@ -62,10 +70,26 @@
             ],
             "title": "Free Percent",
             "type": "number"
+          },
+          "recording_hours_left": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Estimated hours left on free disk space at the current session's measured write rate; `None` when no session is recording or the rate is not yet measurable.",
+            "examples": [
+              6.5
+            ],
+            "title": "Recording Hours Left"
           }
         },
         "required": [
-          "free_percent"
+          "free_percent",
+          "free_bytes"
         ],
         "title": "Disk",
         "type": "object"
@@ -78,6 +102,19 @@
               "2026-11-24T09:02:00+01:00"
             ],
             "title": "At",
+            "type": "string"
+          },
+          "level": {
+            "description": "Severity: a hint, a recoverable warning, or an outage.",
+            "enum": [
+              "info",
+              "warning",
+              "error"
+            ],
+            "examples": [
+              "warning"
+            ],
+            "title": "Level",
             "type": "string"
           },
           "message": {
@@ -100,7 +137,8 @@
         "required": [
           "at",
           "service",
-          "message"
+          "message",
+          "level"
         ],
         "title": "ErrorEntry",
         "type": "object"
@@ -363,6 +401,21 @@
             ],
             "title": "Session Folder",
             "type": "string"
+          },
+          "title": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Title of the current session; `None` when none is running.",
+            "examples": [
+              "Quarterly planning"
+            ],
+            "title": "Title"
           },
           "utterances": {
             "description": "Number of transcript utterances recorded so far.",

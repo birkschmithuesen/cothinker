@@ -71,8 +71,26 @@ components:
           - 71.5
           title: Free Percent
           type: number
+        free_bytes:
+          description: Free disk space, in bytes.
+          examples:
+          - 76000000000
+          title: Free Bytes
+          type: integer
+        recording_hours_left:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          description: Estimated hours left on free disk space at the current session's
+            measured write rate; `None` when no session is recording or the rate is
+            not yet measurable.
+          examples:
+          - 6.5
+          title: Recording Hours Left
       required:
       - free_percent
+      - free_bytes
       title: Disk
       type: object
     ErrorEntry:
@@ -96,10 +114,21 @@ components:
           - reconnect after timeout
           title: Message
           type: string
+        level:
+          description: 'Severity: a hint, a recoverable warning, or an outage.'
+          enum:
+          - info
+          - warning
+          - error
+          examples:
+          - warning
+          title: Level
+          type: string
       required:
       - at
       - service
       - message
+      - level
       title: ErrorEntry
       type: object
     Meeting:
@@ -207,6 +236,15 @@ components:
       properties:
         project:
           $ref: '#/components/schemas/Project'
+        title:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Title of the current session; `None` when none is running.
+          examples:
+          - Quarterly planning
+          title: Title
         session_folder:
           description: Name of the current session's folder; empty when none is running.
           examples:
