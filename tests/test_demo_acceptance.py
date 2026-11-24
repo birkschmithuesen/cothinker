@@ -98,6 +98,7 @@ def test_participant_accepts_stats_out(tmp_path):
 
 
 def test_gather_stats_script_awaits_every_captured_peer_connection():
+    pytest.importorskip("websocket")
     p = _load("participant")
     assert "window.__pcs" in p.CAPTURE_PEER_CONNECTIONS_SCRIPT
     assert "getStats" in p.GATHER_STATS_SCRIPT
