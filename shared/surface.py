@@ -30,6 +30,8 @@ INTENT_KINDS = frozenset(
         "graph",
         "knowledge",
         "listen",
+        "transcript",
+        "transcript_partial",
     }
 )
 

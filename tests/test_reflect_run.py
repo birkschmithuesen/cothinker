@@ -20,7 +20,7 @@ agent turn carry a pre-written `agent_reply` (the capture-bullets JSON
 shape, see `tests/fake_worker.py`) instead of a live model call.
 
 `build_session_blocks`' default `REGISTRY` (`gateway/block_host_wiring.py`)
-registers all thirteen of the Reflect template's blocks (issue #178); this
+registers all fourteen of the Reflect template's blocks (issues #178, #181); this
 test still keeps its own copy (`FULL_REGISTRY`) rather than importing
 `bhw.REGISTRY` directly -- ADR 0022 level 3 is about the TEMPLATE, not
 about which blocks `gateway/consumer.py` happens to be wired to, so this
@@ -42,6 +42,7 @@ from gateway import consumer
 from gateway.raw_transcript import MinutesFile
 from gateway.stage_state import StageState
 from gateway.stage_surface import StageSurface
+from blocks.live_transcript import LiveTranscriptBlock
 from blocks.speaker_queue import SpeakerQueueBlock
 from blocks.speaking_share import SpeakingShareBlock
 from blocks.timer import TimerBlock
@@ -52,13 +53,14 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = REPO_ROOT / "templates" / "reflect" / "template.toml"
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "reflect_meeting.jsonl"
 
-# All thirteen Reflect blocks, pinned to the real classes rather than read
+# All fourteen Reflect blocks, pinned to the real classes rather than read
 # off `bhw.REGISTRY` (see the module docstring above).
 FULL_REGISTRY = {
     **bhw.REGISTRY,
     "timer": TimerBlock,
     "speaker-queue": SpeakerQueueBlock,
     "speaking-share": SpeakingShareBlock,
+    "live-transcript": LiveTranscriptBlock,
 }
 
 # Invented meeting, invented association (AGENTS.md rule 7: only example
@@ -83,7 +85,7 @@ HEAD = dict(title="Werkstatt-Planung", entity="beispielverein",
 #                                closes the first (no LLM call needed either)
 EXPECTED_ACTIVE = {"capture-bullets", "minutes-document", "topics",
                   "speaker-queue", "speaking-share", "status-line", "graph",
-                  "voice-attribution"}
+                  "voice-attribution", "live-transcript"}
 EXPECTED_SILENT = {"timer", "knowledge-link", "mirroring-coach",
                   "decisions-tasks-questions", "condense"}
 
@@ -250,6 +252,13 @@ def test_reflect_session_runs_through_its_single_phase(tmp_path):
 
     assert snapshot.queue is not None
     assert snapshot.session_graph is not None
+
+    # issue #181 L3: transcript:recent carries the last 10 finished lines,
+    # each with its speaker.
+    assert snapshot.transcript_recent, "no finished lines reached the stage snapshot"
+    assert len(snapshot.transcript_recent) <= 10
+    assert {line.speaker for line in snapshot.transcript_recent} >= {"Mira", "Jonas", "Alina"}
+    assert all(line.text for line in snapshot.transcript_recent)
 
 
 def _mutant_template_without_minutes_document(tmp_path: Path) -> Path:

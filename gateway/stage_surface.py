@@ -38,6 +38,13 @@ table of the migration plan:
                                  replacing the old bare-path `links:` kind)
     listen:room     listen    -> content()["listen"] (issue #180, ADR 0024:
                                  the call-window block's state)
+    transcript:recent transcript -> content()["transcript_recent"] (issue
+                                 #181: the live-transcript block's last 10
+                                 finished lines; `transcript:partial`, the
+                                 same block's in-progress line, is not
+                                 mapped here yet -- it stays an unmapped
+                                 kind, logged once and dropped, until a
+                                 follow-up wires the panel's live delivery)
 
 Rendering is idempotent: an intent whose payload is unchanged since the
 last call is not applied again, so passing the whole snapshot each time is
@@ -60,7 +67,7 @@ from blocks.mirroring_coach.coach import NACHTRAG_PREFIX  # the block owns the c
 from shared.surface import UserAction, ViewIntent
 
 KINDS = frozenset({"prompt", "status", "artefact", "graph", "timer", "queue",
-                   "voice", "share", "knowledge", "listen"})
+                   "voice", "share", "knowledge", "listen", "transcript"})
 
 # Keys of the agenda the legacy AgendaController owns and the timer intent
 # does not carry; they survive a timer render.
@@ -107,6 +114,7 @@ class StageSurface:
             "timer": ("timer", self._timer),
             "knowledge": ("knowledge", self._region("knowledge")),
             "listen": ("listen", self._region("listen")),
+            "transcript": ("transcript", self._region("transcript_recent")),
         }
 
     # ------------------------------------------------------------ Surface

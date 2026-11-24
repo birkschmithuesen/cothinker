@@ -113,7 +113,7 @@ def test_status_rule_sets_operating_line():
     surface, _, writer, _ = make()
     assert surface.name == "stage" and list(surface.actions()) == []
     assert surface.kinds == {"prompt", "status", "artefact", "graph", "timer",
-                             "queue", "voice", "share", "knowledge", "listen"}
+                             "queue", "voice", "share", "knowledge", "listen", "transcript"}
     surface.render([intent("status:line", "status",
                            {"state": "working", "detail": {"count": 3, "failed": False}})])
     assert len(writer.statuses) == 1
@@ -264,6 +264,18 @@ def test_knowledge_rule_sets_knowledge_key_and_clears_it():
     assert state.content()["knowledge"] == knowledge
     surface.render([])
     assert "knowledge" not in state.content()
+
+
+def test_transcript_rule_sets_transcript_recent_key():
+    """issue #181: `transcript:recent` sets `content()["transcript_recent"]`,
+    always present rather than key-absent-means-hidden (an empty list is
+    "nothing said yet", not "no live-transcript block")."""
+    surface, state, _, _ = make()
+    assert state.content()["transcript_recent"] == []
+    lines = [{"speaker": "Mira", "started_at": "2026-11-23T09:14:02+01:00",
+              "text": "Lass uns die Vendor-Frage zuruckstellen."}]
+    surface.render([intent("transcript:recent", "transcript", lines)])
+    assert state.content()["transcript_recent"] == lines
 
 
 def test_timer_rule_sets_agenda_keeping_people():

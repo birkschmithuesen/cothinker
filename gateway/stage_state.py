@@ -417,6 +417,13 @@ class StageState:
         # key is left out of `content()` (key-absent-means-hidden), same
         # as `queue`/`share`/`session_graph`/`knowledge`.
         self.listen: dict | None = None
+        # The last 10 finished transcript lines, from the `live-transcript`
+        # block's `transcript:recent` view intent (issue #181). Always a
+        # list, never None: `StageStateSnapshot.transcript_recent` has no
+        # Optional variant (unlike `queue`/`voice`/`share`/`session_graph`/
+        # `knowledge`, it is not a region that is absent until a block
+        # shows up -- an empty list already is "nothing said yet").
+        self.transcript_recent: list[dict] = []
 
     # ------------------------------------------------------------ helpers
     @property
@@ -1216,6 +1223,10 @@ class StageState:
             # from before this field existed, so an old stage page and a
             # session without the file see exactly the same payload shape.
             "agenda": self.agenda,
+            # Always present (never key-absent-means-hidden, unlike the
+            # region fields in `_content()` below): an empty list already
+            # means "nothing finished yet", not "no live-transcript block".
+            "transcript_recent": list(self.transcript_recent),
         }
 
     # ------------------------------------------------------------ restore

@@ -12,9 +12,10 @@ Reflect is the first template (ADR 0010) and every building block plugs
 into the block host (ADR 0008, `docs/architecture/target.md` §5). There is
 no template flag and no off switch (migration rule, ADR 0018): the
 session host always builds its block host from `REFLECT_TEMPLATE`. The
-template already names all thirteen Reflect blocks (issue #178 added
-`voice-attribution` as a 13th, against ADR 0010's fixed 12 -- see
-`docs/architecture/blocks-inventory.md`); `REGISTRY` only grows
+template already names all fourteen Reflect blocks (issue #178 added
+`voice-attribution` as a 13th and issue #181 `live-transcript` as a 14th,
+against ADR 0010's fixed 12 -- see `docs/architecture/blocks-inventory.md`);
+`REGISTRY` only grows
 one line per block as each one's own pull request lands, so a block id
 the template lists but nobody has registered yet is skipped, with one log
 line, rather than failing the whole session.
@@ -36,6 +37,7 @@ from blocks.knowledge_link import KnowledgeLinkBlock
 import blocks.status_line as status_line_block
 from blocks.condense import CondenseBlock
 from blocks.graph import GraphBlock
+from blocks.live_transcript import LiveTranscriptBlock
 from blocks.mirroring_coach.coach import MirroringCoach, resolve_config
 from blocks.topics import TopicsBlock
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
@@ -71,6 +73,7 @@ REGISTRY: dict[str, Callable[[], Block]] = {
     "speaker-queue": SpeakerQueueBlock,
     "speaking-share": SpeakingShareBlock,
     "call-window": CallWindowBlock,
+    "live-transcript": LiveTranscriptBlock,
 }
 
 REGISTRY["condense"] = CondenseBlock

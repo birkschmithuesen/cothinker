@@ -18,10 +18,11 @@ REPO = Path(__file__).resolve().parents[1]
 REFLECT = REPO / "templates" / "reflect" / "template.toml"
 
 # ADR 0010's own 12, plus `voice-attribution` as a 13th (issue #178) and
-# `call-window` as a 14th (issue #180) -- the ADR's text stays as it was,
-# unchanged (it is only ever superseded or amended, never rewritten); see
+# `call-window` as a 14th (issue #180) and `live-transcript` as a 15th
+# (issue #181) -- the ADR's text stays as it was, unchanged (it is only
+# ever superseded or amended, never rewritten); see
 # docs/architecture/blocks-inventory.md.
-REFLECT_14 = (
+REFLECT_15 = (
     "capture-bullets",
     "topics",
     "decisions-tasks-questions",
@@ -36,6 +37,7 @@ REFLECT_14 = (
     "graph",
     "voice-attribution",
     "call-window",
+    "live-transcript",
 )
 
 TEMPLATE_HEADER = '[template]\nname = "x"\napi_version = 1\nrules = ["grounding", "add-dont-restructure"]\n'
@@ -65,7 +67,7 @@ def test_reflect_template_loads():
 
 def test_reflect_block_ids_match_adr_0010_order():
     t = st.load_template(REFLECT)
-    assert tuple(b.id for b in t.blocks) == REFLECT_14
+    assert tuple(b.id for b in t.blocks) == REFLECT_15
 
 
 def test_reflect_has_one_session_phase_with_all_blocks():
@@ -73,7 +75,7 @@ def test_reflect_has_one_session_phase_with_all_blocks():
     assert len(t.phases) == 1
     phase = t.phases[0]
     assert phase.id == "session"
-    assert phase.blocks == REFLECT_14
+    assert phase.blocks == REFLECT_15
 
 
 def test_phase_naming_unknown_block_raises(tmp_path):

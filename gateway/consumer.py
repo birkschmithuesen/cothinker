@@ -4124,6 +4124,20 @@ def main() -> int:
                         if gedankenende is not None:
                             gedankenende.smart_turn(ev)
                         continue
+                    if ev.get("type") == "partial":
+                        # issue #181: the live-transcript block's tentative
+                        # tail. Forwarded as-is on every partial; the block
+                        # itself throttles how often it re-emits the view
+                        # intent (<=4/s per turn), and ignores a partial
+                        # with no turn_id (a status ping, not a transcript
+                        # update) -- see blocks/live_transcript/transcript.py.
+                        session_blocks.dispatch("partial", {
+                            "turn_id": ev.get("turn_id"),
+                            "speaker": final_speaker(ev),
+                            "text": ev.get("text"),
+                            "at": time.time(),
+                        })
+                        continue
                     if ev.get("type") != "final":
                         continue
                     text = ev.get("text")
@@ -4276,12 +4290,20 @@ def main() -> int:
                     try:
                         if turns:
                             for turn in turns:
+                                # The split sub-turns share the one STT
+                                # turn_id of the utterance they came from
+                                # (gateway/speaker_split.py's `Turn` has no
+                                # id of its own) -- good enough for the
+                                # live-transcript block to match a final
+                                # back to the partial it closes.
                                 feed_utterance(minutes_file, session_blocks, turn.text, turn.name,
-                                              {"t_start": turn.t_start, "t_end": turn.t_end,
+                                              {"turn_id": ev.get("turn_id"),
+                                               "t_start": turn.t_start, "t_end": turn.t_end,
                                                "at": time.time()})
                         else:
                             feed_utterance(minutes_file, session_blocks, text, spk,
-                                          {"t_start": t_start, "t_end": t_end,
+                                          {"turn_id": ev.get("turn_id"),
+                                           "t_start": t_start, "t_end": t_end,
                                            "at": time.time()})
                     except Exception as e:         # noqa: BLE001
                         log("raw line not written:", repr(e))
