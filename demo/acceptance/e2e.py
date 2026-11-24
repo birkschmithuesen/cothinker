@@ -392,39 +392,40 @@ def build_public_url(base_url: str, path: str, token: str) -> str:
     return base_url.rstrip("/") + path + "?t=" + token
 
 
-def check_surfaces(base_url: str, token: str, names: list[str],
-                    out_dir: Path) -> tuple[list[Check], list[str]]:
-    """Opens stage and monitor at 1920x1080 via the public contract route,
-    asserts named transcript lines, the current agenda item, and no
-    console errors; returns the checks plus the raw stage transcript
-    bullets (for score_check) collected along the way.
+def check_surfaces(base_url: str, token: str, names: list[str], out_dir: Path,
+                    settle_s: float = 10.0, wait_s: float = 0.0) -> tuple[list[Check], list[str]]:
+    """Opens stage and monitor at 1920x1080 via the public contract route
+    EARLY (while the call is still running) and keeps them open for
+    `wait_s` before asserting anything: the monitor's "last three
+    contributions" (participant names) only ever arrives as a live SSE
+    push (surfaces/contract/models.py TranscriptRecentIntent) -- a page
+    that connects only after the call has already ended never receives
+    it and would always show nothing, which is a race in this check, not
+    a deployment bug. Returns the checks plus the raw stage transcript
+    bullets collected at the end (for score_check).
 
     "Current agenda item" is whatever the live snapshot's own
-    agenda.current_text says (set from the project's agenda.md, not
-    related to the spoken script's probe lines) -- SKIPPED, not FAIL,
-    when no agenda is configured for this deployment."""
+    agenda.current_text says at the end of `wait_s` (set from the
+    project's agenda.md, not related to the spoken script's probe
+    lines) -- SKIPPED, not FAIL, when no agenda is configured."""
     from playwright.sync_api import sync_playwright
 
     checks: list[Check] = []
     transcript_bullets: list[str] = []
     api_url = base_url.rstrip("/") + "/api/"
-    try:
-        agenda = fetch_snapshot(base_url, token).get("agenda") or {}
-    except Exception:
-        agenda = {}
-    current_item = agenda.get("current_text")
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
+        opened = []
         for surface_name, path in (("stage", "/stage/"), ("monitor", "/monitor/")):
             context = browser.new_context(viewport={"width": 1920, "height": 1080})
             page = context.new_page()
-            console_errors = []
+            console_errors: list[str] = []
             page.on("console", lambda msg: console_errors.append(msg.text)
                      if msg.type == "error" else None)
             url = build_public_url(base_url, path, token) + "&api=" + api_url
             page.goto(url, wait_until="load")
-            page.wait_for_timeout(2000)
+            page.wait_for_timeout(settle_s * 1000 / 2)
 
             # Without the ct_demo_name cookie (only ever set by
             # participant.py for the meeting page), stage/monitor ask "Wie
@@ -433,8 +434,21 @@ def check_surfaces(base_url: str, token: str, names: list[str],
             join_later = page.locator("#join-later")
             if join_later.count() and join_later.is_visible():
                 join_later.click()
-                page.wait_for_timeout(300)
+                page.wait_for_timeout(settle_s * 1000 / 2)
+            opened.append((surface_name, context, page, console_errors))
 
+        # The call (and the SSE connections above) stay live through the
+        # rest of the script, so monitor's recent-transcript push has a
+        # real chance to arrive before anything is asserted.
+        time.sleep(wait_s)
+
+        try:
+            agenda = fetch_snapshot(base_url, token).get("agenda") or {}
+        except Exception:
+            agenda = {}
+        current_item = agenda.get("current_text")
+
+        for surface_name, context, page, console_errors in opened:
             if surface_name == "stage":
                 roh_summary = page.locator("details.roh summary")
                 if roh_summary.count():
@@ -641,13 +655,15 @@ def main(argv: list[str]) -> int:
     connect_s = max(args.minutes * 60, timeline["total_s"] + 90)
     procs = start_participants(args.base_url, token, out_dir, args.chrome, connect_s)
 
-    # Let the whole script (incl. both wake-line repeats, near its end)
-    # finish playing before reading surfaces or polling for an answer.
-    time.sleep(timeline["total_s"] + 10)
-
-    # 5. Surfaces, opened while the call is still up.
+    # 5. Surfaces: connect NOW, not after the script has finished --
+    # monitor's participant-name push (transcript:recent) only ever
+    # arrives live over SSE; a page that connects after the call already
+    # ended never receives it. check_surfaces() holds the pages open for
+    # the rest of the script's own length (incl. both wake-line repeats,
+    # near its end) before asserting anything.
     surface_checks, transcript_bullets = check_surfaces(
-        args.base_url, token, ["Alex", "Sam"], out_dir)
+        args.base_url, token, ["Alex", "Sam"], out_dir,
+        wait_s=timeline["total_s"] + 10)
 
     # 6. Contract.
     monitor_url = build_public_url(args.base_url, "/monitor/", token)
