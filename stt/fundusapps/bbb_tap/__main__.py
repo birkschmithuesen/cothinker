@@ -36,6 +36,17 @@ from fundusapps.bbb_tap.pcm import PcmSink, WavRecorder, decode_chunk
 HERE = Path(__file__).resolve().parent
 
 
+def _resolve_record_time(record_time):
+    """`record_time` if given (format YYYYMMDD-HHMMSS, see --record-time),
+    else `datetime.now()` -- the timestamp that names the recording and,
+    with --per-track, its sidecar. A caller that starts a matching STT
+    server first (scripts/stt-vserver.sh) can fix this instead of letting
+    this process pick its own after the fact, see --record-time's help."""
+    if record_time:
+        return datetime.datetime.strptime(record_time, "%Y%m%d-%H%M%S")
+    return datetime.datetime.now()
+
+
 def redact_url(url):
     p = urlsplit(url)
     return f"{p.scheme}://{p.hostname}" if p.hostname else "<url>"
@@ -464,6 +475,15 @@ def main(argv=None):
     ap.add_argument("--record-dir", dest="record_dir",
                     default=os.environ.get("STT_RECORD_DIR", str(Path.home() / "cothinker-audio")))
     ap.add_argument("--no-record", dest="no_record", action="store_true")
+    ap.add_argument("--record-time", dest="record_time", default="",
+                    help="override the timestamp that names the recording "
+                         "(format YYYYMMDD-HHMMSS) instead of computing it "
+                         "from datetime.now(). Lets a wrapper script that "
+                         "starts a matching STT server first "
+                         "(scripts/stt-vserver.sh) predict this run's "
+                         "--per-track sidecar path and hand both processes "
+                         "the same timestamp, rather than racing this "
+                         "process's own choice of now().")
     ap.add_argument("--per-track", dest="per_track", action="store_true",
                     help="also record each remote audio track to its own WAV "
                          "(bbb-HHMMSS-trkN.wav) plus a -tracks.json participant map")
@@ -508,7 +528,7 @@ def main(argv=None):
 
     recorder = per_track = None
     if not a.no_record:
-        now = datetime.datetime.now()
+        now = _resolve_record_time(a.record_time)
         path = Path(a.record_dir) / now.strftime("%Y-%m-%d") / f"bbb-{now:%H%M%S}.wav"
         recorder = WavRecorder(path)
         status(event="recording", dir=str(path.parent))
