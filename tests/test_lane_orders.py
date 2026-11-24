@@ -99,3 +99,46 @@ def test_a_policy_without_the_hook_still_gets_its_delivery(tmp_path):
     _propose(tmp_path, {**TASK, "order": "A1"})
     w.ingest(spoken=DECIDED)
     assert policy.delivered_ids == ["A1"]
+
+
+# ------------------------------------------------------- orders_turn_hook
+def test_the_hook_enqueues_one_orders_block_when_orders_wait():
+    got = []
+    hook = consumer.orders_turn_hook(lambda: True, got.append,
+                                     log=lambda *a: None)
+    hook(object(), SimpleNamespace(block=DECIDED), "pause")
+    [b] = got
+    assert b.reason == consumer.ORDERS_REASON == "orders"
+    assert b.wake_word is False and b.text == DECIDED
+
+
+def test_the_hook_costs_nothing_when_no_order_waits():
+    got = []
+    hook = consumer.orders_turn_hook(lambda: False, got.append,
+                                     log=lambda *a: None)
+    hook(object(), SimpleNamespace(block=DECIDED), "pause")
+    assert got == []
+
+
+def test_the_hook_never_raises_into_the_decider_thread():
+    def broken(_block):
+        raise RuntimeError("queue gone")
+    said = []
+    hook = consumer.orders_turn_hook(lambda: True, broken,
+                                     log=lambda *a: said.append(a))
+    hook(object(), SimpleNamespace(block=DECIDED), "pause")
+    assert said and said[0][0] == "orders turn not enqueued:"
+
+
+# ---------------------------------------------------------- order_answers
+def test_an_orders_turn_keeps_only_the_answers_to_orders():
+    answers = [{"action": "decision", "text": "Werkstatt am Freitag.",
+                "order": "A1"},
+               {**TASK, "order": "A2"}]
+    others = [{"action": "topic", "title": "Werkstatt", "order": "A3"},
+              {"action": "main", "markdown": "x", "quote": "x", "order": "A4"},
+              {"action": "decision", "text": "ohne Auftrag"},
+              {"action": "notice", "kind": "risk", "text": "n"},
+              {"action": "decision", "text": "kaputte Id", "order": "A 1!"},
+              "kein Objekt"]
+    assert consumer.order_answers(answers + others) == answers
