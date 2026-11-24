@@ -13,4 +13,4 @@ jobs:
       - run: pip install pytest pyyaml jsonschema
       - run: pip install -r surfaces/contract/requirements.txt
       - run: playwright install chromium
-      - run: python -m pytest -q tests
+      - run: python -m pytest -q
