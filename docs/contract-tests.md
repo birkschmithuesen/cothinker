@@ -8,10 +8,11 @@ behaviour each test checks is specified in `docs/architecture/target.md` §2;
 the tests cite the section, they do not restate it.
 
 The tests live in `tests/contract/<api>/` and run on every commit with the
-rest of the suite. They never touch the network: a guard in
-`tests/contract/conftest.py` refuses every socket connection that does not go
-to the loopback interface, so a test may start a fake server on `127.0.0.1`
-and nothing else.
+rest of the suite. They are written not to touch the network: a guard in
+`tests/contract/conftest.py` refuses Python-level socket connects to
+non-loopback addresses in the test process, so a test may start a fake server
+on `127.0.0.1` and nothing else. Subprocesses and the Playwright browser are
+outside the guard.
 
 ## Running a contract against your own implementation
 

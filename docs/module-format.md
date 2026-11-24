@@ -63,9 +63,11 @@ files = ["echo.json"]
   not interpret the profile's contents itself.
 - `[state].files` — the list of file names the module intends to read and
   write through its `StateStore` (see below). This is documentation for
-  humans and tooling, not enforced by the loader: a module is free to call
-  `ctx.state.read(name)` / `write(name, data)` with any name, and nothing
-  in `shared/modules.py` cross-checks it against this list.
+  humans and tooling, not enforced by the loader: nothing in
+  `shared/modules.py` cross-checks it against the names a module passes to
+  `ctx.state.read(name)` / `write(name, data)`. The module contract test
+  (`tests/contract/module/`, rule MOD-STATE, see `docs/contract-tests.md`)
+  does require a module to write only the files it declares here.
 
 ## The entry point class
 
@@ -221,7 +223,7 @@ def load_modules(cfg: InstanceConfig, search: Sequence[Path]) -> list[Module]
   hub, or decide which events fire when — that is the calling code's job
   (see the proof module and its hub wiring, a separate piece of work).
 - It does not validate `[state].files` against what a module actually
-  reads or writes.
+  reads or writes (the module contract test does, rule MOD-STATE).
 - It does not enforce anything about what a module puts in its profile
   directory.
 
