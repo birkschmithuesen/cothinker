@@ -148,3 +148,88 @@ generated from `surfaces/contract/models.py` by
 (`tests/test_surface_contract_spec.py`) fails when a model changes and the
 committed files are not regenerated; run the generator and commit the
 result whenever you change a model.
+
+## Operator console
+
+A second contract audience next to the participant/room one above
+(issue #159, ADR 0019's schema/fixture/conformance approach applied to a
+second audience): one page for whoever runs a deployment, under its own
+`/operator/` prefix and its own `OperatorBackend` protocol
+(`surfaces/operator/backend.py`), served by the separate
+`surfaces/operator/` package. It complements, and does not replace, the
+operator desks planned for InScribe (issues #73, #77).
+
+### Start fixture mode
+
+```
+pip install -r surfaces/operator/requirements.txt
+echo my-operator-token > /tmp/operator.token
+python -m surfaces.operator --fixtures --token-file /tmp/operator.token
+```
+
+Serves `GET /operator/status`, SSE `GET /operator/events` (event
+`operator-status`, the full snapshot on change, at most once a second)
+and the `start`/`stop`/`project` commands, backed by
+`surfaces/operator/fixtures.py`'s `FixtureOperatorBackend`: a ~2-minute
+scripted timeline (idle, start, participants join and speak, a call
+attempt, an error, wind-down, stop) demonstrating every field, with
+commands accepted and reflected on top of it.
+
+### Start against the demo kit
+
+```
+python -m surfaces.operator --demo-kit demo/demo.sh \
+  --projects-file /tmp/operator-projects.json --token-file /tmp/operator.token
+```
+
+`surfaces/operator/demo_backend.py`'s `DemoKitOperatorBackend` drives
+`demo/demo.sh start|stop|status` as subprocess calls -- never any other
+verb or flag -- and maps its unit lines onto the operator contract's
+service names. `--projects-file` is a JSON list of `{"id", "label"}`
+objects: the allowed working folders from deployment config, never a
+free path.
+
+### Auth
+
+Every `/operator/` request needs `Authorization: Bearer <token>`; the
+token is read once from the file named by `--token-file` or the
+`OPERATOR_TOKEN_FILE` environment variable (`surfaces/operator/auth.py`),
+compared in constant time, and never logged or echoed back. This token
+is separate from the participant/room surface's; neither the app nor the
+token is ever shared between the two.
+
+### Commands
+
+`POST /operator/start {project_id, title}` answers `202` with the
+resulting status, or `400` if `project_id` is outside the allowlist
+(nothing is started), or `409` if a meeting is already running.
+`POST /operator/stop {confirm: true, force: false}` answers `202`, or
+`409` naming the participant count when people are still in the meeting
+(set `force: true` to stop anyway), or `409` if nothing is running.
+`POST /operator/project {project_id}` answers `202` while stopped, or
+`409` while running. Every response -- success or conflict -- carries
+the resulting status under `"status"`.
+
+### Run the conformance check
+
+```
+playwright install chromium
+python -m surfaces.operator.check --surface surfaces/operator/examples/minimal/index.html
+```
+
+Same spirit as the participant contract's check above: starts the
+operator fixture backend on a free port, opens the surface with
+`?api=<that server>/operator/&token=<token>`, and checks it fetches
+`/operator/status`, subscribes to `/operator/events`, sends the token as
+a Bearer header (never a query parameter), requests nothing outside the
+operator paths and its own static files, renders at least two
+`operator-status` pushes, and logs no console errors.
+`surfaces/operator/examples/minimal/index.html` is the reference surface;
+note it reads the push channel with a manual `fetch` + line-reader
+instead of `EventSource`, since `EventSource` cannot carry the
+`Authorization` header this contract requires.
+
+`surfaces/operator/openapi.json` and `asyncapi.yaml` are generated from
+`surfaces/operator/models.py` by
+`python3 -m surfaces.operator.generate_spec`, drift-checked by
+`tests/test_operator_spec.py`, exactly like the participant contract's.
