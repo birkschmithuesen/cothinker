@@ -121,9 +121,17 @@ start_all() {
   # only the consumer picks the name (date + title slug) when it starts.
   # Resolve it here instead of touching the consumer: the newest subfolder
   # of sessions/ at the moment contract starts is this run's session.
+  # COTHINKER_PROJECT_DIR / COTHINKER_SESSIONS_DIR mirror the consumer unit's
+  # own environment (a deployment may point the project at a separate repo,
+  # e.g. a wiki clone, and put sessions under its own subfolder) -- read the
+  # same two variables here, with the same defaults the consumer falls back
+  # to, so this resolves the SAME directory the consumer is about to write
+  # into rather than always the plain project folder.
+  local project_dir=${COTHINKER_PROJECT_DIR:-$DEMO_HOME/project}
+  local sessions_dir=${COTHINKER_SESSIONS_DIR:-sessions}
   local session_dir=""
-  if [ -d "$DEMO_HOME/project/sessions" ]; then
-    session_dir=$(find "$DEMO_HOME/project/sessions" -mindepth 1 -maxdepth 1 \
+  if [ -d "$project_dir/$sessions_dir" ]; then
+    session_dir=$(find "$project_dir/$sessions_dir" -mindepth 1 -maxdepth 1 \
       -type d -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)
   fi
   printf 'DEMO_SESSION_DIR=%s\n' "$session_dir" >"$RUN_DIR/contract.env" || return 1
