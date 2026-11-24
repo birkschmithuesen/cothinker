@@ -1,0 +1,3 @@
+# surfaces/design: the generator's only runtime dependency, parsing
+# tokens.yaml.
+pyyaml

@@ -1,0 +1,94 @@
+# CoThinker — design tokens (ADR 0023, issue #172 / #27)
+#
+# The single source for colour, type, spacing, radius and motion. Every
+# surface reads a token through the generated `tokens.css` custom property
+# (prefix `--ct-`) or `tokens.json`; it never writes a colour, font name or
+# size literal of its own.
+#
+#     python -m surfaces.design.build
+#
+# generates `tokens.css` and `tokens.json` next to this file. An instance
+# overrides any value here via its own `instances/<name>/look/tokens.yaml`
+# (same shape, merged over this file by the same generator) -- never by
+# editing surface code.
+#
+# Naming schemes chosen where the issue did not fix one (see the PR
+# summary): page type sizes are named size-xs..size-xxl (smallest to
+# largest); spacing/radius/motion sub-tokens are named after their own
+# pixel/millisecond value (space-4 ... space-64, radius-4 ... radius-999,
+# motion-150 / motion-300) -- a value-as-name scale needs no separately
+# invented word.
+
+themes:
+  # The default theme: the project website's light look (paper paired
+  # with a slightly brighter sheet for cards/panels on top of it).
+  default:
+    selector: ":root"
+    color:
+      surface: "#f3f1ea"
+      sheet: "#fbfaf6"
+      ink: "#15171a"
+      muted: "#5b6066"
+      rule: "#c9c6bb"
+      grid: "#e4e1d7"
+      signal: "#d6401c"
+      # accent/accent-tint: the product accent, taken from the workshop
+      # skin (stage/static/workshop/workshop.css's own --accent/
+      # --accent-tint) -- same hex on purpose, so that skin's properties
+      # can read straight from these tokens with no visible change.
+      accent: "#4A3ABF"
+      accent-tint: "#ECE8FB"
+      ok: "#2E5A4C"
+      warn: "#8a5a00"
+      danger: "#b3261e"
+  # The dark variant for the room display: same accent family, a dark
+  # surface. Selector matches any element carrying data-theme="display"
+  # (and, through ordinary CSS inheritance, its descendants) -- a token
+  # this theme does not redeclare keeps the default theme's value.
+  display:
+    selector: '[data-theme="display"]'
+    color:
+      surface: "#12101A"
+      sheet: "#1c1a26"
+      ink: "#F1EEFA"
+      muted: "#b9b3cc"
+      rule: "#3a3550"
+      accent: "#A99BF5"
+      signal: "#ff7a52"
+      ok: "#7fd1b0"
+      warn: "#f2c14e"
+      danger: "#ff8a80"
+
+type:
+  # Fira Sans / Fira Mono (SIL OFL) ship as .woff2 "files from the website
+  # repo" per issue #172 -- this is cothinker-public, not the website
+  # repo, so the font binaries are not present here (checked: no .woff2
+  # under this repo's tree). tokens.css emits @font-face rules that point
+  # at font-path below; a deployment supplies the actual files there. This
+  # gap is deliberate, not a silent omission -- see ADR 0023 and the PR
+  # summary.
+  font-sans: "Fira Sans"
+  font-mono: "Fira Mono"
+  font-path: "fonts/"
+  # Page sizes, 13/15/17/22/28/40 px, named smallest (xs) to largest (xxl).
+  size:
+    xs: 13
+    sm: 15
+    md: 17
+    lg: 22
+    xl: 28
+    xxl: 40
+  # Room-display sizes, measured for 16:9 at 1920 px and reading distance.
+  display-size:
+    brand: 56
+    value: 88
+    main: 64
+    agenda: 44
+    side: 40
+    note: 28
+
+# Spacing, radius and motion scales: each sub-token is named after its own
+# pixel/millisecond value.
+space: [4, 8, 12, 16, 24, 32, 48, 64]
+radius: [4, 8, 16, 999]
+motion: [150, 300]
