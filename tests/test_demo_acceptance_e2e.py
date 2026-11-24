@@ -148,6 +148,17 @@ def test_wake_check_fails_for_piper_answer_too_slow():
     assert check.status == "FAIL"
 
 
+def test_wake_check_boundary_is_inclusive_of_the_timeout_itself():
+    # "within 60s" (commit b5d14a0b's own wording) includes the 60s mark
+    # itself; only strictly past it is too slow.
+    at_timeout = e2e.wake_check("piper", lane_answer_seen=True, elapsed_s=60.0,
+                                 timeout_s=60.0)
+    assert at_timeout.status == "PASS"
+    just_past = e2e.wake_check("piper", lane_answer_seen=True, elapsed_s=60.0001,
+                                timeout_s=60.0)
+    assert just_past.status == "FAIL"
+
+
 def test_score_check_passes_at_or_above_min_ratio():
     assert e2e.score_check(ratio=0.9, matched=20, min_ratio=0.9).status == "PASS"
 
