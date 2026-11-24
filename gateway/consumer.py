@@ -1657,6 +1657,52 @@ def turn_closed(blocks: SessionBlocks, turn: int, *, ok: bool,
         "turn": turn, "ok": ok, "answered": answered}})
 
 
+# --lanes --policy (ADR 0024): the reason of a block that exists only to
+# carry level 2's finished orders into a turn of the serial worker.
+ORDERS_REASON = "orders"
+# --lanes (ADR 0024): what an orders turn may put on the stage. The topic
+# and the answer to a call have their own owners under --lanes (the topics
+# block with the call lane, and the call lane), so a `topic` or `main`
+# proposal of an orders turn is not applied; its order settles
+# `unanswered` at turn_closed like any order that brought nothing.
+LANE_ORDER_ACTIONS = frozenset({"decision", "tag_entry"})
+
+
+def order_answers(actions: list) -> list:
+    """The proposals of an orders turn under --lanes that answer a level-2
+    order: a `decision` or `tag_entry` carrying an `order` id. Everything
+    else the agent proposed in that turn is dropped (ADR 0024)."""
+    return [a for a in actions if isinstance(a, dict)
+            and a.get("action") in LANE_ORDER_ACTIONS
+            and is_token(a.get("order"))]
+
+
+def orders_turn_hook(orders_waiting: Callable[[], bool],
+                     enqueue: Callable[[Block], int],
+                     log: Callable[..., None] = log) -> Callable:
+    """The decider result hook `--lanes --policy` installs (ADR 0024).
+
+    Under `--lanes` no ordinary block reaches `RunQueue`, so nothing would
+    ever open a turn for level 2's orders. The hook runs on the decider
+    thread AFTER the policy runner has handled the same result -- every
+    order that result queued is already waiting -- and enqueues one
+    `orders` block (the decided block's text) when any order waits. A
+    result that queued nothing costs nothing: no block, no agent turn.
+
+    Takes no stage lock; `enqueue` takes only the queue's own condition.
+    Never raises: a failing hook must not cost the decider its result."""
+    def hook(result, snap, reason) -> None:
+        try:
+            if not orders_waiting():
+                return
+            text = str(getattr(snap, "block", "") or "")
+            enqueue(Block(sentences=[text] if text else [],
+                          reason=ORDERS_REASON, wake_word=False))
+        except Exception as e:            # noqa: BLE001 -- decider thread
+            log("orders turn not enqueued:", repr(e))
+    return hook
+
+
 class ReplyIntake:
     """Dispatches a reply and collects the capture block's outputs.
 
@@ -3667,6 +3713,11 @@ def main() -> int:
         addressed the agent, otherwise the cutting reason."""
         return "order" if b.wake_word else (b.reason or "unknown")
 
+    # --lanes: every turn of the serial worker is an orders turn (ADR 0024,
+    # `orders_turn_hook` is the only producer of its blocks). False on the
+    # serial path, where run_turn is unchanged.
+    orders_only = bool(a.lanes)
+
     def run_turn(b: Block) -> bool:
         """One agent turn: prompt, worker, proposals, stage.
 
@@ -3788,6 +3839,16 @@ def main() -> int:
                 # The run came back, so it saw the entries that still owe
                 # the protocol an appearance. They stop riding along.
                 state.mark_recorded(unrecorded)
+            if orders_only:
+                # --lanes (ADR 0024): this turn exists for level 2's
+                # orders. Only their answers are applied; the minutes items
+                # stay unfiled (under --lanes no agent writes the Verlauf).
+                kept = order_answers(reply.proposals)
+                dropped = len(reply.proposals) - len(kept) + len(reply.bullets)
+                if dropped:
+                    log(f"  orders turn: {dropped} items outside the orders"
+                        " not filed")
+                reply = TurnReply([], kept, reply.failure)
             if writer.protocol is not None:
                 # Once more, right before the entries are filed: an order
                 # run may have CREATED the file its `**erledigt** [[...]]`
@@ -3880,6 +3941,13 @@ def main() -> int:
         return bool(result["ok"])
 
     queue = RunQueue(run=run_turn, max_chars=a.max_batch)
+    if lanes is not None and decisions.policy_on:
+        # ADR 0024: under --lanes level 2's orders get their own turns on
+        # the serial worker -- enqueued by the decider result hook, only
+        # when a result queued an order.
+        decisions.add_result_hook(
+            orders_turn_hook(decisions.orders_waiting, queue.enqueue, log))
+        log("lanes: level-2 orders run on the serial worker")
     # Which announcement is which call-out's: filled by `block_done()`,
     # emptied by `run_turn()`. Both reach it only when called, so it can
     # sit after the one and before the other.
