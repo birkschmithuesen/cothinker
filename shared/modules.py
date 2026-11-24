@@ -136,6 +136,9 @@ def load_module(path: Path) -> Module:
     except KeyError as e:
         raise ModuleError(f"{path}: module.toml missing key {e}")
     profile = m.get("profile", "profile")
+    tests = m.get("tests")
+    if tests is not None and not (path / tests).is_dir():
+        raise ModuleError(f"module {name!r} at {path}: declared tests dir {tests!r} missing")
     if api_version != CORE_API_VERSION:
         raise ModuleError(
             f"module {name!r} at {path}: api_version {api_version} != supported {CORE_API_VERSION}")

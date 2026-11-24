@@ -84,6 +84,24 @@ def test_api_version_mismatch_raises_module_error(search_root):
         sm.load_module(mod_dir)
 
 
+def test_declared_tests_dir_missing_raises_module_error(search_root):
+    mod_dir = search_root / "fixture_mod"
+    (mod_dir / "module.toml").write_text(GOOD_TOML.replace(
+        'profile = "profile"', 'profile = "profile"\ntests = "tests"'), encoding="utf-8")
+    with pytest.raises(sm.ModuleError, match="tests"):
+        sm.load_module(mod_dir)
+
+
+def test_declared_tests_dir_present_loads_fine(search_root):
+    mod_dir = search_root / "fixture_mod"
+    (mod_dir / "tests").mkdir()
+    (mod_dir / "tests" / "test_fixture_mod.py").write_text("", encoding="utf-8")
+    (mod_dir / "module.toml").write_text(GOOD_TOML.replace(
+        'profile = "profile"', 'profile = "profile"\ntests = "tests"'), encoding="utf-8")
+    mod = sm.load_module(mod_dir)
+    assert mod.name == "fixture_mod"
+
+
 def test_load_modules_finds_the_one_known_module(search_root):
     cfg = InstanceConfig(name="demo", root=search_root, timezone="Europe/Berlin", languages=("de",),
                           app_format="x/1", poster_format="y/1", modules=("fixture_mod",))
