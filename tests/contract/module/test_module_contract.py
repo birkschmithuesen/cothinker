@@ -105,6 +105,16 @@ def test_its_profile_dir_exists(subject, tmp_path):
     assert Path(got).is_dir(), f"MOD-PROFILE: profile directory {got} missing"
 
 
+def _is_statestore_owned_dotfile(name: str, declared: set[str]) -> bool:
+    """`StateStore.update`'s `.<name>.lock` and `StateStore.write`'s stray
+    `.<name>.<random>.tmp` (`tempfile.mkstemp`), for a declared `name` only --
+    not any other dotfile a module might write."""
+    for n in declared:
+        if name == f".{n}.lock" or re.fullmatch(re.escape(f".{n}.") + r"[^.]+\.tmp", name):
+            return True
+    return False
+
+
 def test_it_writes_only_its_declared_state_files_into_its_own_root(subject, tmp_path):
     declared = set(_manifest(subject).get("state", {}).get("files", []))
     before = _files(subject)
@@ -114,7 +124,7 @@ def test_it_writes_only_its_declared_state_files_into_its_own_root(subject, tmp_
     ctx = ModuleContext(instance=instance, state=StateStore(own))
     for kind in EVENT_KINDS:
         mod.on_event(CoreEvent(kind=kind, payload={"text": "eins zwei drei"}), ctx)
-    written = {name for name in _files(own) if not name.startswith(".")}
+    written = {name for name in _files(own) if not _is_statestore_owned_dotfile(name, declared)}
     assert written <= declared, f"MOD-STATE: wrote {sorted(written - declared)}, not in [state].files"
     outside = [name for name in _files(tmp_path) if not name.startswith("own/")]
     assert outside == [], f"MOD-ISOLATION: wrote outside its own state root: {outside}"
@@ -254,6 +264,10 @@ MODULE_VIOLATIONS = {
     "write-into-a-sibling-state-root": (
         "MOD-ISOLATION",
         '        StateStore(ctx.state.root.parent / "sibling").write("declared.json", {})'),
+    "undeclared-dotfile": (
+        "MOD-STATE",
+        '        if ev.kind == "cue":\n'
+        '            (ctx.state.root / ".cache.json").write_text("{}", encoding="utf-8")'),
 }
 
 
