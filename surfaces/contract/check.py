@@ -219,6 +219,15 @@ _WRAP_EVENT_SOURCE_SCRIPT = """
 """ % {"settle_ms": int(DOM_SETTLE_S * 1000)}
 
 
+def _with_api_param(surface_url: str, contract_base: str) -> str:
+    """`surface_url` with `api=<contract_base>/` appended to its query
+    string. A token-gated surface (ADR 0020) already carries its own
+    `?t=...`, so this joins with `&` rather than assuming `surface_url`
+    has no query of its own."""
+    sep = "&" if "?" in surface_url else "?"
+    return f"{surface_url}{sep}api={contract_base}/"
+
+
 def _surface_origin(surface_url: str) -> str:
     parts = urlsplit(surface_url)
     return f"{parts.scheme}://{parts.netloc}"
@@ -242,9 +251,11 @@ def _replay_and_collect(
     out_dir: Path,
     screenshot_prefix: str,
 ):
-    """Opens `surface_url?api=<contract_base>/`, plays `frames` on the
-    already-running contract server behind it, and returns
-    `(requests, console_messages, per_intent_results, final_html)`.
+    """Opens `surface_url` with `api=<contract_base>/` appended to its query
+    string (a token-gated surface already carries its own `?t=...`, so this
+    joins with `&` rather than assuming `surface_url` has no query of its
+    own), plays `frames` on the already-running contract server behind it,
+    and returns `(requests, console_messages, per_intent_results, final_html)`.
     """
     from playwright.sync_api import sync_playwright
 
@@ -271,7 +282,7 @@ def _replay_and_collect(
         )
         page.add_init_script(_WRAP_EVENT_SOURCE_SCRIPT)
 
-        open_url = f"{surface_url}?api={contract_base}/"
+        open_url = _with_api_param(surface_url, contract_base)
         page.goto(open_url, wait_until="load")
 
         deadline = time.monotonic() + overall_budget_s
