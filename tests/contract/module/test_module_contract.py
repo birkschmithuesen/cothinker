@@ -27,7 +27,10 @@ from shared.modules import (CORE_API_VERSION, CoreEvent, ModuleContext, ModuleEr
 
 CONTRACT_API = "module"
 REPO = Path(__file__).resolve().parents[3]
-BUILTIN_SUBJECTS = {"example_echo": REPO / "modules" / "example_echo"}
+BUILTIN_SUBJECTS = {
+    "example_echo": REPO / "modules" / "example_echo",
+    "with_phases": REPO / "tests" / "contract" / "module" / "fixtures" / "with_phases",
+}
 EVENT_KINDS = ("utterance", "block", "phase", "cue")
 
 
@@ -214,6 +217,22 @@ def test_the_broken_fake_fails_the_contract_only_for_the_profile_rule(tmp_path):
     (broken / "module.toml").write_text(BROKEN_TOML.format(api=CORE_API_VERSION), encoding="utf-8")
     (broken / "module.py").write_text(BROKEN_PY, encoding="utf-8")
     assert _failed_rules(broken, tmp_path) == {"MOD-PROFILE"}
+
+
+# ----------------------------- red proof: MOD-PHASES against a real subject
+# `example_echo.phases()` returns `[]`, so the loop in
+# `test_its_phases_have_an_id_and_titles` never runs its body for that
+# built-in subject -- a mutant deleting the loop's assertions would stay
+# green. The `with_phases` fixture (added to BUILTIN_SUBJECTS) has a
+# non-empty `phases()`, so this proves the rule is actually exercised.
+def test_a_mutant_emptying_a_phases_titles_fails_only_mod_phases(tmp_path):
+    mutant = tmp_path / "with_phases_mutant"
+    shutil.copytree(BUILTIN_SUBJECTS["with_phases"], mutant, ignore=shutil.ignore_patterns("__pycache__"))
+    text = (mutant / "module.py").read_text(encoding="utf-8")
+    text, n = re.subn(r'titles=\{"en": "Intro"\}', "titles={}", text)
+    assert n == 1, "test setup: expected exactly one titles literal to mutate"
+    (mutant / "module.py").write_text(text, encoding="utf-8")
+    assert _failed_rules(mutant, tmp_path) == {"MOD-PHASES"}
 
 
 # ------------------- one violating module per state rule (same subject tests)

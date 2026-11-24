@@ -1,0 +1,9 @@
+[module]
+name = "with_phases"
+version = "0.1.0"
+api_version = 1
+entry = "module:WithPhasesModule"
+profile = "profile"
+
+[state]
+files = []
