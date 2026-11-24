@@ -1,7 +1,13 @@
-"""The surface conformance check itself (ADR 0019 point 4, issue #142): a
-tiny good reference surface must pass every check, and a deliberately
-broken one must fail with the right reason -- the mutation proof the
-acceptance criteria ask for.
+"""Surface API contract (ADR 0022 level 2): the surface conformance check of
+ADR 0019 point 4 (issue #142); behaviour: docs/architecture/target.md §2.3 and
+docs/surface-contract.md.
+
+A subject is a surface, given as a path to its `index.html` (the same value
+`python -m surfaces.contract.check --surface` takes). The tiny good reference
+surface must pass every check, and a deliberately broken one must fail with
+the right reason -- the mutation proof the acceptance criteria ask for.
+Outside surfaces: `COTHINKER_CONTRACT_SURFACE=<path to index.html>`
+(docs/contract-tests.md).
 """
 from __future__ import annotations
 
@@ -9,13 +15,19 @@ from pathlib import Path
 
 from surfaces.contract.check import run_check
 
-REPO_ROOT = Path(__file__).resolve().parent.parent
+CONTRACT_API = "surface"
+REPO_ROOT = Path(__file__).resolve().parents[3]
 MINIMAL_SURFACE = REPO_ROOT / "surfaces" / "contract" / "examples" / "minimal" / "index.html"
-BROKEN_SURFACE = REPO_ROOT / "tests" / "fixtures" / "broken_surface" / "index.html"
+BROKEN_SURFACE = Path(__file__).resolve().parent / "broken_surface" / "index.html"
+BUILTIN_SUBJECTS = {"minimal": MINIMAL_SURFACE}
 
 
-def test_minimal_example_passes_every_check(tmp_path):
-    report = run_check(str(MINIMAL_SURFACE), scenario="meeting", out=tmp_path)
+def resolve_outside(value: str) -> str:
+    return value
+
+
+def test_the_surface_passes_every_check(subject, tmp_path):
+    report = run_check(str(subject), scenario="meeting", out=tmp_path)
 
     failed = [check for check in report.checks if not check.passed]
     assert not failed, f"unexpected failures: {failed}"
