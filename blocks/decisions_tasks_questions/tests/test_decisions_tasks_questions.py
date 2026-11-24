@@ -345,3 +345,113 @@ def test_a_broken_block_never_stops_the_session(tmp_path):
     rig.block.finish()
     rig.hear()            # the decider is closed: dropped, never raised
     assert rig.blocks.dispatch("tick", {"at": 0.0, "components": {}}) >= 1
+
+
+# ------------------------------------- orders and tasks (issues #178, #129)
+TASK = {"action": "tag_entry", "tag": "aufgabe",
+        "text": "Sam bestellt bis Donnerstag Material.",
+        "person": "Sam", "due": "Donnerstag"}
+SAMS_TASK = {"text": "Sam bestellt bis Donnerstag Material.",
+             "person": "Sam", "due": "Donnerstag"}
+
+
+def tasks_intents(rig):
+    return [i for i in rig.intents if i.kind == "tasks"]
+
+
+def test_orders_wait_until_a_turn_takes_them(tmp_path):
+    rig = Rig(tmp_path, policy=True, decide_fn=scripted(aufgabe=0.8))
+    assert rig.block.orders_waiting() is False
+    rig.hear()
+    rig.settle_decider()
+    assert rig.block.orders_waiting() is True
+    rig.turn_orders(segment("Nur das."))
+    assert rig.block.orders_waiting() is False
+
+
+def test_no_orders_wait_without_level_2(tmp_path):
+    assert Rig(tmp_path, policy=False).block.orders_waiting() is False
+
+
+def test_a_filed_aufgabe_answer_becomes_the_tasks_intent(tmp_path):
+    rig = Rig(tmp_path, policy=True, decide_fn=scripted(aufgabe=0.8))
+    rig.hear()
+    rig.settle_decider()
+    rig.turn_orders(segment("Nur das."))
+    rig.block.task_filed("A1", {**TASK, "order": "A1"})
+    [got] = tasks_intents(rig)
+    assert (got.id, got.block, got.audience) == ("tasks:room", BLOCK_ID, "room")
+    assert got.payload == {"tasks": [SAMS_TASK]}
+    assert rig.state.content()["tasks"] == [SAMS_TASK]
+
+
+def test_a_task_the_meeting_gave_no_person_or_due_keeps_them_empty(tmp_path):
+    rig = Rig(tmp_path, policy=True, decide_fn=scripted(aufgabe=0.8))
+    rig.hear()
+    rig.settle_decider()
+    rig.turn_orders(segment("Nur das."))
+    rig.block.task_filed("A1", {"action": "tag_entry", "tag": "aufgabe",
+                                "text": "Material bestellen."})
+    assert rig.state.tasks == [{"text": "Material bestellen.",
+                                "person": "", "due": ""}]
+
+
+def test_the_list_grows_and_a_repeat_is_not_added_twice(tmp_path):
+    rig = Rig(tmp_path, policy=True, decide_fn=scripted(aufgabe=0.8))
+    rig.hear()
+    rig.settle_decider()
+    rig.turn_orders(segment("Nur das."))
+    rig.block.task_filed("A1", TASK)
+    rig.block.task_filed("A1", {**TASK, "text": "Raum buchen.", "person": "Alex"})
+    rig.block.task_filed("A1", TASK)
+    assert [t["text"] for t in rig.state.tasks] == [
+        "Sam bestellt bis Donnerstag Material.", "Raum buchen."]
+    assert len(tasks_intents(rig)) == 2
+
+
+def test_only_the_running_turns_aufgabe_orders_make_tasks(tmp_path):
+    rig = Rig(tmp_path, policy=True, decide_fn=scripted(aufgabe=0.8))
+    rig.hear()
+    rig.settle_decider()
+    rig.block.task_filed("A1", TASK)               # no turn took A1 yet
+    rig.turn_orders(segment("Nur das."))
+    rig.block.task_filed("A9", TASK)               # not an order of this turn
+    rig.block.task_filed("A1", {**TASK, "tag": "notiz"})
+    rig.block.task_filed("A1", {**TASK, "text": "   "})
+    assert not tasks_intents(rig) and "tasks" not in rig.state.content()
+
+
+def test_an_aufgabe_answer_to_a_frage_order_makes_no_task(tmp_path):
+    """The ORDER decides what was asked for: an `aufgabe`-tagged answer to
+    an `offene_frage` order (tag `frage`) is no task."""
+    rig = Rig(tmp_path, policy=True, decide_fn=scripted(offene_frage=0.9))
+    rig.hear()
+    rig.settle_decider()
+    rig.turn_orders(segment("Nur das."))
+    rig.block.task_filed("A1", {**TASK, "order": "A1"})
+    assert not tasks_intents(rig) and "tasks" not in rig.state.content()
+
+
+def test_a_decision_order_makes_no_task(tmp_path):
+    rig = Rig(tmp_path, policy=True, decide_fn=scripted(beschluss=0.8))
+    rig.hear()
+    rig.settle_decider()
+    rig.turn_orders(segment("Nur das."))
+    rig.block.task_filed("A1", TASK)
+    assert not tasks_intents(rig)
+
+
+def test_without_level_2_a_filed_task_is_a_no_op(tmp_path):
+    rig = Rig(tmp_path, policy=False)
+    rig.block.task_filed("A1", TASK)
+    assert not tasks_intents(rig)
+
+
+def test_an_aufgabe_order_asks_for_person_and_due():
+    import blocks.decisions_tasks_questions.policy as pol
+    aufgabe = pol.Action("tag_entry", "aufgabe", 0.9, True, tag="aufgabe")
+    text = pol.order_text(aufgabe, "A1", "Sam bis Donnerstag")
+    assert text.endswith(pol.TASK_FIELDS_NOTE) and text.isascii()
+    assert '"person"' in text and '"due"' in text
+    frage = pol.Action("tag_entry", "offene_frage", 0.9, True, tag="frage")
+    assert pol.TASK_FIELDS_NOTE not in pol.order_text(frage, "A2", "x")
