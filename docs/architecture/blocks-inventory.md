@@ -70,7 +70,7 @@ speaker queue.
 
 | Target | Lines | Files | Used by |
 |---|---|---|---|
-| STT — server, wire, registry | 1231 | `stt/fundusapps/__init__.py`, `common/__init__.py`, `common/turnid.py`, `stt_server/__init__.py`, `__main__.py`, `app.py`, `backends/__init__.py`, `backends/base.py`, `botland_callbacks.py`, `events.py`, `settings.py` | core |
+| STT — server, wire, registry | 1542 | `stt/fundusapps/__init__.py`, `common/__init__.py`, `common/turnid.py`, `stt_server/__init__.py`, `__main__.py`, `app.py`, `args.py`, `backends/__init__.py`, `backends/base.py`, `botland_callbacks.py`, `events.py`, `settings.py` | core |
 | STT — audio stage | 2148 | `stt/fundusapps/bbb_tap/__init__.py`, `feed_wav.py`, `pcm.py`; `stt_server/audio_clock.py`, `interview_signal.py`, `pcm_source.py`, `sr.py`, `vad.py`, `vad_detectors.py` | core |
 | STT — engine Speechmatics EU | 775 | `shared/speechmatics.py` 323, `shared/utterance.py` 175, `stt_server/backends/speechmatics_rt_backend.py` 277 | core |
 | STT — engine local Whisper | 178 | `stt_server/backends/whisper_backend.py` 178 | core |
@@ -248,6 +248,7 @@ stt/fundusapps/common/turnid.py                                                 
 stt/fundusapps/stt_server/__init__.py                                            stt:server
 stt/fundusapps/stt_server/__main__.py                                            stt:server
 stt/fundusapps/stt_server/app.py                                                 stt:server
+stt/fundusapps/stt_server/args.py                                                stt:server
 stt/fundusapps/stt_server/audio_clock.py                                         stt:audio
 stt/fundusapps/stt_server/backends/__init__.py                                   stt:server
 stt/fundusapps/stt_server/backends/_vendored_whisper_streaming/__init__.py       retire
