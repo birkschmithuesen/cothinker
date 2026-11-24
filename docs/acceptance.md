@@ -94,9 +94,11 @@ rendered or printed.
 5. **Surfaces** — Playwright opens stage and monitor at 1920×1080 against
    `?api=` on the public contract route, while the call plays. Asserts the
    two participants' real names appear (never a generic "Speaker N"), the
-   current agenda line is visible, and no console errors were logged;
-   screenshots are saved. Does not prove the layout is usable at other
-   viewport sizes.
+   live snapshot's current agenda item (`agenda.current_text`, from the
+   project's own `agenda.md` -- unrelated to the spoken script's probe
+   lines; `SKIPPED` when no agenda is configured) is visible, and no
+   console errors were logged; screenshots are saved. Does not prove the
+   layout is usable at other viewport sizes.
 
 6. **Contract** — `surfaces/contract/check.py`'s own conformance check
    (ADR 0019) runs against the live monitor URL, exactly as

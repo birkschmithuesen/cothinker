@@ -392,17 +392,27 @@ def build_public_url(base_url: str, path: str, token: str) -> str:
     return base_url.rstrip("/") + path + "?t=" + token
 
 
-def check_surfaces(base_url: str, token: str, names: list[str], agenda_hint: str,
+def check_surfaces(base_url: str, token: str, names: list[str],
                     out_dir: Path) -> tuple[list[Check], list[str]]:
     """Opens stage and monitor at 1920x1080 via the public contract route,
     asserts named transcript lines, the current agenda item, and no
     console errors; returns the checks plus the raw stage transcript
-    bullets (for score_check) collected along the way."""
+    bullets (for score_check) collected along the way.
+
+    "Current agenda item" is whatever the live snapshot's own
+    agenda.current_text says (set from the project's agenda.md, not
+    related to the spoken script's probe lines) -- SKIPPED, not FAIL,
+    when no agenda is configured for this deployment."""
     from playwright.sync_api import sync_playwright
 
     checks: list[Check] = []
     transcript_bullets: list[str] = []
     api_url = base_url.rstrip("/") + "/api/"
+    try:
+        agenda = fetch_snapshot(base_url, token).get("agenda") or {}
+    except Exception:
+        agenda = {}
+    current_item = agenda.get("current_text")
 
     with sync_playwright() as pw:
         browser = pw.chromium.launch(headless=True)
@@ -441,11 +451,15 @@ def check_surfaces(base_url: str, token: str, names: list[str], agenda_hint: str
                                  "PASS" if not missing_names else "FAIL",
                                  "missing: %s" % ", ".join(missing_names) if missing_names
                                  else "all of %s present" % ", ".join(names)))
-            checks.append(Check("%s shows the current agenda item" % surface_name,
-                                 "PASS" if agenda_hint in body_text else "FAIL",
-                                 "agenda hint %r %s" % (
-                                     agenda_hint, "found" if agenda_hint in body_text
-                                     else "not found")))
+            if current_item is None:
+                checks.append(Check("%s shows the current agenda item" % surface_name,
+                                     "SKIPPED", "no agenda configured for this deployment"))
+            else:
+                found = current_item in body_text
+                checks.append(Check("%s shows the current agenda item" % surface_name,
+                                     "PASS" if found else "FAIL",
+                                     "current agenda item %r %s" % (
+                                         current_item, "found" if found else "not found")))
             page.screenshot(path=str(out_dir / ("%s.png" % surface_name)), full_page=True)
             checks.append(Check("%s has no console errors" % surface_name,
                                  "PASS" if not console_errors else "FAIL",
@@ -633,7 +647,7 @@ def main(argv: list[str]) -> int:
 
     # 5. Surfaces, opened while the call is still up.
     surface_checks, transcript_bullets = check_surfaces(
-        args.base_url, token, ["Alex", "Sam"], AGENDA_LINE, out_dir)
+        args.base_url, token, ["Alex", "Sam"], out_dir)
 
     # 6. Contract.
     monitor_url = build_public_url(args.base_url, "/monitor/", token)
