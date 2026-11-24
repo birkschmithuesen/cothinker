@@ -24,6 +24,7 @@ instances/<name>/
   scripts/
   tests/
   docs/
+  look/
 ```
 
 - `instance.toml` — the manifest (format below). The only file every
@@ -39,6 +40,11 @@ instances/<name>/
   equivalents of the repository's own top-level folders: unit templates
   and render helpers, this deployment's acceptance scenarios, one-off
   scripts, deployment-specific tests, and deployment-facing documentation.
+- `look/` — this deployment's design-token override, `tokens.yaml` in the
+  same shape as `surfaces/design/tokens.yaml` (ADR 0023). `python -m
+  surfaces.design.build --instance <name>` merges it over the default and
+  writes `look/tokens.css` / `look/tokens.json`. A deployment changes its
+  look here, never by editing surface code.
 
 `instances/README.md` is the short version of this rule; `instances/example/`
 is a complete, fully invented instance that exercises every part of this
