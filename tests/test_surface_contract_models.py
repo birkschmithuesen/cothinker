@@ -15,6 +15,9 @@ from surfaces.contract.models import (
     GraphIntent,
     KnowledgeHit,
     KnowledgeIntent,
+    ListenClose,
+    ListenIntent,
+    ListenSnapshot,
     MessageAction,
     QueueIntent,
     QueueSeat,
@@ -195,3 +198,45 @@ def test_view_intent_union_accepts_knowledge_kind():
                   "href": "ablage/budget.md"}],
     })
     assert isinstance(knowledge_intent, KnowledgeIntent)
+
+
+def test_stage_state_snapshot_listen_defaults_to_none():
+    """issue #180, ADR 0023: the call window's snapshot field, same
+    key-absent-means-hidden convention as `queue`/`voice`/`share`."""
+    assert StageStateSnapshot.model_fields["listen"].default is None
+
+
+def test_listen_snapshot_matches_the_call_window_block_payload():
+    snapshot = ListenSnapshot(
+        state="listening", since=12.0, opened_by="voice", closes_in_s=8.0,
+        last_close=None,
+    )
+    assert snapshot.model_dump() == {
+        "state": "listening", "since": 12.0, "opened_by": "voice",
+        "closes_in_s": 8.0, "last_close": None,
+    }
+
+
+def test_listen_snapshot_defaults_to_idle():
+    snapshot = ListenSnapshot()
+    assert snapshot.state == "idle"
+    assert snapshot.since is None
+    assert snapshot.opened_by is None
+    assert snapshot.closes_in_s is None
+    assert snapshot.last_close is None
+
+
+def test_listen_snapshot_carries_the_last_close_reason():
+    snapshot = ListenSnapshot(
+        state="idle", since=None, opened_by=None, closes_in_s=None,
+        last_close=ListenClose(reason="cancel", at=20.0),
+    )
+    assert snapshot.last_close.model_dump() == {"reason": "cancel", "at": 20.0}
+
+
+def test_view_intent_union_accepts_listen_kind():
+    listen_intent = TypeAdapter(ViewIntent).validate_python({
+        "kind": "listen", "id": "listen:room", "state": "idle", "since": None,
+        "opened_by": None, "closes_in_s": None, "last_close": None,
+    })
+    assert isinstance(listen_intent, ListenIntent)

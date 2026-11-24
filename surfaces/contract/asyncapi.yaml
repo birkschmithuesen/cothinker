@@ -272,6 +272,97 @@ components:
       - id
       title: KnowledgeIntent
       type: object
+    ListenClose:
+      description: '`ListenSnapshot.last_close`: how the most recent call window ended
+
+        (`gateway.segmenter.BlockBuilder.state()`''s own shape).'
+      properties:
+        reason:
+          description: 'How the call closed: the end phrase, a tap, a silence timeout,
+            the call''s own max duration, or a tap on an empty window (cancel, nothing
+            sent).'
+          enum:
+          - end
+          - tap
+          - silence
+          - max
+          - cancel
+          examples:
+          - end
+          title: Reason
+          type: string
+        at:
+          description: Epoch seconds the call closed.
+          examples:
+          - 1732450920.0
+          title: At
+          type: number
+      required:
+      - reason
+      - at
+      title: ListenClose
+      type: object
+    ListenIntent:
+      description: '`listen:room`: the call-window block''s view intent (kind `listen`,
+
+        issue #180, ADR 0023); the same shape as `StageStateSnapshot.listen`.'
+      properties:
+        kind:
+          const: listen
+          default: listen
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - listen:room
+          title: Id
+          type: string
+        state:
+          default: idle
+          enum:
+          - idle
+          - listening
+          examples:
+          - idle
+          title: State
+          type: string
+        since:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          examples:
+          - null
+          title: Since
+        opened_by:
+          anyOf:
+          - enum:
+            - voice
+            - tap
+            type: string
+          - type: 'null'
+          default: null
+          examples:
+          - null
+          title: Opened By
+        closes_in_s:
+          anyOf:
+          - type: number
+          - type: 'null'
+          default: null
+          examples:
+          - null
+          title: Closes In S
+        last_close:
+          anyOf:
+          - $ref: '#/components/schemas/ListenClose'
+          - type: 'null'
+          default: null
+      required:
+      - id
+      title: ListenIntent
+      type: object
     PromptIntent:
       properties:
         kind:
@@ -850,6 +941,7 @@ components:
           choice_list: '#/components/schemas/ChoiceIntent'
           graph: '#/components/schemas/GraphIntent'
           knowledge: '#/components/schemas/KnowledgeIntent'
+          listen: '#/components/schemas/ListenIntent'
           prompt: '#/components/schemas/PromptIntent'
           queue: '#/components/schemas/QueueIntent'
           share: '#/components/schemas/ShareIntent'
@@ -872,3 +964,4 @@ components:
       - $ref: '#/components/schemas/KnowledgeIntent'
       - $ref: '#/components/schemas/TranscriptRecentIntent'
       - $ref: '#/components/schemas/TasksIntent'
+      - $ref: '#/components/schemas/ListenIntent'

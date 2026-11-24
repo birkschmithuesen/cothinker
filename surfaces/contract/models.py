@@ -199,6 +199,45 @@ class QueueSnapshot(BaseModel):
     round: None = Field(default=None, description="Reserved for a future round-based queue mode; always `None` today.")
 
 
+class ListenClose(BaseModel):
+    """`ListenSnapshot.last_close`: how the most recent call window ended
+    (`gateway.segmenter.BlockBuilder.state()`'s own shape)."""
+
+    reason: Literal["end", "tap", "silence", "max", "cancel"] = Field(
+        description="How the call closed: the end phrase, a tap, a silence"
+        " timeout, the call's own max duration, or a tap on an empty"
+        " window (cancel, nothing sent).",
+        examples=["end"],
+    )
+    at: float = Field(description="Epoch seconds the call closed.", examples=[1732450920.0])
+
+
+class ListenSnapshot(BaseModel):
+    """`content()["listen"]`: the call-window block's `listen:room`
+    view-intent payload, filled by `gateway.segmenter.BlockBuilder.state()`
+    (issue #180, ADR 0023). The window the wake word ("Hey Robo"), a tap,
+    or the end phrase ("Robo, Ende") opens and closes; every sentence
+    spoken while it is open belongs to the call."""
+
+    state: Literal["idle", "listening"] = Field(
+        default="idle", description="Whether the call window is open.", examples=["idle"],
+    )
+    since: float | None = Field(
+        default=None, description="Epoch seconds the window opened; `None` while idle.", examples=[None],
+    )
+    opened_by: Literal["voice", "tap"] | None = Field(
+        default=None, description="What opened the window; `None` while idle.", examples=[None],
+    )
+    closes_in_s: float | None = Field(
+        default=None,
+        description="Seconds of silence left before the window auto-closes; `None` while idle.",
+        examples=[None],
+    )
+    last_close: ListenClose | None = Field(
+        default=None, description="How the most recent call ended; `None` before the first one.",
+    )
+
+
 class VoiceRecentEntry(BaseModel):
     """One entry of `voice.recent`: a distinct past speaker and when they
     were last heard."""
@@ -359,6 +398,12 @@ class StageStateSnapshot(BaseModel):
         " the `knowledge-link` block; `None` until the block has emitted"
         " one (key-absent-means-hidden, `StageState._content()`).",
     )
+    listen: ListenSnapshot | None = Field(
+        default=None,
+        description="The call window's state, from the `call-window` block"
+        " (issue #180, ADR 0023); `None` when that block is absent from"
+        " the session (key-absent-means-hidden, `StageState._content()`).",
+    )
 
 
 # --------------------------------------------------------------------------
@@ -496,6 +541,19 @@ class KnowledgeIntent(KnowledgeSnapshot):
     id: str = Field(description="Identity a user action refers back to.", examples=["knowledge:t1"])
 
 
+class ListenIntent(BaseModel):
+    """`listen:room`: the call-window block's view intent (kind `listen`,
+    issue #180, ADR 0023); the same shape as `StageStateSnapshot.listen`."""
+
+    kind: Literal["listen"] = "listen"
+    id: str = Field(description="Identity a user action refers back to.", examples=["listen:room"])
+    state: Literal["idle", "listening"] = Field(default="idle", examples=["idle"])
+    since: float | None = Field(default=None, examples=[None])
+    opened_by: Literal["voice", "tap"] | None = Field(default=None, examples=[None])
+    closes_in_s: float | None = Field(default=None, examples=[None])
+    last_close: ListenClose | None = Field(default=None)
+
+
 class TranscriptRecentIntent(BaseModel):
     """The last three contributions. Not wired yet, see issue #129."""
 
@@ -530,6 +588,7 @@ ViewIntent = Annotated[
         KnowledgeIntent,
         TranscriptRecentIntent,
         TasksIntent,
+        ListenIntent,
     ],
     Field(discriminator="kind"),
 ]
