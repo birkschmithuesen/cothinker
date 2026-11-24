@@ -472,7 +472,7 @@ def run_contract_check(monitor_url: str, token: str, out_dir: Path) -> Check:
 # --------------------------------------------------------------------------
 
 PARTICIPANT_PY = Path(__file__).resolve().parent / "participant.py"
-_JOINED_RE = re.compile(r"^joined name=(\S+) after ([\d.]+)s")
+_JOINED_RE = re.compile(r"^joined name=(\S+) after ([\d.]+)s", re.MULTILINE)
 
 
 def start_participant(name: str, wav: Path, url_file: Path, stats_out: Path,

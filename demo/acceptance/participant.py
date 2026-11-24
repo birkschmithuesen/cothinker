@@ -66,6 +66,11 @@ class Cdp:
     def __init__(self, ws_url: str):
         self.ws = websocket.create_connection(ws_url, timeout=30)
         self.n = 0
+        # call() only correlates responses by id; an unsolicited event
+        # (no "id") arriving while waiting on some other call's response
+        # would otherwise be silently dropped. Stashed here instead, so
+        # find_iframe_context() can look back through them.
+        self.events: list[dict] = []
 
     def call(self, method: str, **params):
         self.n += 1
@@ -77,11 +82,31 @@ class Cdp:
                 if "error" in msg:
                     raise RuntimeError("%s: %s" % (method, msg["error"]))
                 return msg.get("result", {})
+            if "method" in msg:
+                self.events.append(msg)
 
-    def eval(self, expr: str, await_promise: bool = False):
-        r = self.call("Runtime.evaluate", expression=expr,
-                      returnByValue=True, awaitPromise=await_promise)
+    def eval(self, expr: str, await_promise: bool = False,
+              context_id: int | None = None):
+        params = {"expression": expr, "returnByValue": True,
+                  "awaitPromise": await_promise}
+        if context_id is not None:
+            params["contextId"] = context_id
+        r = self.call("Runtime.evaluate", **params)
         return r.get("result", {}).get("value")
+
+    def find_iframe_context(self, frame_id: str) -> int | None:
+        """The execution context id of the given frame's default world
+        (Runtime.executionContextCreated, seen since Runtime.enable()).
+        A page's own window and its iframe's window are separate contexts
+        -- RTCPeerConnection.getStats() must run in the iframe's, since
+        that is where Jitsi actually creates the connection."""
+        for ev in self.events:
+            if ev.get("method") != "Runtime.executionContextCreated":
+                continue
+            ctx = ev["params"]["context"]
+            if ctx.get("auxData", {}).get("frameId") == frame_id:
+                return ctx["id"]
+        return None
 
 
 def wait_cdp(port: int, timeout: float = 30.0) -> str:
@@ -157,6 +182,11 @@ def main(argv: list[str]) -> int:
                      url=origin, path=a.cookie_path, secure=True,
                      sameSite="Lax")
             if a.stats_out:
+                # Runtime.enable before navigate: executionContextCreated
+                # events (one per frame, incl. the Jitsi iframe navigated
+                # to below) must already be flowing by the time it fires,
+                # or find_iframe_context() has nothing to find.
+                cdp.call("Runtime.enable")
                 cdp.call("Page.addScriptToEvaluateOnNewDocument",
                          source=CAPTURE_PEER_CONNECTIONS_SCRIPT)
             cdp.call("Page.navigate", url=url)
@@ -175,19 +205,37 @@ def main(argv: list[str]) -> int:
                     fh.write(base64.b64decode(shot["data"]))
                 print("screenshot written")
             if a.stats_out:
+                # The RTCPeerConnection override lives in the iframe's own
+                # window (that is where Jitsi actually runs), not the top
+                # page's -- window.__pcs must be read from that frame's
+                # execution context, found via its frameId. #jitsi has
+                # exactly one child frame (the Jitsi iframe).
+                tree = cdp.call("Page.getFrameTree")
+                children = tree.get("frameTree", {}).get("childFrames", [])
+                frame_id = children[0]["frame"]["id"] if children else None
                 t1 = time.time()
-                while not cdp.eval("(window.__pcs || []).length > 0"):
+                ctx_id = None
+                while ctx_id is None:
+                    ctx_id = cdp.find_iframe_context(frame_id) if frame_id else None
+                    if ctx_id is not None:
+                        break
                     if time.time() - t1 > a.stats_timeout:
                         print("FAIL: no RTCPeerConnection appeared for stats",
                               file=sys.stderr)
                         return 1
                     time.sleep(0.5)
-                raw = cdp.eval(GATHER_STATS_SCRIPT, await_promise=True)
+                while not cdp.eval("(window.__pcs || []).length > 0", context_id=ctx_id):
+                    if time.time() - t1 > a.stats_timeout:
+                        print("FAIL: no RTCPeerConnection appeared for stats",
+                              file=sys.stderr)
+                        return 1
+                    time.sleep(0.5)
+                raw = cdp.eval(GATHER_STATS_SCRIPT, await_promise=True, context_id=ctx_id)
                 with open(a.stats_out, "w", encoding="utf-8") as fh:
                     fh.write(raw)
                 entries = len(json.loads(raw))
                 print("stats written pcs=%d entries=%d"
-                      % (cdp.eval("(window.__pcs || []).length"), entries))
+                      % (cdp.eval("(window.__pcs || []).length", context_id=ctx_id), entries))
             time.sleep(max(0.0, a.seconds - (time.time() - t0)))
             return 0
         finally:
