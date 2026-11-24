@@ -45,11 +45,14 @@ set +a
 DEMO_REPO=${DEMO_REPO:-$DEMO_HOME/repo}
 # Directory that holds this demo/ kit (may differ from the runtime checkout).
 DEMO_KIT=${DEMO_KIT:-$DEMO_REPO}
-DEMO_UNITS=${DEMO_UNITS:-"session stage stt chrome tap consumer"}
+DEMO_UNITS=${DEMO_UNITS:-"session stage stt chrome tap consumer contract"}
 JITSI_WEB=${JITSI_WEB:-http://127.0.0.1:8000/}
 RUN_DIR=${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/cothinker-demo
 LOG_DIR=$DEMO_HOME/logs
-PORT_RE=':(5051|5053|8020|8091|9223)\b'
+# 8092 is the contract unit (DEMO_UNITS, stopped with the rest); 8093 is
+# contract-fixtures, which runs always and is never started/stopped here --
+# it must stay out of PORT_RE or `stop` would wrongly flag it as leaking.
+PORT_RE=':(5051|5053|8020|8091|8092|9223)\b'
 
 fail=0
 unit() { echo "cothinker-demo-$1.service"; }
@@ -109,10 +112,31 @@ start_all() {
     python3 "$DEMO_KIT/demo/session_server.py" --mint-robo "$RUN_DIR/robo.env"
   ) || { echo "FAIL: minting the bot join URL" >&2; return 1; }
 
-  git -C "$DEMO_HOME/project" config user.name >/dev/null 2>&1 \
-    || git -C "$DEMO_HOME/project" config user.name "CoThinker Demo"
-  git -C "$DEMO_HOME/project" config user.email >/dev/null 2>&1 \
-    || git -C "$DEMO_HOME/project" config user.email "demo@example.invalid"
+  # COTHINKER_PROJECT_DIR / COTHINKER_SESSIONS_DIR mirror the consumer unit's
+  # own environment (a deployment may point the project at a separate repo,
+  # e.g. a wiki clone, and put sessions under its own subfolder) -- read the
+  # same two variables here, with the same defaults the consumer falls back
+  # to, both for the git identity below and for resolving the session dir,
+  # so demo.sh always operates on the SAME directory the consumer is about
+  # to write into rather than always the plain project folder.
+  local project_dir=${COTHINKER_PROJECT_DIR:-$DEMO_HOME/project}
+  local sessions_dir=${COTHINKER_SESSIONS_DIR:-sessions}
+
+  git -C "$project_dir" config user.name >/dev/null 2>&1 \
+    || git -C "$project_dir" config user.name "CoThinker Demo"
+  git -C "$project_dir" config user.email >/dev/null 2>&1 \
+    || git -C "$project_dir" config user.email "demo@example.invalid"
+
+  # The contract unit (live mode) needs this run's session directory, but
+  # only the consumer picks the name (date + title slug) when it starts.
+  # Resolve it here instead of touching the consumer: the newest subfolder
+  # of sessions/ at the moment contract starts is this run's session.
+  local session_dir=""
+  if [ -d "$project_dir/$sessions_dir" ]; then
+    session_dir=$(find "$project_dir/$sessions_dir" -mindepth 1 -maxdepth 1 \
+      -type d -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)
+  fi
+  printf 'DEMO_SESSION_DIR=%s\n' "$session_dir" >"$RUN_DIR/contract.env" || return 1
 
   local u
   for u in $DEMO_UNITS; do
