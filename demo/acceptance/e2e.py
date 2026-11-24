@@ -407,6 +407,15 @@ def check_surfaces(base_url: str, token: str, names: list[str], agenda_hint: str
             page.goto(url, wait_until="load")
             page.wait_for_timeout(2000)
 
+            # Without the ct_demo_name cookie (only ever set by
+            # participant.py for the meeting page), stage/monitor ask "Wie
+            # heißt du?" before showing anything; "Später" is the page's
+            # own way for a non-speaking viewer to skip that.
+            join_later = page.locator("#join-later")
+            if join_later.count() and join_later.is_visible():
+                join_later.click()
+                page.wait_for_timeout(300)
+
             if surface_name == "stage":
                 roh_summary = page.locator("details.roh summary")
                 if roh_summary.count():
