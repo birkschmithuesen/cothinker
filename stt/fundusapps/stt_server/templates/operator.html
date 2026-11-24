@@ -1,0 +1,615 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8" />
+  <title>STT Operator — {{ backend }}</title>
+  <style>
+    /* Spaltenlayout statt fester Hoehenrechnung: die Kopfleisten sind ueber die
+       Zeit gewachsen (Erkennung, Eingang, VAD-Schwelle, Mikrofon-Gate), und ein
+       `calc(100vh - 4.6rem)` musste bei jeder neuen Zeile nachgezogen werden --
+       einmal vergessen und die Transkriptspalten stehen unter dem Fensterrand. */
+    body { font-family: system-ui, sans-serif; margin: 0; padding: 0; background: #111; color: #eee;
+           display: flex; flex-direction: column; height: 100vh; }
+    header { padding: 0.5rem 1rem; background: #000; display: flex; gap: 1rem; align-items: center; }
+    header h1 { margin: 0; font-size: 1rem; font-weight: 500; }
+    .conn { width: 0.7rem; height: 0.7rem; border-radius: 50%; background: #888; }
+    .conn.ok { background: #4caf50; } .conn.bad { background: #f44336; }
+    main { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: #333;
+           flex: 1; min-height: 0; }
+    .col { display: flex; flex-direction: column; background: #1b1b1b; min-height: 0; }
+    .col h2 { font-size: 0.85rem; padding: 0.4rem 0.8rem; margin: 0; background: #222; display: flex; gap: 0.6rem; align-items: center; }
+    .badge { font-size: 0.7rem; padding: 0.1rem 0.4rem; border-radius: 0.3rem; background: #444; }
+    .badge.listening { background: #1565c0; } .badge.transcribing { background: #ef6c00; } .badge.muted { background: #555; }
+    .history { flex: 1; overflow-y: auto; padding: 0.6rem 0.9rem; font-size: 0.95rem; line-height: 1.4; }
+    .history div { margin-bottom: 0.25rem; }
+    .ts { color: #888; margin-right: 0.4rem; }
+    .live { padding: 0.4rem 0.9rem; min-height: 1.6rem; color: #aaa; font-style: italic; border-top: 1px solid #333; }
+
+    /* Erkennung an/aus -- siehe Kommentar im script-Block unten. */
+    .power { padding: 0.5rem 1rem; background: #000; display: flex; gap: 0.9rem; align-items: center;
+             border-top: 1px solid #333; }
+    .power button { font-size: 0.9rem; font-weight: 600; padding: 0.45rem 1.1rem; border: 0;
+                    border-radius: 0.3rem; cursor: pointer; color: #fff; }
+    .power button:disabled { opacity: 0.35; cursor: default; }
+    #btn-stop  { background: #b71c1c; }
+    #btn-start { background: #2e7d32; }
+    #power-state { font-size: 0.9rem; }
+    #power-state.running { color: #81c784; }
+    #power-state.paused  { color: #ffb74d; }
+    #power-note { font-size: 0.75rem; color: #888; margin-left: auto; }
+
+    /* Eingang + Pegel -- siehe Kommentar im script-Block unten. */
+    .audio { padding: 0.5rem 1rem; background: #000; display: flex; gap: 0.9rem;
+             align-items: center; border-top: 1px solid #222; font-size: 0.85rem;
+             flex-wrap: wrap; }
+    .audio label { color: #888; }
+    .audio select { background: #1b1b1b; color: #eee; border: 1px solid #444;
+                    border-radius: 0.3rem; padding: 0.3rem 0.4rem; font-size: 0.85rem;
+                    max-width: 26rem; }
+    #dev-error { color: #ef9a9a; }
+    #levels { display: flex; gap: 1.2rem; align-items: center; margin-left: auto; }
+    .lvl { display: flex; gap: 0.5rem; align-items: center; }
+    .lvl-name { color: #888; }
+    .bars { display: flex; flex-direction: column; gap: 0.15rem; }
+    .barline { display: flex; gap: 0.35rem; align-items: center; }
+    .tag { color: #777; font-size: 0.7rem; width: 2.6rem; text-align: right; }
+    .meter { position: relative; width: 11rem; height: 0.6rem; background: #262626;
+             border-radius: 0.15rem; overflow: hidden; }
+    .meter i { display: block; height: 100%; width: 0; background: #4caf50; }
+    .meter i.hot { background: #e53935; }
+    /* Der RMS-Balken ist duenner und anders eingefaerbt, damit er nicht mit der
+       Aussteuerungsanzeige darueber verwechselt wird -- die Schwellenlinie
+       gehoert ausschliesslich zu ihm. */
+    .meter.rms { height: 0.32rem; }
+    .meter.rms i { background: #29b6f6; }
+    .meter b.thr { position: absolute; top: 0; bottom: 0; width: 2px; left: 0;
+                   background: #ffee58; display: none; }
+    /* Zweite Linie, andere Farbe: das Mikrofon-Gate ist eine andere Frage als
+       der VAD und darf nicht wie derselbe Wert aussehen. */
+    .meter b.gate { position: absolute; top: 0; bottom: 0; width: 2px; left: 0;
+                    background: #ff7043; display: none; }
+    .lvl-val { font-variant-numeric: tabular-nums; color: #ccc; min-width: 4.5rem;
+               font-size: 0.8rem; }
+    .lvl-val.dead { color: #ef9a9a; }
+
+    /* VAD-Schwelle -- siehe Kommentar im script-Block unten. */
+    .vad { padding: 0.5rem 1rem; background: #000; display: flex; gap: 0.7rem;
+           align-items: center; border-top: 1px solid #222; font-size: 0.85rem;
+           flex-wrap: wrap; }
+    .vad label { color: #888; }
+    .vad input[type=range] { width: 14rem; accent-color: #ffee58; }
+    .vad input[type=number] { background: #1b1b1b; color: #eee; border: 1px solid #444;
+                              border-radius: 0.3rem; padding: 0.25rem 0.35rem; width: 6rem;
+                              font-size: 0.85rem; font-variant-numeric: tabular-nums; }
+    .swatch { display: inline-block; width: 0.75rem; height: 2px; vertical-align: middle;
+              margin-right: 0.3rem; }
+    .swatch.thr { background: #ffee58; }
+    .swatch.gate { background: #ff7043; }
+    #vad-note { color: #777; font-size: 0.75rem; }
+    #vad-error, #gate-error { color: #ef9a9a; }
+    /* Rueckmeldung, ob der Wert den Neustart ueberlebt. Knapp, kein Modal,
+       keine Animation -- er steht neben dem Regler und verschwindet wieder. */
+    .saved { font-size: 0.75rem; color: #81c784; }
+    .saved.bad { color: #ffb74d; }
+    .vad input[type=range].gate { accent-color: #ff7043; }
+    #gate-state { font-weight: 600; }
+    #gate-state.on  { color: #81c784; }
+    #gate-state.off { color: #ffb74d; }
+    #gate-state.disabled { color: #777; font-weight: 400; }
+    #gate-note { color: #777; font-size: 0.75rem; }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>STT Operator — backend: {{ backend }}</h1>
+    <span id="conn" class="conn"></span>
+  </header>
+
+  <!--
+    Erkennung an/aus (Birk, 2026-08-29). Der Server laeuft an einem Ausstellungstag
+    durchgehend; jede erkannte Aeusserung kostet beim Anbieter Geld. Frueher liess
+    sich das nur per HTTP-POST von aussen steuern -- am Morgen/Abend also gar nicht
+    praktikabel.
+
+    "Aus" ruft /pause: sr.py setzt dann pro Thread `_mute`, und die Audioframes
+    werden VERWORFEN, bevor sie ans Backend gehen (sr.py Zeile ~171:
+    `self.audio_queue.queue.clear()`). Es geht also wirklich nichts mehr raus --
+    das spart echte Kosten, nicht nur die Anzeige. Der Server selbst laeuft weiter,
+    das Mikrofon bleibt geoeffnet, "An" (/resume) greift sofort.
+  -->
+  <div class="power">
+    <button id="btn-start" type="button">▶ Erkennung an</button>
+    <button id="btn-stop"  type="button">■ Erkennung aus</button>
+    <span id="power-state">…</span>
+    <span id="power-note">„Aus“ stoppt den Versand an den Anbieter — keine Kosten mehr.</span>
+  </div>
+
+  <!--
+    Eingang + Pegel (Birk, 2026-08-29). Zwei Fragen, die vor Ort ohne Terminal
+    nicht zu beantworten waren: Welches Interface haengt gerade dran, und kommt
+    ueberhaupt Signal an? Der Pegel wird in sr.py im PortAudio-Callback
+    gemessen, laeuft also auch im pausierten Zustand weiter -- gerade dann will
+    man das Mikro pruefen, BEVOR man die (kostenpflichtige) Erkennung anschaltet.
+  -->
+  <div class="audio">
+    <label for="dev-select">Eingang</label>
+    <select id="dev-select"><option>…</option></select>
+    <span id="dev-error"></span>
+    <div id="levels"></div>
+  </div>
+
+  <!--
+    VAD-Schwelle (Birk, 2026-08-31). Der VAD entscheidet ueber den RMS eines
+    Blocks (vad.py `_rms`), das Pegelmeter zeigte bisher nur den PEAK. Bei
+    Sprache liegen die beiden je nach Crest-Faktor um das Drei- bis Zehnfache
+    auseinander -- eine Schwellenlinie in den Peak-Balken gezeichnet steht
+    deshalb viel zu weit unten und wird zuverlaessig falsch eingestellt.
+    Darum zwei Balken: oben Peak (Aussteuerung), darunter duenner der RMS, und
+    die gelbe Linie gehoert allein zum RMS-Balken.
+
+    Der Regler ist logarithmisch geteilt (0,001 bis 0,1). Linear waere er
+    unbrauchbar: der interessante Bereich liegt ganz unten, zwischen
+    Grundrauschen und leiser Sprache.
+  -->
+  <div class="vad">
+    <label for="vad-range"><span class="swatch thr"></span>VAD-Schwelle (RMS)</label>
+    <input id="vad-range" type="range" min="0" max="1000" step="1" value="0" />
+    <input id="vad-num" type="number" min="0.0001" max="1" step="0.001" />
+    <span id="vad-error"></span>
+    <span id="vad-saved" class="saved"></span>
+    <span id="vad-note">Darunter gilt als Sprechpause. Angezeigt wird immer der Wert, den der Server bestaetigt hat.</span>
+  </div>
+
+  <!--
+    Mikrofon-Gate (Birk, 2026-08-31). Am ZOOM AMS-24 haengt ein Mikrofon mit
+    physischem Schalter. Aus heisst: der Pegel faellt auf das Grundrauschen des
+    Wandlers. Daraus wird ein Interview-Start/-Stopp -- der zweite Weg neben
+    den gesprochenen Schlussphrasen.
+
+    Ausdruecklich eine ZWEITE Schwelle, nicht die VAD-Schwelle: der VAD trennt
+    Sprache von Sprechpausen, dieses Gate trennt "Mikrofon an" von "Mikrofon
+    aus". Wer zehn Sekunden schweigt, hat sein Mikrofon nicht abgeschaltet.
+
+    Der Wert gehoert zwischen Grundrauschen und leisester Sprache -- am
+    RMS-Balken ablesen: einmal mit ausgeschaltetem Schalter schauen, wo der
+    Balken steht, und die orange Linie deutlich darueber setzen.
+  -->
+  <div class="vad">
+    <label for="gate-range"><span class="swatch gate"></span>Mikrofon-Gate (RMS)</label>
+    <input id="gate-range" class="gate" type="range" min="0" max="1000" step="1" value="0" />
+    <input id="gate-num" type="number" min="0.0001" max="1" step="0.001" />
+    <label for="gate-debounce">Mindestdauer</label>
+    <input id="gate-debounce" type="number" min="0" max="60000" step="100" />
+    <span id="gate-state" class="disabled">…</span>
+    <span id="gate-error"></span>
+    <span id="gate-saved" class="saved"></span>
+    <span id="gate-note">Aus = Erkennung pausiert + Interview-Stopp, an = Erkennung laeuft + Interview-Start.</span>
+  </div>
+
+  <main>
+    {% for rid in recognizer_ids %}
+    <section class="col" data-id="{{ rid }}">
+      <h2>{{ rid }} <span class="badge" data-role="badge">idle</span></h2>
+      <div class="history" data-role="history"></div>
+      <div class="live" data-role="live"></div>
+    </section>
+    {% endfor %}
+  </main>
+  <script>
+    const cols = {};
+    document.querySelectorAll(".col").forEach(c => {
+      cols[c.dataset.id] = {
+        history: c.querySelector('[data-role="history"]'),
+        live:    c.querySelector('[data-role="live"]'),
+        badge:   c.querySelector('[data-role="badge"]'),
+      };
+    });
+    const conn = document.getElementById("conn");
+    function fmt(ts) {
+      const d = new Date(ts * 1000);
+      return d.toTimeString().slice(0, 8);
+    }
+    function setBadge(col, label, cls) {
+      col.badge.textContent = label;
+      col.badge.className = "badge " + cls;
+    }
+
+    // --- Erkennung an/aus -------------------------------------------------
+    // Der angezeigte Zustand kommt IMMER aus /status, nie aus dem Klick: ein
+    // Knopf, der "aus" behauptet, waehrend der Server weiter sendet, waere in
+    // einer Kostenfrage die schlechteste Rueckmeldung. Nach jedem Schalten wird
+    // deshalb neu gelesen.
+    const btnStart = document.getElementById("btn-start");
+    const btnStop  = document.getElementById("btn-stop");
+    const stateEl  = document.getElementById("power-state");
+
+    function renderState(status) {
+      const paused = status === "paused";
+      stateEl.textContent = paused ? "steht — es wird nichts erkannt"
+                          : status === "running" ? "laeuft — Erkennung aktiv"
+                          : "Status: " + status;
+      stateEl.className = paused ? "paused" : (status === "running" ? "running" : "");
+      btnStart.disabled = !paused;
+      btnStop.disabled  = paused;
+    }
+
+    async function refreshState() {
+      try {
+        const r = await fetch("/status");
+        const j = await r.json();
+        renderState(j.status);
+      } catch (e) {
+        stateEl.textContent = "Status nicht lesbar";
+        stateEl.className = "";
+        btnStart.disabled = false;
+        btnStop.disabled = false;
+      }
+    }
+
+    async function power(path) {
+      btnStart.disabled = btnStop.disabled = true;
+      try {
+        await fetch(path, { method: "POST" });
+      } catch (e) {
+        // fall through -- refreshState() below reports the truth either way
+      }
+      await refreshState();
+    }
+
+    btnStart.addEventListener("click", () => power("/resume"));
+    btnStop.addEventListener("click",  () => power("/pause"));
+    refreshState();
+    setInterval(refreshState, 5000);
+    // ----------------------------------------------------------------------
+
+    // --- Eingang + Pegel --------------------------------------------------
+    const devSelect = document.getElementById("dev-select");
+    const devError  = document.getElementById("dev-error");
+    const levelsEl  = document.getElementById("levels");
+    const rows = {};
+
+    async function loadDevices() {
+      try {
+        const j = await (await fetch("/audio_devices")).json();
+        devSelect.innerHTML = "";
+        (j.devices || []).forEach(d => {
+          const o = document.createElement("option");
+          o.value = d.index;
+          o.textContent = `[${d.index}] ${d.name} — ${d.max_input_channels} ch` +
+                          (d.hostapi ? ` (${d.hostapi})` : "");
+          o.selected = d.active;
+          devSelect.appendChild(o);
+        });
+      } catch (e) {
+        devError.textContent = "Geräteliste nicht lesbar";
+      }
+    }
+
+    devSelect.addEventListener("change", async () => {
+      devError.textContent = "";
+      devSelect.disabled = true;
+      try {
+        const r = await fetch("/audio_device", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ device: Number(devSelect.value) }),
+        });
+        const j = await r.json();
+        // Bei Fehlschlag laeuft das ALTE Geraet weiter (siehe sr.py). Die Liste
+        // wird deshalb neu geladen, damit die Auswahl zeigt, was wirklich offen
+        // ist -- nicht das, was angeklickt wurde.
+        if (!r.ok) devError.textContent = "Wechsel fehlgeschlagen: " + (j.error || r.status);
+      } catch (e) {
+        devError.textContent = "Wechsel fehlgeschlagen";
+      }
+      devSelect.disabled = false;
+      await loadDevices();
+    });
+
+    function meterRow(key, label) {
+      if (rows[key]) return rows[key];
+      const el = document.createElement("div");
+      el.className = "lvl";
+      // Zwei benannte Balken. Ein Meter, das zwei Groessen zeigt und nur eine
+      // beschriftet, ist eine Falle -- besonders hier, wo die Schwellenlinie
+      // ausschliesslich zum unteren (RMS) gehoert.
+      el.innerHTML =
+        `<span class="lvl-name"></span>` +
+        `<div class="bars">` +
+        `  <div class="barline"><span class="tag">Peak</span>` +
+        `    <div class="meter peak"><i></i></div><span class="lvl-val"></span></div>` +
+        `  <div class="barline"><span class="tag">RMS</span>` +
+        `    <div class="meter rms"><i></i>` +
+        `      <b class="thr" title="VAD-Schwelle"></b>` +
+        `      <b class="gate" title="Mikrofon-Gate"></b></div>` +
+        `    <span class="lvl-val rms-val"></span></div>` +
+        `</div>`;
+      levelsEl.appendChild(el);
+      rows[key] = {
+        name:    el.querySelector(".lvl-name"),
+        bar:     el.querySelector(".meter.peak i"),
+        val:     el.querySelector(".meter.peak").parentNode.querySelector(".lvl-val"),
+        rmsBar:   el.querySelector(".meter.rms i"),
+        rmsVal:   el.querySelector(".rms-val"),
+        thrLine:  el.querySelector("b.thr"),
+        gateLine: el.querySelector("b.gate"),
+      };
+      rows[key].name.textContent = label;
+      return rows[key];
+    }
+
+    // -60..0 dBFS als Skala; linear waere Sprache ein kaum sichtbarer Stummel.
+    function dbPercent(value) {
+      if (!(value > 0)) return 0;
+      const db = 20 * Math.log10(value);
+      return Math.max(0, Math.min(100, ((db + 60) / 60) * 100));
+    }
+    function dbText(value) {
+      if (!(value > 0)) return "−∞ dB";
+      return (20 * Math.log10(value)).toFixed(0) + " dB";
+    }
+
+    function markDead(row) {
+      // Kein eingefrorener Balken: keine Frames (oder keine Antwort) heisst 0.
+      row.bar.style.width = "0%";
+      row.bar.classList.remove("hot");
+      row.rmsBar.style.width = "0%";
+      row.val.textContent = "kein Signal";
+      row.val.classList.add("dead");
+      row.rmsVal.textContent = "";
+    }
+
+    // Zeichnet eine Schwelle in den RMS-Balken -- nie in den Peak-Balken.
+    function drawThresholdLine(el, value) {
+      if (!(value > 0)) { el.style.display = "none"; return; }
+      el.style.display = "block";
+      el.style.left = dbPercent(value).toFixed(1) + "%";
+    }
+
+    let levelsInFlight = false;
+    async function pollLevels() {
+      if (levelsInFlight) return;  // 150 ms Takt darf keine Requests stapeln
+      levelsInFlight = true;
+      let body = null;
+      try {
+        body = await (await fetch("/levels")).json();
+      } catch (e) {
+        body = null;
+      } finally {
+        levelsInFlight = false;
+      }
+      const sources = (body && body.sources) || [];
+      if (body) {
+        applyVadFromServer(body.vad_energy_threshold);
+        applyGateFromServer(body.mic_gate);
+      }
+      if (!sources.length) {
+        Object.values(rows).forEach(markDead);
+        return;
+      }
+      sources.forEach((s, i) => {
+        const row = meterRow(i, (s.recognizers || []).join("+") || String(s.device));
+        drawThresholdLine(row.thrLine, serverVadThreshold);
+        drawThresholdLine(row.gateLine, serverGate && serverGate.enabled
+                                        ? serverGate.threshold : null);
+        if (!s.signal) {  // keine Frames seit >1 s
+          markDead(row);
+          return;
+        }
+        row.bar.style.width = dbPercent(s.level).toFixed(1) + "%";
+        row.bar.classList.toggle("hot", s.level > 0.708);  // > -3 dBFS
+        row.val.textContent = dbText(s.level);
+        row.val.classList.remove("dead");
+        row.rmsBar.style.width = dbPercent(s.level_rms).toFixed(1) + "%";
+        row.rmsVal.textContent = (s.level_rms || 0).toFixed(4);
+      });
+    }
+
+    // Der erste Aufruf steht bewusst UNTER dem VAD-Block: pollLevels() liest
+    // dessen `serverVadThreshold`, und ein `let` ist vor seiner Deklaration
+    // nicht lesbar (TDZ) -- ein Aufruf hier oben wuerde beim Laden werfen.
+    // ----------------------------------------------------------------------
+
+    // --- VAD-Schwelle -----------------------------------------------------
+    // Der angezeigte Wert kommt IMMER aus /levels, nie aus dem Regler: gesetzt
+    // wird per POST, gelesen wird die Antwort des Servers. Weicht der Server ab
+    // (Wert abgelehnt, zweiter Operator am selben Server), gewinnt der Server.
+    const VAD_MIN = 0.001, VAD_MAX = 0.1;   // Reglerbereich, logarithmisch geteilt
+    const vadRange = document.getElementById("vad-range");
+    const vadNum   = document.getElementById("vad-num");
+    const vadError = document.getElementById("vad-error");
+    const vadSaved = document.getElementById("vad-saved");
+    let serverVadThreshold = null;
+    let vadEditing = false;
+
+    // Ueberlebt der Wert einen Neustart? Genau das ist die Frage, wegen der es
+    // die Einstellungsdatei gibt -- eine Schwelle, die vor Ort eingemessen und
+    // dann beim naechsten Start stillschweigend verworfen wird, ist schlimmer
+    // als gar keine. `persisted` kommt aus der Antwort des Servers, nicht aus
+    // einer Annahme hier.
+    function showSaved(el, body) {
+      if (!body) { el.textContent = ""; return; }
+      if (body.persisted) {
+        el.textContent = "gespeichert";
+        el.className = "saved";
+      } else {
+        el.textContent = "nicht gespeichert: " + (body.persist_error || "unbekannter Grund");
+        el.className = "saved bad";
+      }
+    }
+
+    const sliderToValue = (s) => VAD_MIN * Math.pow(VAD_MAX / VAD_MIN, s / 1000);
+    const valueToSlider = (v) =>
+      Math.round(1000 * Math.log(Math.min(Math.max(v, VAD_MIN), VAD_MAX) / VAD_MIN)
+                      / Math.log(VAD_MAX / VAD_MIN));
+
+    function applyVadFromServer(value) {
+      if (typeof value !== "number" || !(value > 0)) return;
+      serverVadThreshold = value;
+      if (vadEditing) return;   // waehrend des Ziehens nicht unter der Hand verstellen
+      vadRange.value = valueToSlider(value);
+      vadNum.value = Number(value.toFixed(5));
+    }
+
+    async function postVadThreshold(value) {
+      vadError.textContent = "";
+      vadSaved.textContent = "";
+      try {
+        const r = await fetch("/vad_threshold", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ value: value }),
+        });
+        const j = await r.json();
+        if (!r.ok) vadError.textContent = "abgelehnt: " + (j.error || r.status);
+        else showSaved(vadSaved, j);
+      } catch (e) {
+        vadError.textContent = "nicht gesetzt (Server nicht erreichbar)";
+      }
+      // Kein Vertrauen in die eigene Eingabe: der naechste /levels-Durchlauf
+      // schreibt zurueck, was wirklich gilt.
+      vadEditing = false;
+      pollLevels();
+    }
+
+    vadRange.addEventListener("pointerdown", () => { vadEditing = true; });
+    vadRange.addEventListener("input", () => {
+      vadEditing = true;
+      vadNum.value = Number(sliderToValue(Number(vadRange.value)).toFixed(5));
+    });
+    vadRange.addEventListener("change", () =>
+      postVadThreshold(Number(sliderToValue(Number(vadRange.value)).toFixed(5))));
+    vadNum.addEventListener("focus", () => { vadEditing = true; });
+    vadNum.addEventListener("change", () => postVadThreshold(Number(vadNum.value)));
+    vadNum.addEventListener("blur", () => { vadEditing = false; });
+    // ----------------------------------------------------------------------
+
+    // --- Mikrofon-Gate ----------------------------------------------------
+    // Gleiche Bauart wie der VAD-Regler darueber, gleicher Grundsatz: der
+    // Server ist die Wahrheit. Nur die Skala ist eine Dekade tiefer angesetzt,
+    // weil hier das Grundrauschen des Wandlers vom leisesten Sprechen getrennt
+    // wird und nicht Sprache von Sprechpause.
+    const GATE_MIN = 0.0002, GATE_MAX = 0.05;
+    const gateRange    = document.getElementById("gate-range");
+    const gateNum      = document.getElementById("gate-num");
+    const gateDebounce = document.getElementById("gate-debounce");
+    const gateState    = document.getElementById("gate-state");
+    const gateError    = document.getElementById("gate-error");
+    const gateSaved    = document.getElementById("gate-saved");
+    let serverGate = null;
+    let gateEditing = false;
+
+    const gateSliderToValue = (s) => GATE_MIN * Math.pow(GATE_MAX / GATE_MIN, s / 1000);
+    const gateValueToSlider = (v) =>
+      Math.round(1000 * Math.log(Math.min(Math.max(v, GATE_MIN), GATE_MAX) / GATE_MIN)
+                      / Math.log(GATE_MAX / GATE_MIN));
+
+    function applyGateFromServer(gate) {
+      if (!gate) return;
+      serverGate = gate;
+      if (!gate.enabled) {
+        gateState.textContent = "Gate aus (Server ohne --mic-gate gestartet)";
+        gateState.className = "disabled";
+        [gateRange, gateNum, gateDebounce].forEach(e => { e.disabled = true; });
+        return;
+      }
+      [gateRange, gateNum, gateDebounce].forEach(e => { e.disabled = false; });
+      // Der Zustand kommt aus /levels und nicht aus dem SSE-Ereignis: das
+      // Ereignis meldet den WECHSEL, eine Seite die spaeter geoeffnet wird hat
+      // ihn nie gesehen und muesste sonst bis zum naechsten Schalten luegen.
+      gateState.textContent = gate.mic_on ? "Mikrofon an — Interview laeuft"
+                                          : "Mikrofon aus — Interview beendet";
+      gateState.className = gate.mic_on ? "on" : "off";
+      if (gateEditing) return;
+      gateRange.value = gateValueToSlider(gate.threshold);
+      gateNum.value = Number(gate.threshold.toFixed(5));
+      gateDebounce.value = gate.debounce_ms;
+    }
+
+    async function postGate(body) {
+      gateError.textContent = "";
+      gateSaved.textContent = "";
+      try {
+        const r = await fetch("/mic_gate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const j = await r.json();
+        if (!r.ok) gateError.textContent = "abgelehnt: " + (j.error || r.status);
+        else showSaved(gateSaved, j);
+      } catch (e) {
+        gateError.textContent = "nicht gesetzt (Server nicht erreichbar)";
+      }
+      gateEditing = false;
+      pollLevels();
+    }
+
+    gateRange.addEventListener("pointerdown", () => { gateEditing = true; });
+    gateRange.addEventListener("input", () => {
+      gateEditing = true;
+      gateNum.value = Number(gateSliderToValue(Number(gateRange.value)).toFixed(5));
+    });
+    gateRange.addEventListener("change", () =>
+      postGate({ value: Number(gateSliderToValue(Number(gateRange.value)).toFixed(5)) }));
+    gateNum.addEventListener("focus", () => { gateEditing = true; });
+    gateNum.addEventListener("change", () => postGate({ value: Number(gateNum.value) }));
+    gateNum.addEventListener("blur", () => { gateEditing = false; });
+    gateDebounce.addEventListener("focus", () => { gateEditing = true; });
+    gateDebounce.addEventListener("change", () =>
+      postGate({ debounce_ms: Number(gateDebounce.value) }));
+    gateDebounce.addEventListener("blur", () => { gateEditing = false; });
+    // ----------------------------------------------------------------------
+
+    loadDevices();
+    pollLevels();
+    setInterval(pollLevels, 150);
+    // ----------------------------------------------------------------------
+
+    const es = new EventSource("/events");
+    es.onopen  = () => conn.classList.add("ok");
+    es.onerror = () => { conn.classList.remove("ok"); conn.classList.add("bad"); };
+    es.onmessage = (e) => {
+      const ev = JSON.parse(e.data);
+      if (ev.type === "mic_gate") {
+        // Der Schalter am Mikrofon, als Zeile im Protokoll: der Operator soll
+        // spaeter sehen koennen, an welcher Stelle im Gespraech geschaltet
+        // wurde -- ein Zustand allein oben in der Leiste beantwortet das nicht.
+        gateState.textContent = ev.mic_on ? "Mikrofon an — Interview laeuft"
+                                          : "Mikrofon aus — Interview beendet";
+        gateState.className = ev.mic_on ? "on" : "off";
+        Object.values(cols).forEach((c) => {
+          const row = document.createElement("div");
+          row.innerHTML = `<span class="ts">[${fmt(ev.timestamp)}]</span>` +
+                          `<em style="color:#ff7043">` +
+                          (ev.mic_on ? "▶ Mikrofon an — Interview-Start"
+                                     : "■ Mikrofon aus — Interview-Stopp") +
+                          `</em>`;
+          c.history.appendChild(row);
+          c.history.scrollTop = c.history.scrollHeight;
+        });
+        refreshState();  // Erkennung wurde mitgeschaltet
+        return;
+      }
+      const col = cols[ev.recognizer_id];
+      if (!col) return;
+      if (ev.type === "partial") {
+        // elevenlabs-scribe emits a parallel `extending=true` confirmed-prefix
+        // event for the botland delta path; it carries a SHORTER text than the
+        // most recent UI event and would backtrack the live line. Skip it here.
+        if (ev.extending === true) return;
+        if (ev.status === "transcribing") setBadge(col, "transcribing", "transcribing");
+        else                              setBadge(col, "listening",    "listening");
+        if (ev.text) col.live.textContent = ev.text;
+      } else if (ev.type === "final") {
+        const row = document.createElement("div");
+        row.innerHTML = `<span class="ts">[${fmt(ev.timestamp)}]</span>${ev.text}`;
+        col.history.appendChild(row);
+        col.history.scrollTop = col.history.scrollHeight;
+        col.live.textContent = "";
+        setBadge(col, "idle", "");
+      }
+    };
+  </script>
+</body>
+</html>

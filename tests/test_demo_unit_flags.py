@@ -17,6 +17,7 @@ pulls in flask, python-dotenv, vosk and sounddevice at import time (see
 the source needs none of that and gives the identical answer everywhere.
 """
 import ast
+import os
 import shlex
 import subprocess
 import sys
@@ -76,6 +77,11 @@ UNITS = {
         "sources": [ROOT / "stt/fundusapps/stt_server/args.py"],
         "argv": [sys.executable, "-m", "fundusapps.stt_server", "--help"],
         "cwd": ROOT / "stt",
+        # args.py reads these at import time with no fallback; the real
+        # unit provides them via its own Environment= lines (same values).
+        "env": {"STT_HOST": "127.0.0.1", "STT_PORT": "5051",
+                "SST_AUDIO_DEVICES": "tcp:127.0.0.1:5053",
+                "STT_AUDIO_DEVICES_SR": "16000"},
     },
     "cothinker-demo-consumer.service": {
         "sources": [ROOT / "gateway/consumer.py"],
@@ -132,7 +138,8 @@ def test_execstart_flags_are_defined_by_the_targets_argparse(unit_name):
 @pytest.mark.parametrize("unit_name", sorted(UNITS))
 def test_demo_unit_entry_point_imports_and_runs_to_help(unit_name):
     spec = UNITS[unit_name]
-    result = subprocess.run(spec["argv"], cwd=spec["cwd"],
+    env = {**os.environ, **spec.get("env", {})}
+    result = subprocess.run(spec["argv"], cwd=spec["cwd"], env=env,
                              capture_output=True, text=True, timeout=30)
     assert result.returncode == 0, (
         f"{unit_name}'s entry point ({' '.join(spec['argv'])}) failed:\n"
