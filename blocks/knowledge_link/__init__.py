@@ -8,12 +8,14 @@
 project notes a topic belongs to, found from the notes themselves.
 
 The block owns the wiki layer (`blocks/knowledge_link/wiki.py`, a
-`WikiLayer` over the project folder). It consumes `block_output` events
-`topic` (the topic changed) and `minutes_changed` (the minutes -- and with
-them possibly the notes -- changed) and answers with one view intent,
-`links:<topic_id>`, kind `artefact`, payload `{"links": [<path>, ...]}`,
-the paths relative to the project folder. Without a vault (no project
-folder, or one without notes) it emits nothing.
+`WikiLayer` over the wiki root -- the project folder, or `COTHINKER_WIKI_DIR`
+when set, see `use_project`). It consumes `block_output` events `topic`
+(the topic changed) and `minutes_changed` (the minutes -- and with them
+possibly the notes -- changed) and answers with one view intent,
+`knowledge:<topic_id>`, kind `knowledge` (issue #148), payload
+`{"topic_id": ..., "query": ..., "hits": [{"kind", "title", "href"}, ...]}`,
+`href` relative to the wiki root. Without a vault (no project folder, or
+one without notes) it emits nothing.
 
 A `block_output` payload names its kind in `output`:
 `{"output": "topic", "topic_id": ..., "title": ...}` and
@@ -27,6 +29,7 @@ else does.
 """
 from __future__ import annotations
 
+import os
 from pathlib import Path
 from typing import Mapping, Optional, Sequence
 
@@ -47,7 +50,7 @@ class KnowledgeLinkBlock:
         self._ctx: Optional[BlockContext] = None
         self._wiki: Optional[WikiLayer] = None
         self._topic: Optional[tuple[str, str]] = None   # (topic_id, title)
-        self._last: dict[str, list[str]] = {}           # topic_id -> links emitted
+        self._last: dict[str, list[dict]] = {}          # topic_id -> hits emitted
 
     # -- block contract ------------------------------------------------
     def start(self, ctx: BlockContext, config: Mapping[str, object]) -> None:
@@ -65,32 +68,40 @@ class KnowledgeLinkBlock:
             if not isinstance(topic_id, str) or not topic_id or not isinstance(title, str):
                 return ()
             self._topic = (topic_id, title)
-            self._emit_links(force=True)
+            self._emit_knowledge(force=True)
         elif output == "minutes_changed" and self._topic is not None:
-            self._emit_links(force=False)
+            self._emit_knowledge(force=False)
         return ()
 
     def stop(self) -> None:
         pass
 
-    def _emit_links(self, *, force: bool) -> None:
+    def _emit_knowledge(self, *, force: bool) -> None:
         if self._wiki is None or self._ctx is None or self._topic is None:
             return
         topic_id, title = self._topic
-        links = self._wiki.link_paths(title, session_dir=self._ctx.session_dir)
-        if links is None:
+        hits = self._wiki.knowledge_hits(title, session_dir=self._ctx.session_dir)
+        if hits is None:
             return
-        if not force and self._last.get(topic_id) == links:
+        if not force and self._last.get(topic_id) == hits:
             return
-        self._last[topic_id] = links
+        self._last[topic_id] = hits
         self._ctx.emit(ViewIntent(
-            id=f"links:{topic_id}", block=self.id, kind="artefact",
-            audience="room", payload={"links": links}))
+            id=f"knowledge:{topic_id}", block=self.id, kind="knowledge",
+            audience="room",
+            payload={"topic_id": topic_id, "query": title, "hits": hits}))
 
     # -- interim host handles ---------------------------------------------
     def use_project(self, project_dir) -> None:
-        """Gives the block its vault: the round's documents folder."""
-        self._wiki = WikiLayer(Path(project_dir))
+        """Gives the block its vault: `COTHINKER_WIKI_DIR` (a separate,
+        read-only wiki root) when set, else the round's documents folder.
+
+        This is the ONLY place that reads `COTHINKER_WIKI_DIR`: the
+        knowledge-link block is the only reader of it (issue #148) -- it
+        is never added to the call lane's paths or `COTHINKER_EXTRA_DIRS`.
+        """
+        wiki_dir = os.environ.get("COTHINKER_WIKI_DIR", "").strip()
+        self._wiki = WikiLayer(Path(wiki_dir) if wiki_dir else Path(project_dir))
 
     @property
     def has_vault(self) -> bool:

@@ -41,18 +41,22 @@ def topic(topic_id, title):
         "from": "topics", "output": "topic", "topic_id": topic_id, "title": title})
 
 
-def test_topic_change_emits_links_intent(tmp_path):
+def test_topic_change_emits_knowledge_intent(tmp_path):
     block, emitted = make_block(tmp_path, make_project(tmp_path))
     assert block.on_event(topic("t1", "Der Klimaplan der Stadt")) == ()
     assert len(emitted) == 1
     intent = emitted[0]
-    assert intent.id == "links:t1"
+    assert intent.id == "knowledge:t1"
     assert intent.block == "knowledge-link"
-    assert intent.kind == "artefact"
-    assert intent.payload == {"links": ["hintergrund/klimaplan.md"]}
+    assert intent.kind == "knowledge"
+    assert intent.payload == {
+        "topic_id": "t1", "query": "Der Klimaplan der Stadt",
+        "hits": [{"kind": "hintergrund", "title": "Klimaplan",
+                  "href": "hintergrund/klimaplan.md"}],
+    }
 
 
-def test_links_are_project_relative(tmp_path):
+def test_hits_are_wiki_root_relative(tmp_path):
     project = make_project(tmp_path)
     block, emitted = make_block(tmp_path, project)
     block.on_event(topic("t1", "Klimaplan"))
@@ -60,11 +64,12 @@ def test_links_are_project_relative(tmp_path):
         "from": "minutes-document", "output": "minutes_changed"}))
     assert emitted
     for intent in emitted:
-        assert intent.id == "links:t1"
-        for link in intent.payload["links"]:
-            assert not link.startswith("/")
-            assert str(project) not in link
-            assert (project / link).is_file()
+        assert intent.id == "knowledge:t1"
+        for hit in intent.payload["hits"]:
+            href = hit["href"]
+            assert not href.startswith("/")
+            assert str(project) not in href
+            assert (project / href).is_file()
 
 
 def test_no_vault_no_intent(tmp_path):

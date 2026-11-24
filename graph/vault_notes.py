@@ -122,6 +122,45 @@ def extract_tags(text: str) -> list[str]:
     return tags
 
 
+_FM_TYPE_RE = re.compile(r"^type\s*:\s*(.+?)\s*$", re.M)
+_FM_TITLE_RE = re.compile(r"^title\s*:\s*(.+?)\s*$", re.M)
+# A level-1 heading only: `#\s` excludes `##` (the next char is `#`, not
+# whitespace), so a document's first subsection never wins over its title.
+_HEADING_RE = re.compile(r"^#[ \t]+(.+?)\s*$", re.M)
+
+
+def _frontmatter_scalar(text: str, field_re: "re.Pattern[str]") -> str | None:
+    """One scalar frontmatter field (`type:`, `title:`), quotes stripped;
+    None when the note has no frontmatter or lacks the field."""
+    kopf = _FRONTMATTER_RE.match(text)
+    if not kopf:
+        return None
+    treffer = field_re.search(kopf.group(1))
+    if not treffer:
+        return None
+    value = treffer.group(1).strip().strip("\"'").strip()
+    return value or None
+
+
+def extract_type(text: str) -> str | None:
+    """The note's frontmatter `type:`, or None when absent."""
+    return _frontmatter_scalar(text, _FM_TYPE_RE)
+
+
+def extract_title(text: str) -> str | None:
+    """The note's frontmatter `title:`, or None when absent."""
+    return _frontmatter_scalar(text, _FM_TITLE_RE)
+
+
+def extract_heading(text: str) -> str | None:
+    """The first level-1 `# ` heading of the body (frontmatter excluded),
+    or None when there is none."""
+    kopf = _FRONTMATTER_RE.match(text)
+    rumpf = text[kopf.end():] if kopf else text
+    treffer = _HEADING_RE.search(rumpf)
+    return treffer.group(1).strip() if treffer else None
+
+
 @dataclass(frozen=True)
 class Note:
     """One note. `rel` is the identity everything else joins on."""
@@ -131,6 +170,12 @@ class Note:
     mtime: float
     links: tuple[str, ...] = ()
     tags: tuple[str, ...] = ()
+    # Knowledge-hit display fields (issue #148): `kind` is the frontmatter
+    # `type:` or, lacking one, the note's top folder; `title` is the
+    # frontmatter `title:`, or the first `# ` heading, or the file stem --
+    # never empty for a real (non-transient) note.
+    kind: str = ""
+    title: str = ""
 
 
 class NoteIndex:
@@ -233,7 +278,11 @@ def scan_vault(root, *, exclude: Sequence[str] = DEFAULT_EXCLUDE) -> NoteIndex:
                 # An unreadable note is not a reason to lose the graph.
                 text = ""
             gesehen.add(real)
+            top_folder = rel.split("/")[0] if "/" in rel else ""
             notes.append(Note(path=p, rel=rel, stem=p.stem, mtime=st.st_mtime,
                               links=tuple(extract_links(text)),
-                              tags=tuple(extract_tags(text))))
+                              tags=tuple(extract_tags(text)),
+                              kind=extract_type(text) or top_folder,
+                              title=(extract_title(text) or extract_heading(text)
+                                    or p.stem)))
     return NoteIndex(notes)
