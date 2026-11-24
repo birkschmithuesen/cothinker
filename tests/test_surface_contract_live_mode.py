@@ -19,7 +19,7 @@ from pydantic import TypeAdapter
 
 from surfaces.contract.__main__ import build_app, build_live_app
 from surfaces.contract.live_player import LivePlayer
-from surfaces.contract.models import StageStateSnapshot, Task, TranscriptLine, ViewIntent
+from surfaces.contract.models import StageStateSnapshot, Task, TranscriptLine, ViewIntent, KnowledgeIntent
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "live_session"
 STEPS = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(FIXTURE_DIR.glob("step-*.json"))]
@@ -92,6 +92,23 @@ def test_diff_maps_a_transcript_recent_change_to_a_transcript_recent_intent(sess
 
     assert [intent.kind for intent in intents] == ["transcript:recent"]
     assert intents[0].lines[0].speaker == "Mira"
+
+
+def test_diff_maps_a_knowledge_change_to_a_knowledge_intent(session_dir):
+    player = LivePlayer(session_dir)
+    before = player.snapshot
+    after = StageStateSnapshot.model_validate({**before.model_dump(), "knowledge": {
+        "topic_id": "t1", "query": "Budget and heating plan",
+        "hits": [{"kind": "finance", "title": "Budget overview",
+                  "href": "ablage/budget.md"}],
+    }})
+
+    intents = player._diff(before, after)
+
+    assert [intent.kind for intent in intents] == ["knowledge"]
+    assert isinstance(intents[0], KnowledgeIntent)
+    assert intents[0].id == "knowledge:t1"
+    assert intents[0].hits[0].href == "ablage/budget.md"
 
 
 def test_live_mode_snapshot_endpoint_serves_the_mapped_state(session_dir):

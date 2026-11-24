@@ -323,6 +323,12 @@ class StageStateSnapshot(BaseModel):
         examples=[[]],
         json_schema_extra=_planned(),
     )
+    knowledge: KnowledgeSnapshot | None = Field(
+        default=None,
+        description="The latest knowledge hits for the current topic, from"
+        " the `knowledge-link` block; `None` until the block has emitted"
+        " one (key-absent-means-hidden, `StageState._content()`).",
+    )
 
 
 # --------------------------------------------------------------------------
@@ -409,6 +415,45 @@ class GraphIntent(SessionGraph):
     id: str = Field(description="Identity a user action refers back to.", examples=["graph:session"])
 
 
+class KnowledgeHit(BaseModel):
+    """One matching note for the current topic (`blocks/knowledge_link`,
+    issue #148, closing design partner's issue #144): no model, no
+    network -- notes whose name or tags occur in the topic title, plus
+    their link neighbours."""
+
+    kind: str = Field(
+        description="The note's frontmatter `type:`, or its top folder when that is absent.",
+        examples=["finance"],
+    )
+    title: str = Field(
+        description="The note's frontmatter `title:`, its first `# ` heading, or its file stem.",
+        examples=["Budget overview"],
+    )
+    href: str = Field(
+        description="The note's path, relative to the wiki root.",
+        examples=["ablage/budget.md"],
+    )
+
+
+class KnowledgeSnapshot(BaseModel):
+    """`content()["knowledge"]`: the knowledge-link block's
+    `knowledge:<topic_id>` view-intent payload, filled by
+    `blocks/knowledge_link/__init__.py::_emit_knowledge()`."""
+
+    topic_id: str = Field(description="Identity of the topic these hits belong to.", examples=["t1"])
+    query: str = Field(description="The topic title the hits were matched against.", examples=["Budget and heating plan"])
+    hits: list[KnowledgeHit] = Field(default_factory=list, description="Matching notes, best first.")
+
+
+class KnowledgeIntent(KnowledgeSnapshot):
+    """`knowledge:<topic_id>`: the knowledge-link block's view intent
+    (kind `knowledge`, issue #148); the same shape as
+    `StageStateSnapshot.knowledge`, plus the envelope's `kind`/`id`."""
+
+    kind: Literal["knowledge"] = "knowledge"
+    id: str = Field(description="Identity a user action refers back to.", examples=["knowledge:t1"])
+
+
 class TranscriptRecentIntent(BaseModel):
     """The last three contributions. Not wired yet, see issue #129."""
 
@@ -439,6 +484,7 @@ ViewIntent = Annotated[
         QueueIntent,
         ShareIntent,
         GraphIntent,
+        KnowledgeIntent,
         TranscriptRecentIntent,
         TasksIntent,
     ],

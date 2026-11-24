@@ -28,6 +28,9 @@ from surfaces.contract.models import (
     AgendaSnapshot,
     Decision,
     HistoryEntry,
+    KnowledgeHit,
+    KnowledgeIntent,
+    KnowledgeSnapshot,
     PromptIntent,
     QueueSeat,
     QueueSnapshot,
@@ -79,6 +82,15 @@ def _seat(person: str) -> QueueSeat:
 def _queue(speaking: str, waiting: list[str]) -> QueueSnapshot:
     return QueueSnapshot(speaking=_seat(speaking), waiting=[_seat(p) for p in waiting])
 
+
+# Invented notes for the "Decisions & risks" topic (issue #148): what the
+# project already knows, found by the knowledge-link block from the notes
+# themselves (name/tags in the topic title, plus link neighbours) -- no
+# model, no network.
+_KNOWLEDGE_HITS = [
+    KnowledgeHit(kind="contract", title="Vendor timeline", href="contracts/vendor-timeline.md"),
+    KnowledgeHit(kind="ops", title="Migration runbook", href="ops/migration-runbook.md"),
+]
 
 def build_frames(now: float | None = None) -> list[Frame]:
     """The scenario's frames, with every wall-clock label and epoch time
@@ -197,9 +209,11 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 ),
                 queue=_queue("Jonas", ["Tamar", "Mira"]),
                 transcript_recent=transcript_after_jonas,
+                knowledge=KnowledgeSnapshot(topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
             ),
             view_intents=[
                 TranscriptRecentIntent(id="VI4", lines=transcript_after_jonas),
+                KnowledgeIntent(id="knowledge:M2", topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
             ],
         ),
         # Speaker queue turns over to Tamar; another contribution comes in.
@@ -221,6 +235,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 ),
                 queue=_queue("Tamar", ["Mira", "Jonas"]),
                 transcript_recent=transcript_after_tamar,
+                knowledge=KnowledgeSnapshot(topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
             ),
             view_intents=[
                 TranscriptRecentIntent(id="VI5", lines=transcript_after_tamar),
@@ -245,6 +260,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 ),
                 queue=_queue("Tamar", ["Mira", "Jonas"]),
                 transcript_recent=transcript_after_tamar,
+                knowledge=KnowledgeSnapshot(topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
             ),
             view_intents=[StatusIntent(id="VI6", text="Pause for coffee", severity="info")],
         ),

@@ -8,10 +8,10 @@ Read-only: `gateway.consumer.StageWriter` stays the single writer of
 
 Mapping choice (documented in `docs/surface-contract.md`): a change to a
 field with an obvious owning view-intent kind (`queue`, `share`,
-`session_graph`) is emitted as that kind's intent; every other changed
-field is folded into one `StatusIntent` naming the changed fields, since
-most of the snapshot (headline, history, decisions, ...) has no intent
-kind of its own.
+`session_graph`, `knowledge`) is emitted as that kind's intent; every
+other changed field is folded into one `StatusIntent` naming the changed
+fields, since most of the snapshot (headline, history, decisions, ...)
+has no intent kind of its own.
 
 Two ways to name the session directory (issue #161): a fixed `session_dir`
 (the caller already knows it, e.g. a manual run) reads that one directory
@@ -34,6 +34,7 @@ from pathlib import Path
 
 from surfaces.contract.models import (
     GraphIntent,
+    KnowledgeIntent,
     QueueIntent,
     ShareIntent,
     StageStateSnapshot,
@@ -44,10 +45,15 @@ from surfaces.contract.models import (
 
 POLL_INTERVAL_S = 0.3
 
+# The id a changed field's owning intent gets. A plain string for a
+# fixed-identity region (`queue:room`); `knowledge`'s id carries the
+# topic id, filled in from the new snapshot value's own fields via
+# `str.format` -- a no-op for the fixed strings, which have no `{}`.
 _OWNED_INTENT = {
     "queue": (QueueIntent, "queue:room"),
     "share": (ShareIntent, "share:room"),
     "session_graph": (GraphIntent, "graph:session"),
+    "knowledge": (KnowledgeIntent, "knowledge:{topic_id}"),
 }
 
 # Fields holding a bare list rather than a single model (issue #147 point 3:
@@ -138,8 +144,9 @@ class LivePlayer:
                 continue
             owned = _OWNED_INTENT.get(name)
             if owned is not None and new is not None:
-                intent_cls, intent_id = owned
-                intents.append(intent_cls(id=intent_id, **new.model_dump()))
+                intent_cls, intent_id_template = owned
+                dumped = new.model_dump()
+                intents.append(intent_cls(id=intent_id_template.format(**dumped), **dumped))
                 continue
             owned_list = _OWNED_LIST_INTENT.get(name)
             if owned_list is not None:

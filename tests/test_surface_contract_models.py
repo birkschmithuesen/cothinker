@@ -13,6 +13,8 @@ from pydantic import TypeAdapter
 from surfaces.contract.models import (
     ChoiceIntent,
     GraphIntent,
+    KnowledgeHit,
+    KnowledgeIntent,
     MessageAction,
     QueueIntent,
     QueueSeat,
@@ -60,6 +62,7 @@ def test_stage_state_snapshot_queue_share_session_graph_default_to_none():
     assert StageStateSnapshot.model_fields["queue"].default is None
     assert StageStateSnapshot.model_fields["share"].default is None
     assert StageStateSnapshot.model_fields["session_graph"].default is None
+    assert StageStateSnapshot.model_fields["knowledge"].default is None
 
 
 def test_queue_snapshot_matches_speaker_queue_block_payload():
@@ -138,3 +141,19 @@ def test_view_intent_union_accepts_graph_kind():
         "seed": "file:protokoll.md", "nodes": [], "edges": [], "hidden": 0,
     })
     assert isinstance(graph_intent, GraphIntent)
+
+
+def test_knowledge_hit_matches_knowledge_link_block_payload():
+    hit = KnowledgeHit(kind="finance", title="Budget overview", href="ablage/budget.md")
+    assert hit.model_dump() == {
+        "kind": "finance", "title": "Budget overview", "href": "ablage/budget.md"}
+
+
+def test_view_intent_union_accepts_knowledge_kind():
+    knowledge_intent = TypeAdapter(ViewIntent).validate_python({
+        "kind": "knowledge", "id": "knowledge:t1", "topic_id": "t1",
+        "query": "Budget and heating plan",
+        "hits": [{"kind": "finance", "title": "Budget overview",
+                  "href": "ablage/budget.md"}],
+    })
+    assert isinstance(knowledge_intent, KnowledgeIntent)
