@@ -45,6 +45,8 @@ from surfaces.operator.models import (
     Stt,
 )
 
+TOTAL_DISK_BYTES = 100_000_000_000
+
 SERVICE_NAMES = ("meeting", "stt", "audio-tap", "minutes", "stage", "contract")
 
 ALLOWED_PROJECTS = (
@@ -88,11 +90,11 @@ def build_frames(now: float | None = None) -> list[OperatorFrame]:
         meeting=Meeting(participants=[], count=0),
         stt=Stt(connected=False, engine="speechmatics", seconds_since_last_final=0.0, minutes_today=0.0),
         session=Session(
-            project=ALLOWED_PROJECTS[0], session_folder="", agenda=None, utterances=0, last_saved_at="",
+            project=ALLOWED_PROJECTS[0], title=None, session_folder="", agenda=None, utterances=0, last_saved_at="",
         ),
         call=Call(last=None),
         errors=[],
-        disk=Disk(free_percent=74.0),
+        disk=Disk(free_percent=74.0, free_bytes=74 * TOTAL_DISK_BYTES // 100, recording_hours_left=None),
         running=False,
         can_switch_project=True,
     )
@@ -102,8 +104,10 @@ def build_frames(now: float | None = None) -> list[OperatorFrame]:
         "running": True,
         "can_switch_project": False,
         "session": stopped.session.model_copy(update={
+            "title": "Quarterly planning",
             "session_folder": "2026-11-24-quarterly-planning",
         }),
+        "disk": stopped.disk.model_copy(update={"recording_hours_left": None}),  # just started: no rate yet
     })
 
     mira_joins = starting.model_copy(update={
@@ -114,6 +118,7 @@ def build_frames(now: float | None = None) -> list[OperatorFrame]:
             "utterances": 2,
             "last_saved_at": t2,
         }),
+        "disk": starting.disk.model_copy(update={"recording_hours_left": 7.2}),
     })
 
     jonas_joins = mira_joins.model_copy(update={
@@ -130,12 +135,13 @@ def build_frames(now: float | None = None) -> list[OperatorFrame]:
             "utterances": 5,
             "last_saved_at": t3,
         }),
+        "disk": mira_joins.disk.model_copy(update={"recording_hours_left": 6.8}),
     })
 
     error_lands = jonas_joins.model_copy(update={
         "stt": Stt(connected=True, engine="speechmatics", seconds_since_last_final=8.0, minutes_today=1.1),
-        "errors": [ErrorEntry(at=t4, service="stt", message="reconnect after timeout")],
-        "disk": Disk(free_percent=71.0),
+        "errors": [ErrorEntry(at=t4, service="stt", message="reconnect after timeout", level="warning")],
+        "disk": Disk(free_percent=71.0, free_bytes=71 * TOTAL_DISK_BYTES // 100, recording_hours_left=6.1),
         "session": jonas_joins.session.model_copy(update={"utterances": 7, "last_saved_at": t4}),
     })
 
@@ -147,6 +153,7 @@ def build_frames(now: float | None = None) -> list[OperatorFrame]:
             "utterances": 9,
             "last_saved_at": t5,
         }),
+        "disk": error_lands.disk.model_copy(update={"recording_hours_left": 5.9}),
     })
 
     stopped_again = closing.model_copy(update={
@@ -154,6 +161,7 @@ def build_frames(now: float | None = None) -> list[OperatorFrame]:
         "meeting": Meeting(participants=[], count=0),
         "running": False,
         "can_switch_project": True,
+        "disk": closing.disk.model_copy(update={"recording_hours_left": None}),  # no longer recording
     })
 
     return [
@@ -203,6 +211,7 @@ class FixtureOperatorBackend:
             "services": _services(running=True, since=now_iso),
             "session": self.current.session.model_copy(update={
                 "project": project,
+                "title": title,
                 "session_folder": f"{today}-{project_id}",
             }),
         })
