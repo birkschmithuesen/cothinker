@@ -567,6 +567,12 @@ class TapAction(BaseModel):
     kind: Literal["tap"] = "tap"
     intent_id: str | None = Field(default=None, description="The intent tapped, if any; a navigation tap has none.", examples=["VI4"])
     target: str = Field(description="What was tapped.", examples=["status-badge"])
+    payload: dict | None = Field(
+        default=None,
+        description="Extra data the tap carries, e.g. `{\"op\": \"request\"}` "
+        "for a `queue:room` floor request (issue #183). `None` for a plain tap.",
+        examples=[{"op": "request"}],
+    )
 
 
 class VoiceAction(BaseModel):

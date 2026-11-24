@@ -41,9 +41,10 @@ def build_app(scenario: str, cors_origins: list[str] | None = None) -> FastAPI:
 
 
 def build_live_app(session_dir: Path | None = None, cors_origins: list[str] | None = None,
-                    *, session_pointer: Path | None = None) -> FastAPI:
+                    *, session_pointer: Path | None = None,
+                    spool_dir: Path | None = None) -> FastAPI:
     player = LivePlayer(session_dir, session_pointer=session_pointer)
-    return create_app(player, cors_origins=cors_origins)
+    return create_app(player, cors_origins=cors_origins, spool_dir=spool_dir)
 
 
 def main(argv: list[str] | None = None) -> int:

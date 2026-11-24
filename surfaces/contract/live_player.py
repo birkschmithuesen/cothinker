@@ -123,6 +123,13 @@ class LivePlayer:
         data = json.loads(self._path.read_text(encoding="utf-8"))
         return StageStateSnapshot.model_validate(data)
 
+    @property
+    def session_dir(self) -> Path | None:
+        """The session directory currently being read -- `None` before a
+        `session_pointer` resolves (issue #183: names the spool folder a
+        live action write goes into)."""
+        return self._session_dir
+
     def subscribe(self) -> asyncio.Queue:
         queue: asyncio.Queue = asyncio.Queue()
         self._subscribers.add(queue)
