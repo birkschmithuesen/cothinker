@@ -71,11 +71,54 @@ event; it renders what the schema says, or drops what it does not render
 
 ## Run the conformance test
 
-Once `tests/test_surface_conformance.py` exists (its own card, issue #132's
-"Out" list), run it against your surface before calling it done: it loads
-the surface headless against every fixture scenario and checks it renders
-or explicitly drops every intent kind, requests nothing outside the
-contract, and passes the skin rules and the design gate screenshots.
+A surface is done when it passes the conformance check (ADR 0019 point 4).
+Run it against a URL or a local `index.html` -- no knowledge of this
+repository's code required:
+
+```
+pip install -r surfaces/contract/requirements.txt
+playwright install chromium
+python -m surfaces.contract.check --surface surfaces/contract/examples/minimal/index.html
+```
+
+It starts the contract server in fixture mode on a free port, opens the
+surface headless (Playwright Chromium) with `?api=<that server>/`,
+records every network request and plays the whole "meeting" scenario
+(pass `--scenario` for another one). For every intent kind, it checks the
+page either changed visibly or logged `dropped <kind>`; that the page
+requested nothing outside the contract and its own static files; that a
+second replay with every `x-status: planned` field stripped to its zero
+value does not break the page; and that there were no console errors.
+Each check prints as `PASS`/`FAIL` with a one-line reason; a JSON report
+and a screenshot per intent (1920x1080) are written to `--out` (default
+`conformance-out`). Exit code 0 only if every check passes.
+
+Sample output, running the check against the reference surface above:
+
+```
+PASS: fetches /snapshot -- GET /snapshot was requested
+PASS: subscribes to /events -- GET /events was requested
+PASS: requests nothing outside the contract -- every request stayed within the contract paths and the surface's own static files
+PASS: intent 'prompt' renders or is dropped -- DOM changed after the event
+PASS: intent 'timer' renders or is dropped -- DOM changed after the event
+PASS: intent 'transcript:recent' renders or is dropped -- DOM changed after the event
+PASS: intent 'timer' renders or is dropped -- DOM changed after the event
+PASS: intent 'transcript:recent' renders or is dropped -- DOM changed after the event
+PASS: intent 'transcript:recent' renders or is dropped -- DOM changed after the event
+PASS: intent 'status' renders or is dropped -- DOM changed after the event
+PASS: intent 'tasks' renders or is dropped -- DOM changed after the event
+PASS: no console errors -- no console errors were logged
+PASS: planned fields sent empty do not break the page -- no console errors with planned fields stripped
+PASS: planned fields sent empty do not blank the screen -- the page still rendered content with planned fields stripped
+
+PASS: overall
+```
+
+`surfaces/contract/examples/minimal/index.html` is the reference surface
+above: a tiny, dependency-free page using only `fetch('/snapshot')` and
+`EventSource('/events')` that renders every intent kind the "meeting"
+fixture sends, and logs the drop for any kind it does not render. Use it
+as a starting point, or to see what a passing surface looks like.
 
 ## Missing data
 
