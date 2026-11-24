@@ -114,8 +114,12 @@ class _StaticServerThread:
 
 
 def _build_app_from_frames(frames: list[Frame]):
+    """The contract server used by the check: its own port differs from the
+    surface's static-file port it opens the surface against (`run_check`),
+    so it needs cross-origin access by construction, not as an opt-in a
+    caller must remember to pass."""
     player = ScenarioPlayer(frames, frames[0].snapshot)
-    return create_app(player)
+    return create_app(player, cors_origins=["*"])
 
 
 # --------------------------------------------------------------------------
