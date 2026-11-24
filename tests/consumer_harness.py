@@ -124,10 +124,12 @@ def _read(path: Path) -> str:
 def run_consumer(tmp_path: Path, *, finals, extra_args=(),
                  timeout_s: float = 60,
                  wait_for_worker_turns: int = 0,
-                 seed=None, env_extra=None) -> ConsumerRun:
+                 seed=None, env_extra=None, until=None) -> ConsumerRun:
     """`seed(project)` runs before the consumer starts (files it should
     find); `env_extra` is added to the consumer's environment (the fake
-    worker reads FAKE_WORKER_REPLY from it)."""
+    worker reads FAKE_WORKER_REPLY from it). `until(session_dir)`, when
+    given, must also be true before the consumer is ended -- for results
+    that arrive on their own thread after the transcript is complete."""
     finals = list(finals)
     n = 0
     while (tmp_path / f"run{n}").exists():      # repeated runs: own subdir
@@ -171,7 +173,8 @@ def run_consumer(tmp_path: Path, *, finals, extra_args=(),
                 if (sd and all(f.split()[-1].strip(".,!?") in text
                                for f in finals if f.split())
                         and (sd / "buehne.json").exists()
-                        and turns >= wait_for_worker_turns):
+                        and turns >= wait_for_worker_turns
+                        and (until is None or until(sd))):
                     break
                 time.sleep(0.3)
             else:
