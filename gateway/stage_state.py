@@ -398,12 +398,13 @@ class StageState:
         # restart on its own terms (see `AgendaController` there).
         self.agenda: dict | None = None
         # Optional stage regions rendered by `gateway/stage_surface.py`
-        # from the `queue`, `share` and `graph` view intents. None means
+        # from the `queue`, `voice`, `share` and `graph` view intents. None means
         # the key is left out of `content()` altogether, so a session
         # without those blocks writes the same file as before (the
         # version stays, see SCHEMA_VERSION). Absolute data only: no
         # ticking value may sit in here (the fingerprint).
         self.queue: dict | None = None
+        self.voice: dict | None = None
         self.share: dict | None = None
         self.session_graph: dict | None = None
         # The latest knowledge hits for the current topic, from the
@@ -1125,7 +1126,8 @@ class StageState:
         content = self._base_content(main)
         # Only ADDED, and only when a surface rendered them: key absent
         # means "section hidden" for the page.
-        for key, value in (("queue", self.queue), ("share", self.share),
+        for key, value in (("queue", self.queue), ("voice", self.voice),
+                           ("share", self.share),
                            ("session_graph", self.session_graph),
                            ("knowledge", self.knowledge)):
             if value is not None:
