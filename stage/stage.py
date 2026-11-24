@@ -2857,6 +2857,8 @@ def page(titel: str, kopf: str, rumpf: str, mark_json: str, inhalt: str,
 <base href="{wurzel}">
 <title>{titel}</title><style>{STYLE}</style>{vendor}</head><body>
 {kopf}{rumpf}{PARTICIPATE_HTML}
+<div id="transcript"></div>
+<script src="{wurzel}static/transcript-panel.js{tok}"></script>
 <script>{script}</script></body></html>""").encode()
 
 
@@ -3169,7 +3171,8 @@ class H(BaseHTTPRequestHandler):
             except OSError:
                 return self._send(404, b"unbekannt", "text/plain")
             return self._send(200, roh, "application/javascript; charset=utf-8")
-        if path in ("/static/graph.js", "/static/session_graph.js"):
+        if path in ("/static/graph.js", "/static/session_graph.js",
+                    "/static/transcript-panel.js"):
             try:
                 roh = (STATIC / path[len("/static/"):]).read_bytes()
             except OSError:

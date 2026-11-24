@@ -2438,6 +2438,21 @@ def test_static_session_graph_js_is_served(graf_sitz, hole):
     assert code == 200 and "sgStart" in js_sg
 
 
+def test_the_stage_carries_the_transcript_panel_container(graf_sitz, hole):
+    """issue #181: the live-transcript side panel's container, present on
+    the main stage page (not the separate /graph tab)."""
+    assert 'id="transcript"' in hole("/")[1]
+
+
+def test_the_stage_loads_transcript_panel_js(graf_sitz, hole):
+    assert "static/transcript-panel.js" in hole("/")[1]
+
+
+def test_static_transcript_panel_js_is_served(graf_sitz, hole):
+    code, js_tp = hole("/static/transcript-panel.js")
+    assert code == 200 and "tpRender" in js_tp
+
+
 def test_the_stage_header_links_to_the_graph_tab(graf_sitz, hole):
     code, sseite = hole("/")
     assert "Graph ↗" in sseite and 'href="graph' in sseite \
