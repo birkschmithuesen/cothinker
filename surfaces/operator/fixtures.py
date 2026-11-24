@@ -234,7 +234,10 @@ class FixtureOperatorBackend:
         return self.current
 
     async def run(self) -> None:
-        """Replay every frame once, in order, respecting its `delay_s`."""
-        for frame in self._frames:
+        """Replay every frame after the first, in order, respecting its
+        `delay_s`; the first frame is already `current` from `__init__`
+        and is never re-applied, so starting this task never clobbers a
+        command issued before the app's lifespan started it."""
+        for frame in self._frames[1:]:
             await asyncio.sleep(frame.delay_s)
             self.current = frame.status
