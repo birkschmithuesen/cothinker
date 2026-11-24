@@ -272,15 +272,16 @@ def _replay_and_collect(
         # fixture server this check spins up is loopback-only. Chrome's
         # Private Network Access policy blocks a public page from
         # fetching a loopback address by default (confirmed live: every
-        # request to it failed client-side with
-        # "blocked by CORS policy ... `loopback` address space"), even
-        # though the fixture server itself answers fine. This check
-        # controls both ends of that fetch, so it is safe to disable PNA
-        # enforcement for this one browser instance.
+        # request to it failed client-side with "blocked by CORS policy
+        # ... `loopback` address space", even with the PNA feature flags
+        # disabled -- this Chrome version enforces it unconditionally
+        # for a public-to-loopback fetch, not behind a feature flag).
+        # This check controls both ends of that fetch (the fixture
+        # server is its own, spun up for exactly this run) and the
+        # browser instance is thrown away right after, so disabling web
+        # security for it entirely is safe.
         browser = playwright.chromium.launch(
-            headless=True,
-            args=["--disable-features=BlockInsecurePrivateNetworkRequests,"
-                  "PrivateNetworkAccessSendPreflights"])
+            headless=True, args=["--disable-web-security"])
         context = browser.new_context(viewport=VIEWPORT)
         page = context.new_page()
         # Font binaries are not shipped in this public repo (surfaces/design/
