@@ -1441,7 +1441,7 @@ def enrollment_mirror(control: str | None, enrolled: str | None,
     if control == "start":
         text = ("Vorstellungsrunde läuft — bitte nacheinander: „Ich bin …“ "
                 "und ca. 10 Sekunden allein sprechen. Zum Schluss: "
-                "„Robo, Vorstellungsrunde fertig“.")
+                "„Hey Robo, Vorstellungsrunde fertig“.")
         return f"{text} Erkannt: {', '.join(names)}" if enrolled else text
     if control == "end":
         if names:
@@ -2907,11 +2907,15 @@ def main() -> int:
                     help="seconds of silence that end a block")
     ap.add_argument("--max-block", type=float, default=90.0,
                     help="cut here at the latest, even without a pause")
-    ap.add_argument("--wake-word", default="robo",
-                    help="Weckwort. Mehrere durch Komma trennen; jedes wird "
-                         "als WORTANFANG gesucht, damit die Spracherkennung "
-                         "es nicht durch Anschweissen verschluckt (gemessen "
-                         "2026-09-21: 'Roboterzeuge' fuer 'Robo, erzeuge').")
+    ap.add_argument("--wake-word", default="hey robo",
+                    help="Weckphrase. Mehrere durch Komma trennen; der Name "
+                         "wird als WORTANFANG gesucht, damit die "
+                         "Spracherkennung ihn nicht durch Anschweissen "
+                         "verschluckt (gemessen 2026-09-21: 'Roboterzeuge' "
+                         "fuer 'Robo, erzeuge'). Ein blosser Name ohne Gruss "
+                         "feuert nicht mehr (GitHub-Issue #150: zu viele "
+                         "Fehlalarme bei Gespraechen UEBER den Assistenten "
+                         "und bei Verhoerern des einzelnen Worts).")
     ap.add_argument("--commit-every", type=float, default=300,
                     help="seconds between two git commits")
     ap.add_argument("--stt-timeout", type=float, default=300,
@@ -2959,8 +2963,8 @@ def main() -> int:
                          "--no-prefilter turns it off.")
     ap.add_argument("--speakers", action="store_true",
                     help="voice-embedding speaker enrollment: "
-                         "an intro round ('Robo, "
-                         "Vorstellungsrunde' ... 'Robo, Vorstellungsrunde "
+                         "an intro round ('Hey Robo, "
+                         "Vorstellungsrunde' ... 'Hey Robo, Vorstellungsrunde "
                          "fertig') binds each participant's voice to their "
                          "name; afterwards every utterance is attributed "
                          "by cosine similarity instead of the recognizer "
