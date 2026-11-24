@@ -59,7 +59,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from shared.text import MAX_PENDING_LABEL
-from shared.wake_word import WAKE_NOT
+from shared.wake_word import ROBO_LIKE, WAKE_NOT, WAKE_PHRASE_RE
 
 # --- vocabulary --------------------------------------------------------
 
@@ -523,11 +523,11 @@ def content_words(text, n: int = 3) -> list[str]:
     drops empties and tokens with no letter or digit at all (a bare "--",
     "—", "–" or "..." is not a word, even though it survives the
     punctuation strip because a dash isn't in `_PENDING_PUNCT` -- an
-    internal hyphen, as in "Kuchenbasar-Termin", must stay), drops
-    `PENDING_STOPWORDS` and drops the wake word -- but not
-    "Robotik"/"Robert"/"Roboter...", the same exclusion
-    `shared.wake_word.WAKE_NOT` applies, because those are content, not an address
-    to Robo.
+    internal hyphen, as in "Kuchenbasar-Termin", must stay),
+    drops `PENDING_STOPWORDS` and drops the wake name -- "Robo" or one of
+    its misheard variants -- but not "Robotik"/"Roboter...", the same
+    exclusion `shared.wake_word.WAKE_NOT` applies, because those are
+    content, not an address to Robo.
     """
     words: list[str] = []
     for raw in str(text).split():
@@ -537,7 +537,7 @@ def content_words(text, n: int = 3) -> list[str]:
         low = token.lower()
         if low in PENDING_STOPWORDS:
             continue
-        if low.startswith("robo") and not WAKE_NOT.match(low):
+        if ROBO_LIKE.match(low) and not WAKE_NOT.match(low):
             continue
         words.append(token)
         if len(words) >= n:
@@ -545,22 +545,20 @@ def content_words(text, n: int = 3) -> list[str]:
     return words
 
 
-_WAKE_TOKEN = re.compile(r"\brobo[a-zäöüß]*", re.IGNORECASE)
-
-
 def wake_source(text) -> str:
-    """The part of `text` from the first wake word onward.
+    """The part of `text` from the wake name onward (the greeting before
+    it, "Hey"/"Hej"/..., is dropped along with everything earlier).
 
     A wake block still holds every earlier sentence of the open block, so
-    the order is what follows the wake word, not the talk before it.
-    Same matching as `gateway/segmenter.py`: word boundary, prefix, minus `WAKE_NOT`
-    ("Robotik"/"Robert" are not the wake word). The whole text when no
-    wake word is found.
+    the order is what follows the wake phrase, not the talk before it.
+    Same matching as `gateway/segmenter.py`: the greeting-gated name,
+    minus `WAKE_NOT` ("Robotik"/"Roboter" alone are not the wake word).
+    The whole text when no wake phrase is found.
     """
     s = str(text)
-    for m in _WAKE_TOKEN.finditer(s):
-        if not WAKE_NOT.match(m.group(0)):
-            return s[m.start():]
+    for m in WAKE_PHRASE_RE.finditer(s):
+        if not WAKE_NOT.match(m.group("name")):
+            return s[m.start("name"):]
     return s
 
 

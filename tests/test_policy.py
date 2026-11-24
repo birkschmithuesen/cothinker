@@ -379,7 +379,7 @@ check("contractions and fillers (am, im, bis, nicht) do not take a slot",
       == "Beschluss: Fest findet Samstag")
 check("wake word in a later sentence: main label names the order",
       pd.pending_label("main", "Der Verein plant die Satzung lange. "
-                              "Robo, zeig uns die Beetpaten.")
+                              "Hey Robo, zeig uns die Beetpaten.")
       == "Zuruf: zeig Beetpaten")
 check("main label without a wake word uses the whole text",
       pd.pending_label("main", "Satzung Beetpaten Liste") ==

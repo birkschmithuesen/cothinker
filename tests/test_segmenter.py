@@ -88,7 +88,7 @@ def _wake_cut():
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence("Wir sollten das nochmal genauer durchrechnen.")
     clock.advance(0.5)
-    bb.sentence("Robo, nimm dir die Use Cases nochmal alle vor.")
+    bb.sentence("Hey Robo, nimm dir die Use Cases nochmal alle vor.")
     return emitted
 
 
@@ -166,7 +166,7 @@ def test_interjection_attaches_to_the_next_block() -> None:
 # 7 — wake word beats the minimum length
 def test_short_order_still_goes_out() -> None:
     clock, emitted, bb = build(pause_s=2.5, min_chars=25)
-    bb.sentence("Robo, stopp.")
+    bb.sentence("Hey Robo, stopp.")
     assert len(emitted) == 1 and emitted[0].wake_word
 
 
@@ -195,7 +195,7 @@ def _conversation():
         ("Wir haben insgesamt zwoelftausend Euro zur Verfuegung.", 3.5),
         ("Nina uebernimmt die Pressetexte bis zum fuenfzehnten Oktober.", 0.8),
         ("Die Frist fuer den Antrag ist der sechste Oktober, nicht der fuenfte.", 4.0),
-        ("Robo, trag das bitte als Entscheidung ein.", 0.5),
+        ("Hey Robo, trag das bitte als Entscheidung ein.", 0.5),
         ("Offen bleibt, ob wir das ueber den Verein oder die GbR abrechnen.", 3.0),
     ]
     for text, pause in gespraech:
@@ -263,43 +263,53 @@ def test_whitespace_wake_word_doesnt_trigger() -> None:
 # 13 — wake word in quotes, repeated, at the end of a sentence
 def test_wake_word_behind_a_typographic_quote() -> None:
     clock, emitted, bb = build(pause_s=2.5)
-    bb.sentence("„Robo, mach das bitte.")
+    bb.sentence("„Hey Robo, mach das bitte.")
     assert len(emitted) == 1
 
 
 def test_several_wake_words_give_exactly_one_block() -> None:
     clock, emitted, bb = build(pause_s=2.5)
-    bb.sentence("Robo, und dann Robo nochmal, hoerst du, Robo?")
+    bb.sentence("Hey Robo, und dann Hey Robo nochmal, hoerst du, Hey Robo?")
     assert len(emitted) == 1
 
 
 def test_several_wake_words_text_complete() -> None:
     clock, emitted, bb = build(pause_s=2.5)
-    bb.sentence("Robo, und dann Robo nochmal, hoerst du, Robo?")
+    bb.sentence("Hey Robo, und dann Hey Robo nochmal, hoerst du, Hey Robo?")
     assert emitted and emitted[0].text.count("Robo") == 3
 
 
-def test_wake_word_at_end_of_sentence_lowercase() -> None:
+def test_wake_word_at_end_of_sentence_no_longer_fires() -> None:
+    """Issue #150: the phrase must START a clause -- a name dropped at the
+    END of a sentence ("...spaeter, hey robo.") is the same non-address
+    shape as a trailing mention, not an order."""
     clock, emitted, bb = build(pause_s=2.5)
-    bb.sentence("Das machen wir spaeter, robo.")
-    assert len(emitted) == 1
+    bb.sentence("Das machen wir spaeter, hey robo.")
+    assert not any(b.wake_word for b in emitted)
 
 
 # Misheard variants of the wake word at utterance start (live meeting,
-# 2026-10-20: STT transcribed "Robo" as "Grobo", "Wo, wo" and "Wobei", so the
-# instruction landed in the minutes instead of being handled as an order).
+# 2026-10-20: STT transcribed "Robo" as "Grobo", "Wo, wo" and "Wobei").
+# Issue #150 removes the old ambiguous single-word variant mechanism
+# (_WAKE_VARIANT_START's "Wo, wo"/"Wobei" branch and the imperative/
+# address guard behind it) together with its bare-word default: a
+# misheard variant now only fires behind a greeting, same as "Robo"
+# itself. "Wo, wo" and "Wobei" are real German words/questions and are
+# never part of the _ROBO_VARIANT_ALT list -- they cannot fire at all
+# anymore, with or without a greeting.
 @pytest.mark.parametrize("text", [
-    "Grobo, starte die Vorstellungsrunde.",
-    "Wo, wo, naechster Punkt.",
-    "Wobei, fass das mal zusammen.",
+    "Hey Grobo, starte die Vorstellungsrunde.",
 ])
-def test_wake_variant_fires(text: str) -> None:
+def test_wake_variant_fires_with_greeting(text: str) -> None:
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence(text)
     assert emitted and emitted[0].wake_word and emitted[0].reason == "wake"
 
 
 @pytest.mark.parametrize("text", [
+    "Grobo, starte die Vorstellungsrunde.",       # misheard variant, no greeting
+    "Wo, wo, naechster Punkt.",                   # removed ambiguous mechanism
+    "Wobei, fass das mal zusammen.",               # removed ambiguous mechanism
     "Wobei ich finde, dass das schwierig ist.",
     "Wo wohnst du eigentlich?",
     "Wobei das schwierig ist.",
@@ -408,21 +418,37 @@ def test_concurrent_no_sentence_lost_or_duplicated() -> None:
 
 
 # 18 — misheard wake word at utterance start (rehearsal 2026-10-20:
-# "Bobo, trag in ..." was filed as a topic instead of an order)
+# "Bobo, trag in ..." was filed as a topic instead of an order). Issue
+# #150: now gated behind a greeting -- the same misheard names fire only
+# as "Hey Bobo"/"Hallo Hobo"/... "Roboter" stays a false friend (WAKE_NOT)
+# even after a greeting.
+@pytest.mark.parametrize("heard", [
+    "Hey Bobo, trag in status/offene-punkte.md oben ein.",
+    "Hallo Hobo, was steht in den offenen Punkten?",
+    "Hey Probo, fasse zusammen.",
+    "Hey Rubo, fass zusammen.",
+    "Hey Robo-Vorstellungsrunde fertig.",
+    "„Hey Bobo, mach das bitte.",
+    "Hey Bobo - trag das ein.",
+])
+def test_misheard_wake_at_start_fires(heard: str) -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.sentence(heard)
+    assert len(emitted) == 1 and emitted[0].wake_word
+
+
 @pytest.mark.parametrize("heard", [
     "Bobo, trag in status/offene-punkte.md oben ein.",
     "Hobo, was steht in den offenen Punkten?",
     "Probo, fasse zusammen.",
     "Rubo, fass zusammen.",
     "Roboter, recherchiere das bitte.",
-    "Robo-Vorstellungsrunde fertig.",
-    "„Bobo, mach das bitte.",
-    "Bobo - trag das ein.",
+    "Hey Roboter, recherchiere das bitte.",
 ])
-def test_misheard_wake_at_start_fires(heard: str) -> None:
+def test_misheard_wake_without_greeting_no_longer_fires(heard: str) -> None:
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence(heard)
-    assert len(emitted) == 1 and emitted[0].wake_word
+    assert not any(b.wake_word for b in emitted)
 
 
 @pytest.mark.parametrize("normal", [
@@ -452,7 +478,7 @@ def test_allow_wake_default_next_real_order_still_cuts() -> None:
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence("Ich bin Max und will herausfinden, ob der Robo mich erkennt.",
                 allow_wake=False)
-    bb.sentence("Robo, was steht in den offenen Punkten?")
+    bb.sentence("Hey Robo, was steht in den offenen Punkten?")
     assert any(b.wake_word for b in emitted)
 
 
@@ -465,7 +491,7 @@ def _bare_wake():
     bb.sentence("Wir haben das Budget schon letztes Mal besprochen und sollten "
                 "das jetzt nicht wieder aufmachen.")          # explanation
     clock.advance(1.0)
-    bb.sentence("Robo")                                       # bare wake word
+    bb.sentence("Hey Robo")                                   # bare wake phrase
     clock.advance(1.0)
     bb.sentence("Fass das bitte nochmal zusammen.")            # the real order
     clock.advance(3.0)
@@ -509,9 +535,9 @@ def test_bare_wake_word_itself_is_not_echoed_as_block_text() -> None:
 # The real order that follows 11s later must still fire its own call.
 def _welded():
     clock, emitted, bb = build(pause_s=2.5)
-    bb.sentence("Dann koennten wir Robo dazu auch mal fragen. Robo Aktiv.")
+    bb.sentence("Dann koennten wir Robo dazu auch mal fragen. Hey Robo Aktiv.")
     clock.advance(11.0)
-    bb.sentence("Robo. Gib uns mal bitte aus der Ablage eine Uebersicht aller "
+    bb.sentence("Hey Robo. Gib uns mal bitte aus der Ablage eine Uebersicht aller "
                 "Kontaktadressen, die wir notiert haben.")
     clock.advance(3.0)
     bb.tick()
@@ -537,19 +563,31 @@ def test_welded_bare_wake_the_real_order_still_fires() -> None:
     assert len(e) == 2 and e[1].wake_word and "Uebersicht" in e[1].text
 
 
-# 21 — a trailing ADDRESS by name keeps its order
-def test_trailing_address_keeps_its_order() -> None:
+# 21 — a trailing ADDRESS by name (greeted or bare) no longer fires:
+# the phrase must START a clause (issue #150's acceptance table silences
+# "Robo, fass zusammen" the same way -- only "Hey Robo, ..." at the
+# START of what someone says is an address, not a name dropped at the
+# end of someone else's sentence).
+def test_trailing_address_no_longer_fires() -> None:
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence("Mach das bitte, Robo.")
     clock.advance(3.0)
     bb.tick()
-    assert len(emitted) == 1 and emitted[0].wake_word
+    assert not any(b.wake_word for b in emitted)
+
+
+def test_trailing_address_with_greeting_also_does_not_fire() -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.sentence("Mach das bitte, Hey Robo.")
+    clock.advance(3.0)
+    bb.tick()
+    assert not any(b.wake_word for b in emitted)
 
 
 # 22 — a lone "Robo Aktiv." with nothing before it to flush is bare wake too
 def _lone_aktiv():
     clock, emitted, bb = build(pause_s=2.5)
-    bb.sentence("Robo Aktiv.")
+    bb.sentence("Hey Robo Aktiv.")
     clock.advance(1.0)
     bb.sentence("Fass das bitte nochmal zusammen.")
     clock.advance(3.0)
@@ -576,8 +614,10 @@ def test_lone_robo_aktiv_itself_is_not_echoed_as_block_text() -> None:
 # ("... Robo dazu fragen. Robo Aktiv.") and a second, unrelated one
 # ("Ja, das passt schon. Erika. Robo." -- Erika is a participant's name,
 # not an order) must not let the filler that follows ride out as a false
-# call. Production defaults: pause_s=2.5, max_s=90.0, min_chars=25
-# (default), wake_word="robo".
+# call. pause_s=2.5, max_s=90.0, min_chars=25 are the production defaults;
+# wake_word="robo" here exercises the single-word escape hatch
+# (`--wake-word robo`, bare prefix match, no greeting required) rather
+# than the production DEFAULT phrase "hey robo" (issue #150).
 _INCIDENT = [
     (0.0,   "Und die Liste? Ich glaube, die Tabelle zum Budget lag noch im Ordner dort"),
     (6.0,   "Dann könnten wir Robo dazu auch mal fragen. Robo Aktiv."),

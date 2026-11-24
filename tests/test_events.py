@@ -269,7 +269,7 @@ def test_nameless_and_broken_entries_are_skipped(log, trace_file):
 
 
 # ============================================================ consumer call sites
-SPOKEN = "Robo, zeig uns die vier Straenge des Antrags."
+SPOKEN = "Hey Robo, zeig uns die vier Straenge des Antrags."
 
 
 @pytest.fixture(scope="module")
@@ -499,7 +499,7 @@ def test_and_it_cannot_be_opened_by_name_either(stage_view):
 SENTENCES = [
     "Wir fangen mit dem Budget an, das ist der erste Punkt heute.",
     "Insgesamt stehen zwoelftausend Euro zur Verfuegung.",
-    "Robo, zeig uns bitte die vier Straenge des Antrags.",
+    "Hey Robo, zeig uns bitte die vier Straenge des Antrags.",
 ]
 
 

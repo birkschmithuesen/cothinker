@@ -43,7 +43,7 @@ from pathlib import Path
 from typing import Callable, Mapping, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from shared.wake_word import call_ack, call_intent  # noqa: E402
+from shared.wake_word import call_ack, call_intent, strip_wake  # noqa: E402
 from correction_prefilter import prefilter  # noqa: E402
 from blocks.mirroring_coach.context import ROLL_EVERY, WINDOW_SIZE, LaneContext  # noqa: E402
 from lanes import TIMEOUT_MARKER, Job, LaneQueue  # noqa: E402
@@ -380,7 +380,10 @@ class CallLane:
         if self.call_ctx.add_utterance(speaker, filtered):
             self.log("call lane: context window rolled, Stand folded")
             self._rolled(self.call_lane)
-        calls = [{"text": filtered, "intent": call_intent(text),
+        # A welded order ("Hey Robo, fass zusammen") still has the
+        # address in `filtered` -- the call lane gets the order on its
+        # own, not the address (issue #150).
+        calls = [{"text": strip_wake(filtered), "intent": call_intent(text),
                   "ack": ack, "at": self.now()}]
         self.call_lane.submit(Job(id=self._next_job_id("call"),
                                   prompt=self._call_prompt(calls),
