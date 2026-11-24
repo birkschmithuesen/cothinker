@@ -32,7 +32,7 @@ from surfaces.operator.backend import (
     ParticipantsPresentError,
     UnknownProjectError,
 )
-from surfaces.operator.models import Call, Disk, Meeting, OperatorStatus, Project, Service, Session, Stt
+from surfaces.operator.models import Call, Disk, ErrorEntry, Meeting, OperatorStatus, Project, Service, Session, Stt
 
 ALLOWED_VERBS = ("start", "stop", "status")
 
@@ -107,6 +107,14 @@ def _disk_free_percent(path: Path) -> float:
     return round(usage.free / usage.total * 100, 1)
 
 
+def _disk_free_bytes(path: Path) -> int:
+    return shutil.disk_usage(path).free
+
+
+def _dir_size_bytes(path: Path) -> int:
+    return sum(f.stat().st_size for f in path.rglob("*") if f.is_file())
+
+
 class DemoKitOperatorBackend:
     def __init__(
         self,
@@ -120,8 +128,12 @@ class DemoKitOperatorBackend:
         self._run_subprocess = runner or self._default_runner
         self._disk_path = Path(disk_path)
         self._current_project = self._projects[0] if self._projects else None
+        self._current_title: str | None = None
         self._since: dict[str, str] = {}
         self._last_state: dict[str, str] = {}
+        self._errors: list[ErrorEntry] = []
+        self._recording_folder: str = ""
+        self._recording_samples: list[tuple[float, int]] = []
 
     @staticmethod
     def _default_runner(args: list[str]) -> "subprocess.CompletedProcess[str]":
@@ -141,13 +153,45 @@ class DemoKitOperatorBackend:
             if self._last_state.get(service_name) != state:
                 self._last_state[service_name] = state
                 self._since[service_name] = now_iso
+                if state == "failed":
+                    self._record_error(service_name, now_iso)
             services.append(Service(name=service_name, state=state, since=self._since[service_name]))
         return services
+
+    def _record_error(self, service_name: str, at: str) -> None:
+        self._errors.append(ErrorEntry(at=at, service=service_name, message="systemd unit reported failed", level="error"))
+        self._errors = self._errors[-10:]
+
+    def _recording_hours_left(self, running: bool, session_folder: str, free_bytes: int) -> float | None:
+        if not running or not session_folder:
+            self._recording_folder = session_folder
+            self._recording_samples = []
+            return None
+        if session_folder != self._recording_folder:
+            self._recording_folder = session_folder
+            self._recording_samples = []
+        folder_path = Path(session_folder)
+        if not folder_path.is_dir():
+            return None
+        self._recording_samples.append((time.time(), _dir_size_bytes(folder_path)))
+        self._recording_samples = self._recording_samples[-2:]
+        if len(self._recording_samples) < 2:
+            return None
+        (t0, s0), (t1, s1) = self._recording_samples
+        elapsed = t1 - t0
+        if elapsed <= 0:
+            return None
+        rate = (s1 - s0) / elapsed
+        if rate <= 0:
+            return None
+        return round(free_bytes / rate / 3600, 2)
 
     def status(self) -> OperatorStatus:
         result = self._call("status")
         services = self._services(_parse_unit_states(result.stdout))
         running = next(s.state for s in services if s.name == "meeting") == "active"
+        session_folder = _session_folder()
+        free_bytes = _disk_free_bytes(self._disk_path)
         return OperatorStatus(
             services=services,
             meeting=Meeting(participants=[], count=0),
@@ -159,14 +203,19 @@ class DemoKitOperatorBackend:
             ),
             session=Session(
                 project=self._current_project or Project(id="", label=""),
-                session_folder=_session_folder(),
+                title=self._current_title,
+                session_folder=session_folder,
                 agenda=None,
                 utterances=0,
                 last_saved_at="",
             ),
             call=Call(last=None),
-            errors=[],
-            disk=Disk(free_percent=_disk_free_percent(self._disk_path)),
+            errors=list(self._errors),
+            disk=Disk(
+                free_percent=_disk_free_percent(self._disk_path),
+                free_bytes=free_bytes,
+                recording_hours_left=self._recording_hours_left(running, session_folder, free_bytes),
+            ),
             running=running,
             can_switch_project=not running,
         )
@@ -185,6 +234,7 @@ class DemoKitOperatorBackend:
             raise AlreadyRunningError()
         project = self._project_or_raise(project_id)
         self._current_project = project
+        self._current_title = title
         self._call("start")
         return self.status()
 
