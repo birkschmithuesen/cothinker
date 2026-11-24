@@ -236,6 +236,8 @@ surfaces/contract/generate_spec.py                                              
 surfaces/contract/live_player.py                                                 core:surface-api
 surfaces/contract/models.py                                                      core:surface-api
 surfaces/contract/player.py                                                      core:surface-api
+surfaces/design/__init__.py                                                      core:surface-api
+surfaces/design/build.py                                                         core:surface-api
 surfaces/operator/__init__.py                                                    core:surface-api
 surfaces/operator/__main__.py                                                    core:surface-api
 surfaces/operator/app.py                                                         core:surface-api
