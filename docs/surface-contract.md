@@ -18,6 +18,32 @@ advance, utterances carry a speaker, a decision and an open question land,
 the speaker queue turns over, the meeting pauses and tasks are named at the
 close — a few seconds apart, not real meeting time.
 
+## Start live mode
+
+```
+pip install -r surfaces/contract/requirements.txt
+python -m surfaces.contract --live <session dir>
+```
+
+Same URL paths as fixture mode (`/docs`, `/snapshot`, `/events`,
+`/actions`), only the start flag differs. Instead of replaying a fixture
+scenario, this reads the given session directory's `buehne.json` -- the
+file `gateway.consumer.StageWriter` writes for a running meeting -- and
+maps its content onto the same `StageStateSnapshot`/`ViewIntent` models
+fixture mode already validates against. It is read-only: live mode never
+writes `buehne.json`, the consumer stays its single writer.
+
+Live mode polls the file every 0.3 s (well under the 2 s acceptance
+bound) and, on every content change, diffs the previous mapped snapshot
+against the new one. A field with an obvious owning view-intent kind
+(`queue`, `share`, `session_graph`) is pushed as that kind's intent
+(`queue:room`, `share:room`, `graph:session`); every other changed field
+(headline, decisions, notices, the question slot, ...) is folded into
+one `status` intent naming the changed fields, since most of the
+snapshot has no view-intent kind of its own. A field the live core does
+not fill yet stays empty, exactly as in fixture mode (`"x-status":
+"planned"`).
+
 ## Read `/docs`
 
 Open `http://127.0.0.1:8000/docs` for the interactive OpenAPI documentation:
