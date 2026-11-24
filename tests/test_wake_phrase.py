@@ -89,14 +89,21 @@ def test_bare_wake_requires_the_whole_phrase():
 
 
 # --------------------------------------------------------- segmenter wiring
-def test_welded_order_cuts_a_wake_block_without_the_phrase_text_lost():
+def test_welded_order_opens_a_call_without_the_phrase_text_lost():
+    """Issue #180: the wake word opens a call window instead of cutting
+    the block immediately -- the order's text still survives, closed here
+    by the call-silence timeout."""
     seen = []
-    bb = BlockBuilder(output=seen.append, wake_word="hey robo", pause_s=2.5)
+    clock = [0.0]
+    bb = BlockBuilder(output=seen.append, wake_word="hey robo", pause_s=2.5,
+                      now=lambda: clock[0])
     bb.sentence("Hey Robo, fass zusammen")
+    clock[0] += 8.0
+    bb.tick()
     assert len(seen) == 1
     block = seen[0]
     assert block.wake_word is True
-    assert block.reason == "wake"
+    assert block.reason == "silence"
     assert block.text == "Hey Robo, fass zusammen"
 
 

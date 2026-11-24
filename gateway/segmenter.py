@@ -12,12 +12,12 @@ sentence. A single sentence is too little context to hand an agent as a task
 (measured against a real meeting: median 1,161 characters per meaningful
 block, so many sentences). This class bundles sentences into blocks.
 
-Three triggers, the first that matches cuts:
+Outside a call, three triggers, the first that matches cuts:
 
   PAUSE  Nothing spoken for longer than `pause_s` -> the thought is finished.
          The main case.
-  WAKE   The sentence contains the wake word ("Robo") -> cut immediately and
-         send with priority. This is an order, not a transcript.
+  WAKE   The sentence contains the wake word ("Robo") -> opens a CALL
+         WINDOW instead of cutting immediately (see below).
   LENGTH After `max_s` of speaking time, cut even without a pause. Otherwise
          the agent hangs in the air for minutes during a long monologue.
 
@@ -26,12 +26,25 @@ appended to the next block — otherwise a "Right." would chop up the
 protocol. Exception: the LENGTH cut also emits a short block — otherwise a
 "Yes." would stick to a completely different topic half an hour later.
 
+CALL WINDOW (issue #180): the wake word used to cut and send the block
+immediately, the instant it matched -- a live trial (2026-11-24) showed
+"Hey Robo. Ich gebe dir." go out alone, with the content of the following
+sentences never reaching the agent. The wake word now OPENS a window
+instead: every sentence while it is open belongs to the call (pauses do
+not cut it), until it is closed -- by the end phrase ("Robo, Ende",
+`shared.wake_word.END_PHRASE_RE`, stripped from the order), by a tap
+(`open_call`/`close_call`), by `call_silence_s` of silence, or by
+`call_max_s` at the latest. Exactly one block, `wake_word=True` and
+`reason` one of `end|tap|silence|max`, goes out on close. A call closed
+with no content (a tap on an empty window) sends nothing; `state()`
+reports that as `last_close={"reason": "cancel", ...}`.
+
 Time is injected (`now`) so tests don't have to run in real time.
 
 CONCURRENCY: `sentence()` comes from the SSE reader, `tick()` from its own
-thread. Both mutate the same open block, so the whole class is protected by
-a lock. Without it, sentences get lost (measured: 10 of 3000) or appear
-twice (17 of 3000).
+thread, `open_call`/`close_call` from a stage action. All three mutate the
+same state, so the whole class is protected by a lock. Without it,
+sentences get lost (measured: 10 of 3000) or appear twice (17 of 3000).
 """
 from __future__ import annotations
 
@@ -41,10 +54,11 @@ import threading
 import time
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Callable
+from typing import Callable, Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from shared.wake_word import CLAUSE_LEAD, WAKE_NOT, wake_phrase_pattern  # noqa: E402
+from shared.wake_word import (CLAUSE_LEAD, END_PHRASE_RE, WAKE_NOT,  # noqa: E402
+                              wake_phrase_pattern)
 
 # Trailing filler after the wake word that still means "heard, not told to
 # do anything yet" -- live incident 2026-10-27: "Robo
@@ -95,12 +109,16 @@ class BlockBuilder:
         max_s: float = 90.0,
         min_chars: int = 25,
         wake_word: str = "hey robo",
+        call_silence_s: float = 8.0,
+        call_max_s: float = 90.0,
         now: Callable[[], float] = time.monotonic,
     ) -> None:
         self.output = output
         self.pause_s = pause_s
         self.max_s = max_s
         self.min_chars = min_chars
+        self.call_silence_s = call_silence_s
+        self.call_max_s = call_max_s
         self.now = now
         # "Roboter" must not trigger -- but "Roboterzeuge" must. Speech
         # recognition welds the wake word onto the next one when it is
@@ -126,6 +144,12 @@ class BlockBuilder:
         self._open = Block()
         self._last_sentence: float = 0.0
         self._lock = threading.Lock()
+        # The call window (issue #180): "idle" or "listening". While
+        # listening, `self._open` IS the call's block.
+        self._window: str = "idle"
+        self._call_opened_at: Optional[float] = None
+        self._call_opened_by: Optional[str] = None
+        self._last_close: Optional[dict] = None
 
     # ---------------------------------------------------------------- API
     @staticmethod
@@ -222,14 +246,18 @@ class BlockBuilder:
         with self._lock:
             t = self.now()
 
+            if self._window == "listening":
+                # Every sentence while the call is open belongs to it
+                # (issue #180) -- pauses do not cut it, only the end
+                # phrase, a tap, silence or the call's own max.
+                self._collect_call_locked(text, t)
+                return
+
             if allow_wake and self.wake_word_re is not None and self._is_bare_wake(text):
                 # Close whatever was open as an ordinary block -- it is
-                # NOT part of the call -- then open a fresh block already
-                # flagged as a call for the order that follows.
-                if self._open:
-                    self._emit("pause", force=True)
-                self._open = Block(start=t, end=t, wake_word=True)
-                self._last_sentence = t
+                # NOT part of the call -- then open the call window for
+                # the order that follows.
+                self._start_call("voice", t, keep_open=False)
                 return
 
             # Pause BEFORE this sentence? Then it no longer belongs to the old block.
@@ -267,19 +295,34 @@ class BlockBuilder:
                     self._open = Block(start=t, end=t)
                     self._last_sentence = t
                     return
-                self._open.wake_word = True
-                self._emit("wake")             # order: send right away
+                # The order is already accumulated in `self._open`
+                # (e.g. "Hey Robo, fass zusammen") -- the call window
+                # takes over THIS block rather than starting a fresh one,
+                # so the content already said is not lost.
+                self._start_call("voice", t, keep_open=True)
+                # Wake and end phrase can arrive welded into one STT final
+                # ("Hey Robo, fass zusammen. Robo, Ende." with no pause
+                # the server could split on) -- check the end phrase on
+                # the very same text that just opened the call.
+                self._close_if_end_phrase_locked()
                 return
 
             if (t - self._open.start) >= self.max_s:
                 self._emit("length")
 
     def tick(self) -> None:
-        """Call regularly — detects the pause AFTER the last sentence."""
+        """Call regularly — detects the pause AFTER the last sentence, or
+        a call window's silence/max timeout."""
         with self._lock:
+            t = self.now()
+            if self._window == "listening":
+                if (t - self._call_opened_at) >= self.call_max_s:
+                    self._close_call_locked("max")
+                elif (t - self._last_sentence) >= self.call_silence_s:
+                    self._close_call_locked("silence")
+                return
             if not self._open:
                 return
-            t = self.now()
             if (t - self._open.start) >= self.max_s:
                 self._emit("length")           # takes priority: always cuts
             elif (t - self._last_sentence) >= self.pause_s:
@@ -288,6 +331,9 @@ class BlockBuilder:
     def finish(self) -> None:
         """At the end of the session: emit the remainder, however short."""
         with self._lock:
+            if self._window == "listening":
+                self._close_call_locked("final")
+                return
             if self._open:
                 self._emit("final", force=True)
 
@@ -296,7 +342,112 @@ class BlockBuilder:
         with self._lock:
             return self._open.chars
 
+    # -------------------------------------------------------- call window
+    def open_call(self, source: str) -> None:
+        """Opens the call window -- a tap on the stage button (or any
+        external trigger), same effect as the wake word firing."""
+        with self._lock:
+            if self._window == "listening":
+                return
+            self._start_call(source, self.now(), keep_open=False)
+
+    def close_call(self, source: str) -> None:
+        """Closes the call window -- a tap while listening. No-op while
+        idle (nothing to close)."""
+        with self._lock:
+            self._close_call_locked(source)
+
+    def state(self) -> dict:
+        """The window's current state, for the `call_window` building
+        block to turn into the `listen:room` view intent (ADR 0023)."""
+        with self._lock:
+            last_close = dict(self._last_close) if self._last_close else None
+            if self._window != "listening":
+                return {"state": "idle", "since": None, "opened_by": None,
+                        "closes_in_s": None, "last_close": last_close}
+            closes_in_s = max(
+                0.0, self.call_silence_s - (self.now() - self._last_sentence))
+            return {"state": "listening", "since": self._call_opened_at,
+                    "opened_by": self._call_opened_by,
+                    "closes_in_s": closes_in_s, "last_close": last_close}
+
     # ------------------------------------------------------------ internal
+    def _start_call(self, source: str, t: float, *, keep_open: bool) -> None:
+        """Only call while holding the lock. Flips the window to
+        listening. `keep_open=True` reuses the already-accumulated
+        `self._open` (the order text is already in it, see `sentence()`);
+        otherwise whatever was open is flushed as an ordinary block first
+        (it is NOT part of the call) and a fresh, empty one starts it."""
+        if not keep_open:
+            if self._open:
+                self._emit("pause", force=True)
+            self._open = Block(start=t, end=t)
+        self._window = "listening"
+        self._call_opened_at = t
+        self._call_opened_by = source
+        self._last_sentence = t
+
+    def _collect_call_locked(self, text: str, t: float) -> None:
+        """Only call while holding the lock, with the window listening.
+        Appends `text` to the call, then closes it if that sentence
+        carried the end phrase; otherwise checks the call's own max."""
+        if not self._open.sentences:
+            self._open.start = t
+        self._open.sentences.append(text)
+        self._open.end = t
+        self._last_sentence = t
+        if self._close_if_end_phrase_locked():
+            return
+        if (t - self._call_opened_at) >= self.call_max_s:
+            self._close_call_locked("max")
+
+    def _close_if_end_phrase_locked(self) -> bool:
+        """Only call while holding the lock, with the window listening
+        and the latest sentence already appended as
+        `self._open.sentences[-1]`. If THAT sentence carries the end
+        phrase (same clause-start, false-friend rules as the wake
+        phrase), strips it, keeps any content before it in the same
+        clause, closes the call and returns True; otherwise returns
+        False, leaving the call open."""
+        last = self._open.sentences[-1]
+        clauses = [c for c in _SENTENCE_SPLIT.split(last) if c.strip()]
+        end_at = None
+        for i, clause in enumerate(clauses):
+            stripped = CLAUSE_LEAD.sub("", clause.strip())
+            m = END_PHRASE_RE.match(stripped)
+            if m and not self._wake_not(m):
+                end_at = i
+                break
+        if end_at is None:
+            return False
+
+        before = " ".join(c.strip() for c in clauses[:end_at])
+        if before:
+            self._open.sentences[-1] = before
+        else:
+            self._open.sentences.pop()
+        self._close_call_locked("end")
+        return True
+
+    def _close_call_locked(self, reason: str) -> None:
+        """Only call while holding the lock. Closes the call window;
+        sends the accumulated block unless it is empty, in which case the
+        close is recorded as a `cancel` and nothing goes out."""
+        if self._window != "listening":
+            return
+        b = self._open
+        self._open = Block()
+        self._window = "idle"
+        self._call_opened_at = None
+        self._call_opened_by = None
+        t = self.now()
+        if not b:
+            self._last_close = {"reason": "cancel", "at": t}
+            return
+        b.reason = reason
+        b.wake_word = True
+        self._last_close = {"reason": reason, "at": t}
+        self.output(b)
     def _emit(self, reason: str, force: bool = False) -> None:
         """Only call while holding the lock.
 
