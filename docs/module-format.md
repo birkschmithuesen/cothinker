@@ -38,6 +38,7 @@ version = "0.1.0"
 api_version = 1
 entry = "module:EchoModule"
 profile = "profile"
+tests = "tests"
 
 [state]
 files = ["echo.json"]
@@ -61,6 +62,11 @@ files = ["echo.json"]
   shape the profile-consuming code expects. The loader resolves this to an
   absolute path and passes it to the entry point as `profile_dir`; it does
   not interpret the profile's contents itself.
+- `tests` — optional; the directory, relative to the module directory,
+  holding the module's own tests (ADR 0022 level 1: tests live with the
+  code). When present, `load_module` checks that the directory exists and
+  raises `ModuleError` if it does not — a module that declares a tests
+  directory must actually ship it. Omitting the key skips this check.
 - `[state].files` — the list of file names the module intends to read and
   write through its `StateStore` (see below). This is documentation for
   humans and tooling, not enforced by the loader: a module is free to call
@@ -197,9 +203,10 @@ def load_modules(cfg: InstanceConfig, search: Sequence[Path]) -> list[Module]
 - `load_module(path)` reads `<path>/module.toml`, checks `api_version`
   against `CORE_API_VERSION`, imports the entry file and instantiates the
   entry class as described above. A missing manifest, an unreadable
-  manifest, an `api_version` mismatch, a malformed `entry` string, a
-  missing entry file or class, or any exception raised while importing the
-  entry file (a syntax error, a failing import) all raise `ModuleError`
+  manifest, an `api_version` mismatch, a declared `tests` directory that
+  does not exist, a malformed `entry` string, a missing entry file or
+  class, or any exception raised while importing the entry file (a syntax
+  error, a failing import) all raise `ModuleError`
   with a message naming the module and the problem. The entry file is
   registered in `sys.modules` as `cothinker_module_<name>` while it runs,
   so ordinary Python inside it (dataclasses, postponed annotations,

@@ -4,7 +4,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""python3 -m pytest -q tests/test_module_example_echo.py
+"""python3 -m pytest -q modules/example_echo/tests/test_example_echo.py
 
 Drives the loaded module's own `on_event` directly with a "block" `CoreEvent`
 (the shape `workshop.hooks.ModuleHook` builds in the private deployment) --
@@ -20,7 +20,7 @@ import pytest
 from shared import instance as si
 from shared.modules import CoreEvent, ModuleContext, StateStore, load_modules
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[3]
 EXAMPLE = REPO / "instances" / "example"
 MODULES_DIR = REPO / "modules"
 
