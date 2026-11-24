@@ -229,6 +229,7 @@ surfaces/__init__.py                                                            
 surfaces/contract/__init__.py                                                    core:surface-api
 surfaces/contract/__main__.py                                                    core:surface-api
 surfaces/contract/app.py                                                         core:surface-api
+surfaces/contract/check.py                                                       core:surface-api
 surfaces/contract/fixtures/__init__.py                                           core:surface-api
 surfaces/contract/fixtures/meeting/__init__.py                                   core:surface-api
 surfaces/contract/generate_spec.py                                               core:surface-api
