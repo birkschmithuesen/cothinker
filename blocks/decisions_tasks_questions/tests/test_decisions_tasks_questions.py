@@ -7,7 +7,7 @@
 """The `decisions-tasks-questions` block, driven through the session's real
 block host with invented transcript lines.
 
-    python3 -m pytest -q tests/test_block_decisions.py
+    python3 -m pytest -q blocks/decisions_tasks_questions/tests/test_decisions_tasks_questions.py
 """
 from __future__ import annotations
 
@@ -17,7 +17,7 @@ from datetime import datetime
 from pathlib import Path
 from types import SimpleNamespace
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[3]
 sys.path.insert(0, str(REPO))
 sys.path.insert(0, str(REPO / "gateway"))
 

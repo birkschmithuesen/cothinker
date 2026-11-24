@@ -8,7 +8,7 @@
 route a `UserAction`) and checks the `queue:room` view intent it emits plus
 the `block_output` it returns on a change of who speaks.
 
-    python3 -m pytest -q tests/test_block_speaker_queue.py
+    python3 -m pytest -q blocks/speaker_queue/tests/test_speaker_queue.py
 """
 from __future__ import annotations
 
