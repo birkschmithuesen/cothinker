@@ -32,5 +32,6 @@ an entry number of the 2026-11-20 concept-round decision log, or a decision (D1,
 | [0019](0019-surface-contract-for-external-designers.md) | Surface contract for external designers | accepted |
 | [0020](0020-host-names-and-paths-of-a-deployment.md) | Host names and paths of a deployment | accepted, amended by ADR 0021 |
 | [0021](0021-meeting-page-without-the-stage.md) | Meeting page without the stage | accepted |
-| [0022](0022-four-test-levels-tests-live-with-the-code.md) | Four test levels, and tests live with the code they test | accepted |
+| [0022](0022-four-test-levels-tests-live-with-the-code.md) | Four test levels, and tests live with the code they test | accepted, amended by ADR 0024 |
 | [0023](0023-design-tokens.md) | Design tokens — one token file, generated CSS, the CoThinker default look | proposed |
+| [0024](0024-level-4-tests-what-a-real-participant-hits.md) | Level-4 acceptance tests what a real participant hits | proposed |
