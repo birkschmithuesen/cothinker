@@ -139,6 +139,7 @@ block:timer                  block — timer (planned items, drift, projected en
 block:speaker-queue          block — speaker queue (tap to request/leave the floor)
 block:voice-attribution      block — voice attribution (who is talking right now, by track/STT speaker label)
 block:call-window            block — call window (listen:room open/close by voice, tap, or timeout)
+block:live-transcript        block — live transcript (side panel: last 10 finished lines + the in-progress partial)
 retire                       dropped by the target (decision 25 engines)
 ```
 
@@ -170,6 +171,8 @@ blocks/speaker_queue/queue.py                                                   
 blocks/voice_attribution/__init__.py                                              block:voice-attribution
 blocks/voice_attribution/voice.py                                                 block:voice-attribution
 blocks/call_window/__init__.py                                                    block:call-window
+blocks/live_transcript/__init__.py                                                block:live-transcript
+blocks/live_transcript/transcript.py                                              block:live-transcript
 blocks/topics/__init__.py                                                         block:topics
 blocks/topics/detect.py                                                           block:topics
 blocks/topics/hysteresis.py                                                       block:topics
