@@ -252,6 +252,18 @@ class SessionGraph(BaseModel):
     hidden: int = Field(description="Count of nodes folded away by the visibility cap.", examples=[0])
 
 
+class TranscriptLine(BaseModel):
+    speaker: str = Field(default="", description="Who said it; empty when attribution is unsure.", examples=["Tamar"])
+    started_at: str = Field(description="Wall-clock label of when the line started.", examples=["2026-11-23T09:14:02+01:00"])
+    text: str = Field(description="The transcribed text.", examples=["Let's park the vendor question for now."])
+
+
+class Task(BaseModel):
+    text: str = Field(description="The task text.", examples=["Send the updated timeline to the vendor."])
+    person: str = Field(default="", description="Who owns it; empty when the meeting did not name anyone.", examples=["Jonas"])
+    due: str = Field(default="", description="Due date, as named by the meeting; empty when not named.", examples=["2026-12-01"])
+
+
 class StageStateSnapshot(BaseModel):
     """The content fields of `buehne.json`; the consumer adds `status`."""
 
@@ -290,6 +302,26 @@ class StageStateSnapshot(BaseModel):
         description="The session graph the stage tab draws, from the `graph`"
         " block; `None` until the block has emitted one"
         " (key-absent-means-hidden, `StageState._content()`).",
+    )
+    tasks: list[Task] = Field(
+        default_factory=list,
+        description="Tasks named by the meeting so far, from"
+        " `decisions-tasks-questions`; carries the same content as the"
+        " latest `tasks` view intent, so a surface loaded mid-session sees"
+        " it without waiting for the next event. The core does not wire"
+        " this up yet (issue #129); a fixture populates it.",
+        examples=[[]],
+        json_schema_extra=_planned(),
+    )
+    transcript_recent: list[TranscriptLine] = Field(
+        default_factory=list,
+        description="The last three contributions, oldest first; carries"
+        " the same content as the latest `transcript:recent` view intent,"
+        " so a surface loaded mid-session sees it without waiting for the"
+        " next event. The core does not wire this up yet (issue #129); a"
+        " fixture populates it.",
+        examples=[[]],
+        json_schema_extra=_planned(),
     )
 
 
@@ -377,12 +409,6 @@ class GraphIntent(SessionGraph):
     id: str = Field(description="Identity a user action refers back to.", examples=["graph:session"])
 
 
-class TranscriptLine(BaseModel):
-    speaker: str = Field(default="", description="Who said it; empty when attribution is unsure.", examples=["Tamar"])
-    started_at: str = Field(description="Wall-clock label of when the line started.", examples=["2026-11-23T09:14:02+01:00"])
-    text: str = Field(description="The transcribed text.", examples=["Let's park the vendor question for now."])
-
-
 class TranscriptRecentIntent(BaseModel):
     """The last three contributions. Not wired yet, see issue #129."""
 
@@ -391,12 +417,6 @@ class TranscriptRecentIntent(BaseModel):
     kind: Literal["transcript:recent"] = "transcript:recent"
     id: str = Field(description="Identity a user action refers back to.", examples=["VI6"])
     lines: list[TranscriptLine] = Field(description="The last three contributions, oldest first.", examples=[[]])
-
-
-class Task(BaseModel):
-    text: str = Field(description="The task text.", examples=["Send the updated timeline to the vendor."])
-    person: str = Field(default="", description="Who owns it; empty when the meeting did not name anyone.", examples=["Jonas"])
-    due: str = Field(default="", description="Due date, as named by the meeting; empty when not named.", examples=["2026-12-01"])
 
 
 class TasksIntent(BaseModel):

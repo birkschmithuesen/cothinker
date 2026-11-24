@@ -24,6 +24,8 @@ from surfaces.contract.models import (
     SessionGraphEdge,
     SessionGraphNode,
     StageStateSnapshot,
+    Task,
+    TranscriptLine,
     UserAction,
     ViewIntent,
 )
@@ -113,6 +115,21 @@ def test_view_intent_union_accepts_queue_and_share_kinds():
         "kind": "share", "id": "share:room", "shares": [], "total_words": 0,
     })
     assert isinstance(share_intent, ShareIntent)
+
+
+def test_stage_state_snapshot_has_tasks_and_transcript_recent_fields():
+    """issue #147 point 3: `tasks` and `transcript:recent` existed only as
+    events, not in the snapshot -- a surface loaded mid-session saw
+    nothing until the next event. Additive fields, default to empty."""
+    assert StageStateSnapshot.model_fields["tasks"].default_factory() == []
+    assert StageStateSnapshot.model_fields["transcript_recent"].default_factory() == []
+
+    snapshot = StageStateSnapshot.model_construct(
+        tasks=[Task(text="Draft the migration runbook.", person="Tamar", due="")],
+        transcript_recent=[TranscriptLine(speaker="Mira", started_at="2026-11-23T09:00:00+01:00", text="hi")],
+    )
+    assert snapshot.tasks[0].person == "Tamar"
+    assert snapshot.transcript_recent[0].speaker == "Mira"
 
 
 def test_view_intent_union_accepts_graph_kind():
