@@ -44,6 +44,19 @@ snapshot has no view-intent kind of its own. A field the live core does
 not fill yet stays empty, exactly as in fixture mode (`"x-status":
 "planned"`).
 
+## Cross-origin access
+
+Same-origin by default: a surface fetching `/snapshot` or `/events` from
+another origin (e.g. a local dev server against
+`?api=http://127.0.0.1:8000/`) is rejected by the browser unless you opt
+in. Pass `--cors-origin <origin>` (repeatable) to either mode to allow it:
+
+```
+python -m surfaces.contract --fixtures meeting --cors-origin http://localhost:5173
+```
+
+No flag, no header -- the default behaviour is unchanged.
+
 ## Read `/docs`
 
 Open `http://127.0.0.1:8000/docs` for the interactive OpenAPI documentation:

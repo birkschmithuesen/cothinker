@@ -1360,6 +1360,32 @@
             ],
             "description": "Per-person talk-share, from the `speaking-share` block; `None` when that block is absent from the session (key-absent-means-hidden, `StageState._content()`)."
           },
+          "tasks": {
+            "description": "Tasks named by the meeting so far, from `decisions-tasks-questions`; carries the same content as the latest `tasks` view intent, so a surface loaded mid-session sees it without waiting for the next event. The core does not wire this up yet (issue #129); a fixture populates it.",
+            "examples": [
+              []
+            ],
+            "items": {
+              "$ref": "#/components/schemas/Task"
+            },
+            "title": "Tasks",
+            "type": "array",
+            "x-issue": "https://github.com/birkschmithuesen/cothinker/issues/129",
+            "x-status": "planned"
+          },
+          "transcript_recent": {
+            "description": "The last three contributions, oldest first; carries the same content as the latest `transcript:recent` view intent, so a surface loaded mid-session sees it without waiting for the next event. The core does not wire this up yet (issue #129); a fixture populates it.",
+            "examples": [
+              []
+            ],
+            "items": {
+              "$ref": "#/components/schemas/TranscriptLine"
+            },
+            "title": "Transcript Recent",
+            "type": "array",
+            "x-issue": "https://github.com/birkschmithuesen/cothinker/issues/129",
+            "x-status": "planned"
+          },
           "updated": {
             "description": "Wall-clock label of the last update.",
             "examples": [
@@ -1425,6 +1451,76 @@
           "target"
         ],
         "title": "TapAction",
+        "type": "object"
+      },
+      "Task": {
+        "properties": {
+          "due": {
+            "default": "",
+            "description": "Due date, as named by the meeting; empty when not named.",
+            "examples": [
+              "2026-12-01"
+            ],
+            "title": "Due",
+            "type": "string"
+          },
+          "person": {
+            "default": "",
+            "description": "Who owns it; empty when the meeting did not name anyone.",
+            "examples": [
+              "Jonas"
+            ],
+            "title": "Person",
+            "type": "string"
+          },
+          "text": {
+            "description": "The task text.",
+            "examples": [
+              "Send the updated timeline to the vendor."
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "text"
+        ],
+        "title": "Task",
+        "type": "object"
+      },
+      "TranscriptLine": {
+        "properties": {
+          "speaker": {
+            "default": "",
+            "description": "Who said it; empty when attribution is unsure.",
+            "examples": [
+              "Tamar"
+            ],
+            "title": "Speaker",
+            "type": "string"
+          },
+          "started_at": {
+            "description": "Wall-clock label of when the line started.",
+            "examples": [
+              "2026-11-23T09:14:02+01:00"
+            ],
+            "title": "Started At",
+            "type": "string"
+          },
+          "text": {
+            "description": "The transcribed text.",
+            "examples": [
+              "Let's park the vendor question for now."
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "started_at",
+          "text"
+        ],
+        "title": "TranscriptLine",
         "type": "object"
       },
       "ValidationError": {

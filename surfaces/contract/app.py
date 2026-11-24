@@ -12,6 +12,7 @@ import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from surfaces.contract.models import StageStateSnapshot, UserAction
@@ -20,7 +21,7 @@ from surfaces.contract.player import ScenarioPlayer
 SSE_PING_S = 15.0
 
 
-def create_app(player: ScenarioPlayer | None = None) -> FastAPI:
+def create_app(player: ScenarioPlayer | None = None, cors_origins: list[str] | None = None) -> FastAPI:
     @asynccontextmanager
     async def lifespan(_app: FastAPI):
         task = asyncio.create_task(player.run()) if player is not None else None
@@ -38,6 +39,14 @@ def create_app(player: ScenarioPlayer | None = None) -> FastAPI:
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    if cors_origins:
+        app.add_middleware(
+            CORSMiddleware,
+            allow_origins=cors_origins,
+            allow_methods=["*"],
+            allow_headers=["*"],
+        )
 
     @app.get("/snapshot", response_model=StageStateSnapshot, tags=["snapshot"])
     def get_snapshot() -> StageStateSnapshot:
