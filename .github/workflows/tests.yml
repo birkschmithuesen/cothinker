@@ -12,4 +12,5 @@ jobs:
           python-version: "3.11"
       - run: pip install pytest pyyaml jsonschema
       - run: pip install -r surfaces/contract/requirements.txt
+      - run: pip install -r surfaces/contract/requirements-test.txt
       - run: python -m pytest -q tests
