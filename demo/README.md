@@ -9,8 +9,10 @@ consumer writes the protocol with the Jitsi display names as speakers.
 browser --> nginx --> /demo/            demo/page/index.html (static)
                       /demo/api/        demo/session_server.py   (127.0.0.1:8091)
                       /demo/stage/      stage                    (127.0.0.1:8020)
+                      /demo/contract/   surfaces.contract --live (127.0.0.1:8092)
                       /                 Jitsi web                (127.0.0.1:8000)
 Robo: Chrome (CDP 9223) -> tap -> STT (5051, PCM 5053) -> consumer -> project dir
+Design partner: surfaces.contract --fixtures meeting (127.0.0.1:8093, always on, outside demo.sh)
 ```
 
 The page asks for a display name (cookie `ct_demo_name`), calls
@@ -27,12 +29,19 @@ demo/demo.sh stop   [--all]     # --all also takes the Jitsi containers down
 ```
 
 `start` writes `$XDG_RUNTIME_DIR/cothinker-demo/run.env` (one run timestamp
-shared by STT and tap, because the per-track sidecar path embeds it) and
-mints Robo's join URL into `robo.env` (mode 0600) at that moment. Units are
-started in the order session, stage, stt, chrome, tap, consumer. The tap
-only reports `listening` after someone unmutes, so the start check waits
-for the process and the CDP port, not for that line. `stop` exits non-zero
-if a demo Chrome, a unit or a socket on the demo ports is left over.
+shared by STT and tap, because the per-track sidecar path embeds it),
+`contract.env` (the current session directory, resolved as the newest
+subfolder of `project/sessions/`, read by the contract unit as
+`DEMO_SESSION_DIR`) and mints Robo's join URL into `robo.env` (mode 0600) at
+that moment. Units are started in the order session, stage, stt, chrome,
+tap, consumer, contract. The tap only reports `listening` after someone
+unmutes, so the start check waits for the process and the CDP port, not for
+that line. `stop` exits non-zero if a demo Chrome, a unit or a socket on the
+demo ports is left over.
+
+`cothinker-demo-contract-fixtures` (127.0.0.1:8093) is not in `DEMO_UNITS`:
+it serves the fixture scenario for the design partner to poke at, runs
+always (`Restart=always`), and `start`/`stop` never touch it.
 
 ## Install
 

@@ -1,0 +1,23 @@
+[Unit]
+Description=CoThinker demo: contract (live mode, current session's buehne.json)
+
+[Service]
+Type=simple
+# contract.env holds DEMO_SESSION_DIR, written by demo.sh start right before
+# this unit starts: the session folder's name varies per run (date + title
+# slug), so demo.sh resolves the newest one under sessions/ each start.
+EnvironmentFile=%h/.config/cothinker-demo/secrets.env
+EnvironmentFile=-%h/.config/cothinker-demo/demo.env
+EnvironmentFile=%t/cothinker-demo/contract.env
+UnsetEnvironment=PYTHONPATH PYTHONHOME
+WorkingDirectory=@REPO@
+ExecStart=/usr/bin/python3 -m surfaces.contract --live ${DEMO_SESSION_DIR} --host 127.0.0.1 --port 8092
+StandardOutput=append:@DEMO_HOME@/logs/contract.log
+StandardError=inherit
+Restart=on-failure
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target
