@@ -32,10 +32,14 @@ def test_units_have_required_directives():
     assert [u.stem for u in units] == [
         "cothinker-demo-" + n
         for n in ("chrome", "consumer", "contract-fixtures", "contract",
-                   "session", "stage", "stt", "tap")]
-    # contract-fixtures runs forever for the design partner, unlike every
-    # other unit, which only restarts on failure.
-    restart_want = {"cothinker-demo-contract-fixtures": "Restart=always"}
+                   "operator", "session", "stage", "stt", "tap")]
+    # contract-fixtures and operator run forever (the design partner's
+    # fixture scenario, and the operator console surviving `stop`),
+    # unlike every other unit, which only restarts on failure.
+    restart_want = {
+        "cothinker-demo-contract-fixtures": "Restart=always",
+        "cothinker-demo-operator": "Restart=always",
+    }
     for u in units:
         text = u.read_text()
         for needle in ("RestartSec=3", "KillMode=control-group"):
