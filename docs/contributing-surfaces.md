@@ -39,10 +39,10 @@ surfaces today:
   described below.
 - **The operator console** (`surfaces/contract/openapi.json`'s sibling `surfaces/operator/openapi.json`, prefix
   `/operator/`, issue #159): one page for whoever runs a deployment -- `services[]`, `meeting`, `stt`, `session`
-  (project, agenda, utterances), `call`, a redacted `errors[]`, `disk`, `running`/`can_switch_project`, plus the
-  `start`/`stop`/`project` commands. Its own token, never the participant one. `docs/surface-contract.md`'s
-  "Operator console" section is the source of truth for the field list; read its generated `openapi.json`/
-  `asyncapi.yaml` rather than this list drifting out of date.
+  (project, title, agenda, utterances), `call`, a redacted `errors[]` with a `level`, `disk` (percent, bytes and
+  recording time left), `running`/`can_switch_project`, plus the `start`/`stop`/`project` commands. Its own token,
+  never the participant one. `docs/surface-contract.md`'s "Operator console" section is the source of truth for
+  the field list; read its generated `openapi.json`/`asyncapi.yaml` rather than this list drifting out of date.
 
 Building against either one follows the same rules:
 
