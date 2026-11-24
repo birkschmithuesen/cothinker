@@ -113,7 +113,7 @@ def test_status_rule_sets_operating_line():
     surface, _, writer, _ = make()
     assert surface.name == "stage" and list(surface.actions()) == []
     assert surface.kinds == {"prompt", "status", "artefact", "graph", "timer",
-                             "queue", "share"}
+                             "queue", "share", "knowledge"}
     surface.render([intent("status:line", "status",
                            {"state": "working", "detail": {"count": 3, "failed": False}})])
     assert len(writer.statuses) == 1
@@ -227,6 +227,17 @@ def test_graph_rule_sets_session_graph_key():
     graph = {"nodes": [{"id": "n1"}], "edges": []}
     surface.render([intent("graph:session", "graph", graph)])
     assert state.content()["session_graph"] == graph
+
+
+def test_knowledge_rule_sets_knowledge_key_and_clears_it():
+    surface, state, _, _ = make()
+    knowledge = {"topic_id": "t1", "query": "Klimaplan",
+                 "hits": [{"kind": "hintergrund", "title": "Klimaplan",
+                           "href": "hintergrund/klimaplan.md"}]}
+    surface.render([intent("knowledge:t1", "knowledge", knowledge)])
+    assert state.content()["knowledge"] == knowledge
+    surface.render([])
+    assert "knowledge" not in state.content()
 
 
 def test_timer_rule_sets_agenda_keeping_people():

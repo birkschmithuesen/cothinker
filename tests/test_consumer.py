@@ -8459,6 +8459,41 @@ def test_a_reply_with_a_failure_marker_is_a_failed_turn(tmp_path):
     assert "[notiz] x" not in run.protocol_text
 
 
+def test_write_session_pointer_writes_the_run_dir_when_the_env_var_is_set(tmp_path, monkeypatch):
+    pointer = tmp_path / "session.path"
+    monkeypatch.setenv(k.SESSION_POINTER_ENV, str(pointer))
+    run_dir = tmp_path / "sessions" / "2026-11-24-today"
+    run_dir.mkdir(parents=True)
+
+    k.write_session_pointer(run_dir)
+
+    assert pointer.read_text(encoding="utf-8") == str(run_dir)
+
+
+def test_write_session_pointer_is_a_no_op_without_the_env_var(tmp_path, monkeypatch):
+    monkeypatch.delenv(k.SESSION_POINTER_ENV, raising=False)
+    pointer = tmp_path / "session.path"
+    run_dir = tmp_path / "sessions" / "2026-11-24-today"
+    run_dir.mkdir(parents=True)
+
+    k.write_session_pointer(run_dir)
+
+    assert not pointer.exists()
+
+
+def test_a_running_consumer_writes_its_session_dir_into_the_pointer_file(tmp_path):
+    """issue #161: a live contract surface (surfaces/contract --live-pointer)
+    must be told the real session dir, not have to guess the newest folder
+    -- the consumer names it here, as soon as it opens the session."""
+    from consumer_harness import run_consumer
+    pointer = tmp_path / "session.path"
+    run = run_consumer(tmp_path, finals=["Ein Satz fuer den Termin."],
+                       env_extra={"COTHINKER_SESSION_POINTER": str(pointer)})
+    assert run.returncode == 0 and not run.timed_out, run.log
+    assert run.session_dir is not None
+    assert pointer.read_text(encoding="utf-8") == str(run.session_dir)
+
+
 def _scenarios_with_expected_failures():
     """Names of the test functions that carry at least one xfail case."""
     names = set()

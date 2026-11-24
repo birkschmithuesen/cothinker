@@ -306,12 +306,13 @@ class WikiLayer:
         except Exception:                 # noqa: BLE001 -- never raise
             return []
 
-    def link_paths(self, titel: str, k: int = PAGE_LINKS, *,
-                   session_dir=None) -> list[str] | None:
-        """The related notes of `titel` as paths relative to the project
-        folder (posix), best first; same uniqueness and session-folder
-        filter as `page_links`. None when there is no vault: the scan
-        failed or the folder holds no notes. Never raises."""
+    def knowledge_hits(self, titel: str, k: int = PAGE_LINKS, *,
+                       session_dir=None) -> list[dict] | None:
+        """The related notes of `titel` as knowledge hits -- `kind`,
+        `title`, `href` (the note's path relative to the wiki root, posix)
+        -- best first; same uniqueness and session-folder filter as
+        `page_links`. None when there is no vault: the scan failed or the
+        folder holds no notes. Never raises."""
         try:
             paar = self._edges()
             if paar is None or not paar[0].notes:
@@ -319,7 +320,12 @@ class WikiLayer:
             index, edges = paar
             stems = self._unique_stems(index, edges, titel, max(0, k),
                                        skip=self._inside(session_dir))
-            return [index.resolve(s).rel.replace("\\", "/") for s in stems]
+            hits = []
+            for stem in stems:
+                note = index.resolve(stem)
+                hits.append({"kind": note.kind, "title": note.title,
+                            "href": note.rel.replace("\\", "/")})
+            return hits
         except Exception:                 # noqa: BLE001 -- never raise
             return None
 

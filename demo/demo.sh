@@ -112,15 +112,13 @@ start_all() {
     python3 "$DEMO_KIT/demo/session_server.py" --mint-robo "$RUN_DIR/robo.env"
   ) || { echo "FAIL: minting the bot join URL" >&2; return 1; }
 
-  # COTHINKER_PROJECT_DIR / COTHINKER_SESSIONS_DIR mirror the consumer unit's
-  # own environment (a deployment may point the project at a separate repo,
-  # e.g. a wiki clone, and put sessions under its own subfolder) -- read the
-  # same two variables here, with the same defaults the consumer falls back
-  # to, both for the git identity below and for resolving the session dir,
-  # so demo.sh always operates on the SAME directory the consumer is about
-  # to write into rather than always the plain project folder.
+  # COTHINKER_PROJECT_DIR mirrors the consumer unit's own environment (a
+  # deployment may point the project at a separate repo, e.g. a wiki
+  # clone) -- read it here too, with the same default the consumer falls
+  # back to, so the git identity below is set on the SAME directory the
+  # consumer is about to write into rather than always the plain project
+  # folder.
   local project_dir=${COTHINKER_PROJECT_DIR:-$DEMO_HOME/project}
-  local sessions_dir=${COTHINKER_SESSIONS_DIR:-sessions}
 
   git -C "$project_dir" config user.name >/dev/null 2>&1 \
     || git -C "$project_dir" config user.name "CoThinker Demo"
@@ -128,15 +126,17 @@ start_all() {
     || git -C "$project_dir" config user.email "demo@example.invalid"
 
   # The contract unit (live mode) needs this run's session directory, but
-  # only the consumer picks the name (date + title slug) when it starts.
-  # Resolve it here instead of touching the consumer: the newest subfolder
-  # of sessions/ at the moment contract starts is this run's session.
-  local session_dir=""
-  if [ -d "$project_dir/$sessions_dir" ]; then
-    session_dir=$(find "$project_dir/$sessions_dir" -mindepth 1 -maxdepth 1 \
-      -type d -printf '%T@ %p\n' 2>/dev/null | sort -rn | head -n1 | cut -d' ' -f2-)
-  fi
-  printf 'DEMO_SESSION_DIR=%s\n' "$session_dir" >"$RUN_DIR/contract.env" || return 1
+  # only the consumer picks the name (date + title slug) when it opens it
+  # -- after it has already started. Guessing it here (the newest
+  # subfolder of sessions/ at the moment contract starts) could pick a
+  # prepared future folder or an older one instead, so this names a
+  # pointer file in RUN_DIR for the consumer to write its session's path
+  # into (COTHINKER_SESSION_POINTER, cothinker-demo-consumer.service) and
+  # has the contract unit read that, re-reading on change
+  # (--live-pointer, gateway/consumer.py write_session_pointer, issue
+  # #161) -- never a guess, and it follows a restart into a new session
+  # without a restart of its own.
+  printf 'DEMO_SESSION_POINTER=%s\n' "$RUN_DIR/session.path" >"$RUN_DIR/contract.env" || return 1
 
   local u
   for u in $DEMO_UNITS; do

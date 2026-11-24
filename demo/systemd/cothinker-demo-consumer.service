@@ -7,6 +7,10 @@ EnvironmentFile=%h/.config/cothinker-demo/secrets.env
 EnvironmentFile=-%h/.config/cothinker-demo/demo.env
 Environment=COTHINKER_PROJECT_DIR=@DEMO_HOME@/project
 Environment=COTHINKER_DECIDER=jev
+# The contract unit (live mode) reads this file to follow the session
+# actually open instead of guessing a folder (issue #161); same path as
+# DEMO_SESSION_POINTER in contract.env, written by demo.sh start.
+Environment=COTHINKER_SESSION_POINTER=%t/cothinker-demo/session.path
 # Defaults; override in demo.env. HERMES_PYTHONPATH has no default and must
 # be set in demo.env (the hermes checkout and its site-packages).
 Environment=HERMES_PROFILE_DIR=%h/.hermes/profiles/cothinker-lanes

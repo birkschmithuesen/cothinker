@@ -14,6 +14,7 @@ browser --> nginx --> /meeting/          demo/page/index.html (static, call only
                       /                 Jitsi web                (127.0.0.1:8000)
 Robo: Chrome (CDP 9223) -> tap -> STT (5051, PCM 5053) -> consumer -> project dir
 Design partner: surfaces.contract --fixtures meeting (127.0.0.1:8093, always on, outside demo.sh)
+Operator: surfaces.operator --demo-kit demo.sh (127.0.0.1:@OPERATOR_PORT@, always on, outside demo.sh)
 ```
 
 Two static pages, one session endpoint (ADR 0021). `demo/page/index.html`
@@ -38,9 +39,11 @@ demo/demo.sh stop   [--all]     # --all also takes the Jitsi containers down
 
 `start` writes `$XDG_RUNTIME_DIR/cothinker-demo/run.env` (one run timestamp
 shared by STT and tap, because the per-track sidecar path embeds it),
-`contract.env` (the current session directory, resolved as the newest
-subfolder of `project/sessions/`, read by the contract unit as
-`DEMO_SESSION_DIR`) and mints Robo's join URL into `robo.env` (mode 0600) at
+`contract.env` (`DEMO_SESSION_POINTER`, the path of the pointer file the
+consumer writes its current session directory into once it opens it; the
+contract unit reads that file, re-reading on change, so it follows the
+consumer's actual session instead of guessing a folder -- issue #161) and
+mints Robo's join URL into `robo.env` (mode 0600) at
 that moment. Units are started in the order session, stage, stt, chrome,
 tap, consumer, contract. The tap only reports `listening` after someone
 unmutes, so the start check waits for the process and the CDP port, not for
@@ -51,12 +54,19 @@ demo ports is left over.
 it serves the fixture scenario for the design partner to poke at, runs
 always (`Restart=always`), and `start`/`stop` never touch it.
 
+`cothinker-demo-operator` is likewise not in `DEMO_UNITS` and runs always:
+it is the operator console (issue #159), driving `demo.sh start|stop|status`
+itself as subprocess calls, and it must survive `demo.sh stop` so whoever
+runs the deployment can see the stopped state and start it again.
+
 ## Install
 
 `demo/systemd/*.service` are templates. Replace `@DEMO_HOME@` (state dir
 with `repo/`, `project/`, `audio/`, `logs/`), `@REPO@` (CoThinker checkout)
 `@KIT@` (directory that contains this `demo/` folder; set `DEMO_KIT` in
-`demo.env` if it is not the checkout) and `@HERMES_PY@` (Python that can import the hermes worker), copy them to
+`demo.env` if it is not the checkout), `@HERMES_PY@` (Python that can import
+the hermes worker) and `@OPERATOR_PORT@` (the operator console's port --
+an ops decision, not fixed by this repository), copy them to
 `~/.config/systemd/user/`, run `systemctl --user daemon-reload`. Serve
 `demo/page/index.html` under `/meeting/` and `demo/page/split.html` under
 `/meeting-split/` (one nginx location each) and proxy the paths above. Run
@@ -67,6 +77,13 @@ with `repo/`, `project/`, `audio/`, `logs/`), `@REPO@` (CoThinker checkout)
 `~/.config/cothinker-demo/secrets.env` (mode 0600, read by the units):
 `JITSI_JWT_SECRET`, `DEMO_TOKEN`, `STAGE_TOKEN`, `SPEECHMATICS_API_KEY`,
 `OPENROUTER_API_KEY`.
+
+`~/.config/cothinker-demo/operator.token` (mode 0600): the operator
+console's own token, read by `cothinker-demo-operator.service`'s
+`--token-file` -- never the participant/room token, never logged.
+`~/.config/cothinker-demo/operator-projects.json` (not secret): the
+allowed working folders, a JSON list of `{"id": ..., "label": ...}`
+objects, read by the same unit's `--projects-file`.
 
 `~/.config/cothinker-demo/demo.env` (not secret, `KEY=value` lines only;
 read by `demo.sh` and the units): `DEMO_HOME`, `JITSI_DIR`, `DEMO_DOMAIN`,

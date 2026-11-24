@@ -1,0 +1,40 @@
+{"t_start": 0.0, "t_end": 6.0, "speaker": "Mira", "text": "Guten Abend, ich glaube wir sind komplett, dann starten wir mit der Tagesordnung.", "actions": [{"intent_id": "participant:name", "kind": "edit", "person": "p-mira", "payload": {"name": "Mira"}}, {"intent_id": "participant:name", "kind": "edit", "person": "p-jonas", "payload": {"name": "Jonas"}}, {"intent_id": "participant:name", "kind": "edit", "person": "p-alina", "payload": {"name": "Alina"}}, {"intent_id": "queue:room", "kind": "tap", "person": "p-mira", "payload": {"op": "request"}}]}
+{"t_start": 10.5, "t_end": 16.5, "speaker": "Jonas", "text": "Hallo zusammen, von meiner Seite gibt es nichts Neues seit dem letzten Treffen.", "actions": [{"intent_id": "queue:room", "kind": "tap", "person": "p-mira", "payload": {"op": "done"}}, {"intent_id": "queue:room", "kind": "tap", "person": "p-jonas", "payload": {"op": "request"}}]}
+{"t_start": 21.0, "t_end": 27.0, "speaker": "Alina", "text": "Ich habe die Raumanfrage beim Gemeindesaal schon losgeschickt, wir warten noch auf Antwort.", "actions": [{"intent_id": "queue:room", "kind": "tap", "person": "p-jonas", "payload": {"op": "done"}}, {"intent_id": "queue:room", "kind": "tap", "person": "p-alina", "payload": {"op": "request"}}]}
+{"t_start": 31.5, "t_end": 37.5, "speaker": "Mira", "text": "Gut, dann fangen wir mit dem Punkt Raumplanung für das Repair-Café an.", "actions": [{"intent_id": "queue:room", "kind": "tap", "person": "p-alina", "payload": {"op": "done"}}]}
+{"t_start": 42.0, "t_end": 48.0, "speaker": "Jonas", "text": "Der Gemeindesaal wäre am Samstag frei, der kleine Saal nebenan aber nicht."}
+{"t_start": 52.5, "t_end": 58.5, "speaker": "Alina", "text": "Ich würde den großen Saal bevorzugen, falls viele Leute mit Geräten kommen."}
+{"t_start": 63.0, "t_end": 69.0, "speaker": "Mira", "text": "Das sehe ich auch so, Platz für Werkbänke brauchen wir auf jeden Fall."}
+{"t_start": 73.5, "t_end": 79.5, "speaker": "Jonas", "text": "Dann würde ich sagen, wir nehmen den großen Saal und legen den Termin fest."}
+{"t_start": 84.0, "t_end": 90.0, "speaker": "Alina", "text": "Einverstanden, Samstag im großen Saal klingt für mich gut."}
+{"t_start": 94.5, "t_end": 100.5, "speaker": "Mira", "text": "Gut, dann ist das geklärt. Lasst uns jetzt zum nächsten Punkt wechseln: der Finanzierung.", "agenda_change": {"neues_thema": 0.92, "rueckkehr_thema": null, "block": "Lasst uns jetzt zum nächsten Punkt wechseln: der Finanzierung.", "previous": "Raumplanung"}}
+{"t_start": 105.0, "t_end": 111.0, "speaker": "Jonas", "text": "Für die Finanzierung könnten wir einen kleinen Teilnahmebeitrag nehmen, so fünf Euro."}
+{"t_start": 115.5, "t_end": 121.5, "speaker": "Alina", "text": "Oder wir fragen nach Spenden am Eingang, das ist niedrigschwelliger."}
+{"t_start": 126.0, "t_end": 132.0, "speaker": "Mira", "text": "Ich fände einen freiwilligen Spendenkorb am Eingang am besten, keine Pflichtgebühr."}
+{"t_start": 136.5, "t_end": 142.5, "speaker": "Jonas", "text": "Das überzeugt mich auch, dann machen wir das so."}
+{"t_start": 147.0, "t_end": 153.0, "speaker": "Alina", "text": "Gut, dann einigen wir uns auf den freiwilligen Spendenkorb."}
+{"t_start": 157.5, "t_end": 163.5, "speaker": "Mira", "text": "Dann halten wir fest: wir entscheiden uns für den freiwilligen Spendenkorb am Eingang, keine Pflichtgebühr.", "agent_reply": {"verlauf": ["Die Runde bespricht die Finanzierung des Repair-Cafés."], "entscheidungen": ["Die Gruppe entscheidet sich für einen freiwilligen Spendenkorb am Eingang statt einer Pflichtgebühr."], "aufgaben": [], "offene_fragen": [], "buehne": []}}
+{"t_start": 168.0, "t_end": 174.0, "speaker": "Jonas", "text": "Wer kümmert sich eigentlich um die Ankündigung im Stadtteilblatt?"}
+{"t_start": 178.5, "t_end": 184.5, "speaker": "Alina", "text": "Das könnte ich übernehmen, wenn mir jemand den Text gibt."}
+{"t_start": 189.0, "t_end": 195.0, "speaker": "Mira", "text": "Jonas, kannst du dich bis Freitag, dem 28. November, um die Reservierung des Gemeindesaals kümmern?"}
+{"t_start": 199.5, "t_end": 205.5, "speaker": "Jonas", "text": "Ja klar, das übernehme ich bis Freitag, dem 28. November."}
+{"t_start": 210.0, "t_end": 216.0, "speaker": "Alina", "text": "Wie machen wir das eigentlich mit der Haftung, falls während der Reparatur etwas kaputtgeht?", "agent_reply": {"verlauf": ["Es wird über die Ankündigung und die Aufgabenverteilung gesprochen."], "entscheidungen": [], "aufgaben": ["Jonas kümmert sich bis Freitag, 28. November, um die Reservierung des Gemeindesaals."], "offene_fragen": ["Wie wird die Haftung geregelt, falls während der Reparatur etwas kaputtgeht?"], "buehne": []}}
+{"t_start": 220.5, "t_end": 226.5, "speaker": "Mira", "text": "Das ist eine gute Frage, das sollten wir unbedingt noch klären."}
+{"t_start": 231.0, "t_end": 237.0, "speaker": "Jonas", "text": "Ich schau mal, ob der Verein eine Versicherung dafür hat."}
+{"t_start": 241.5, "t_end": 247.5, "speaker": "Alina", "text": "Gut, dann lassen wir die Frage erstmal offen und klären das außerhalb."}
+{"t_start": 252.0, "t_end": 258.0, "speaker": "Mira", "text": "Kommen wir zum nächsten Punkt, der Werbung für die Veranstaltung."}
+{"t_start": 262.5, "t_end": 268.5, "speaker": "Jonas", "text": "Ich könnte Flyer entwerfen und im Repair-Café-Netzwerk teilen."}
+{"t_start": 273.0, "t_end": 279.0, "speaker": "Alina", "text": "Ich frage noch beim lokalen Radiosender nach einem kurzen Hinweis."}
+{"t_start": 283.5, "t_end": 289.5, "speaker": "Mira", "text": "Hey Robo, fasse die letzten Punkte bitte kurz zusammen.", "wake_word": true, "agent_reply": {"verlauf": ["Zusammenfassung: Termin Samstag im großen Saal, Finanzierung über Spendenkorb, Jonas kümmert sich um die Reservierung, offene Frage zur Haftung, Werbung über Flyer und Radio geplant."], "entscheidungen": [], "aufgaben": [], "offene_fragen": [], "buehne": []}}
+{"t_start": 294.0, "t_end": 300.0, "speaker": "Jonas", "text": "Danke Robo, das hilft weiter."}
+{"t_start": 304.5, "t_end": 310.5, "speaker": "Alina", "text": "Gut, machen wir weiter mit der Materialliste."}
+{"t_start": 315.0, "t_end": 321.0, "speaker": "Mira", "text": "Wir brauchen Werkzeugkisten, Mehrfachsteckdosen und Verlängerungskabel."}
+{"t_start": 325.5, "t_end": 331.5, "speaker": "Jonas", "text": "Ich habe noch Werkzeug von der letzten Aktion, das bringe ich mit."}
+{"t_start": 336.0, "t_end": 342.0, "speaker": "Alina", "text": "Ich kümmere mich um Mehrfachsteckdosen und Kabel."}
+{"t_start": 346.5, "t_end": 352.5, "speaker": "Mira", "text": "Super, dann sind wir für die Ausstattung gut aufgestellt."}
+{"t_start": 357.0, "t_end": 363.0, "speaker": "Jonas", "text": "Sollen wir noch Kaffee und Kuchen organisieren für die Helfenden?"}
+{"t_start": 367.5, "t_end": 373.5, "speaker": "Alina", "text": "Das fände ich schön, ich kann einen Kuchen backen."}
+{"t_start": 378.0, "t_end": 384.0, "speaker": "Mira", "text": "Ich bringe Kaffee und Tassen mit."}
+{"t_start": 388.5, "t_end": 394.5, "speaker": "Jonas", "text": "Dann haben wir, glaube ich, alles Wichtige besprochen."}
+{"t_start": 399.0, "t_end": 405.0, "speaker": "Alina", "text": "Von meiner Seite auch, bis zum nächsten Treffen."}
+{"t_start": 409.5, "t_end": 415.5, "speaker": "Mira", "text": "Gut, dann schließen wir hier für heute. Danke euch beiden."}

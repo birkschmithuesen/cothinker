@@ -873,6 +873,35 @@ def session_paths(folder: Path, day: str, title: str | None,
             "flat": False}
 
 
+# A live contract surface (`surfaces.contract --live-pointer`, issue #161)
+# has no way to know this run's session folder in advance -- only the
+# consumer picks its name (date + title slug) once it opens it, and a
+# sibling guessing the newest folder under sessions/ can pick an older or
+# a prepared one instead and crash-loop on the missing stage state. When
+# this names a file, the surface reads it (re-reading on change) to follow
+# the session actually open instead of guessing.
+SESSION_POINTER_ENV = "COTHINKER_SESSION_POINTER"
+
+
+def write_session_pointer(run_dir: Path) -> None:
+    """Tell a live contract surface which session is current now.
+
+    A dedicated write, not folded into `SyncWindow.acquire()`: the sync
+    window's marker and lock protect the vault sync against a half-written
+    file (docs/feedback-2026-09-26.md point 9) -- a narrow, already
+    documented concern that has nothing to do with naming the current
+    session for a live view; giving that write a second, unrelated meaning
+    would not make either concern easier to read.
+
+    A no-op without `COTHINKER_SESSION_POINTER` set, so a deployment that
+    never named a pointer file sees no behaviour change.
+    """
+    pointer = os.environ.get(SESSION_POINTER_ENV, "").strip()
+    if not pointer:
+        return
+    atomic_write_text(Path(pointer), str(run_dir))
+
+
 # ========================================================= agenda + timer
 def tick_agenda_item(path: Path, index: int) -> None:
     """Flip the `index`-th checkbox (0-based, in file order) to `[x]`.
@@ -3085,6 +3114,7 @@ def main() -> int:
     path = orte["protocol"]
     if not orte["flat"]:
         run_dir.mkdir(parents=True, exist_ok=True)
+    write_session_pointer(run_dir)
     # Restart window: marker + the sync's own lock until the stage is back
     # on screen (card MM-O, feedback-2026-09-26 pt 9). Released again just
     # after `restore_stage`; taken once more for the shutdown writes.

@@ -236,6 +236,16 @@ surfaces/contract/generate_spec.py                                              
 surfaces/contract/live_player.py                                                 core:surface-api
 surfaces/contract/models.py                                                      core:surface-api
 surfaces/contract/player.py                                                      core:surface-api
+surfaces/operator/__init__.py                                                    core:surface-api
+surfaces/operator/__main__.py                                                    core:surface-api
+surfaces/operator/app.py                                                         core:surface-api
+surfaces/operator/auth.py                                                        core:surface-api
+surfaces/operator/backend.py                                                     core:surface-api
+surfaces/operator/check.py                                                       core:surface-api
+surfaces/operator/demo_backend.py                                                core:surface-api
+surfaces/operator/fixtures.py                                                    core:surface-api
+surfaces/operator/generate_spec.py                                               core:surface-api
+surfaces/operator/models.py                                                      core:surface-api
 stt/fundusapps/__init__.py                                                       stt:server
 stt/fundusapps/bbb_tap/__init__.py                                               stt:audio
 stt/fundusapps/bbb_tap/__main__.py                                               stt:audio

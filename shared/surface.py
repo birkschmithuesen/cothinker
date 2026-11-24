@@ -27,6 +27,7 @@ INTENT_KINDS = frozenset(
         "queue",
         "share",
         "graph",
+        "knowledge",
     }
 )
 

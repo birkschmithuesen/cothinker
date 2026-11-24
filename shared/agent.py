@@ -110,7 +110,8 @@ class FakeAgentPort:
     `send_turn` echoes the input text as one `text_delta` followed by
     `done`, unless `script()` has queued a reply for that exact text --
     a queued reply is consumed once, then the port falls back to the echo
-    again.
+    again. Like every adapter (target.md §2.2), a reply whose text carries
+    one of `FAILURE_MARKERS` ends `failed`, never `done`.
     """
 
     def __init__(self) -> None:
@@ -134,7 +135,14 @@ class FakeAgentPort:
         events = self._scripts.pop(text, None)
         if events is None:
             events = [Event(kind="text_delta", text=text), Event(kind="done")]
-        yield from events
+        reply: list[str] = []
+        for ev in events:
+            if ev.kind == "text_delta":
+                reply.append(ev.text)
+            if ev.kind == "done" and any(marker in "".join(reply) for marker in FAILURE_MARKERS):
+                yield Event(kind="failed", reason="failure_marker", usage=ev.usage)
+            else:
+                yield ev
 
     def stop(self, session: Session) -> None:
         self.stopped.append(session)

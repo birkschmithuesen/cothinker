@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<!--
+  Deliberately broken operator surface (issue #159's mutation proof):
+  otherwise identical to surfaces/operator/examples/minimal/index.html,
+  except it also fetches a host outside the contract -- its own
+  simulation data, the rule the check must catch -- and a path on the
+  contract origin outside the allowed operator paths.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Broken operator reference surface</title>
+</head>
+<body>
+  <h1 id="running"></h1>
+  <div id="updates"></div>
+  <script>
+    const params = new URLSearchParams(location.search);
+    const api = params.get("api") || "/operator/";
+    const token = params.get("token") || "";
+    const authHeaders = { "Authorization": "Bearer " + token };
+
+    const updates = document.getElementById("updates");
+
+    function render(status) {
+      document.getElementById("running").textContent = status.running ? "running" : "stopped";
+      const entry = document.createElement("div");
+      entry.textContent = "services=" + status.services.length;
+      updates.appendChild(entry);
+    }
+
+    fetch(api + "status", { headers: authHeaders }).then((r) => r.json()).then(render);
+
+    // The bug: a request outside the contract and the surface's own
+    // static files -- its own simulation data, fetched from elsewhere.
+    fetch("https://example.invalid/own-simulation-data.json").catch(() => {});
+
+    // A second bug: a request to the contract origin, but on a path
+    // that is not an allowed operator path.
+    fetch(api + "redoc", { headers: authHeaders }).catch(() => {});
+
+    fetch(api + "events", { headers: authHeaders }).then(async (response) => {
+      const reader = response.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) return;
+        buffer += decoder.decode(value, { stream: true });
+        let boundary;
+        while ((boundary = buffer.indexOf("\n\n")) >= 0) {
+          const chunk = buffer.slice(0, boundary);
+          buffer = buffer.slice(boundary + 2);
+          const dataLine = chunk.split("\n").find((line) => line.startsWith("data:"));
+          if (dataLine) {
+            render(JSON.parse(dataLine.slice(5).trim()));
+          }
+        }
+      }
+    });
+  </script>
+</body>
+</html>

@@ -19,7 +19,7 @@ from pydantic import TypeAdapter
 
 from surfaces.contract.__main__ import build_app, build_live_app
 from surfaces.contract.live_player import LivePlayer
-from surfaces.contract.models import StageStateSnapshot, Task, TranscriptLine, ViewIntent
+from surfaces.contract.models import StageStateSnapshot, Task, TranscriptLine, ViewIntent, KnowledgeIntent
 
 FIXTURE_DIR = Path(__file__).resolve().parent / "fixtures" / "live_session"
 STEPS = [json.loads(p.read_text(encoding="utf-8")) for p in sorted(FIXTURE_DIR.glob("step-*.json"))]
@@ -94,6 +94,23 @@ def test_diff_maps_a_transcript_recent_change_to_a_transcript_recent_intent(sess
     assert intents[0].lines[0].speaker == "Mira"
 
 
+def test_diff_maps_a_knowledge_change_to_a_knowledge_intent(session_dir):
+    player = LivePlayer(session_dir)
+    before = player.snapshot
+    after = StageStateSnapshot.model_validate({**before.model_dump(), "knowledge": {
+        "topic_id": "t1", "query": "Budget and heating plan",
+        "hits": [{"kind": "finance", "title": "Budget overview",
+                  "href": "ablage/budget.md"}],
+    }})
+
+    intents = player._diff(before, after)
+
+    assert [intent.kind for intent in intents] == ["knowledge"]
+    assert isinstance(intents[0], KnowledgeIntent)
+    assert intents[0].id == "knowledge:t1"
+    assert intents[0].hits[0].href == "ablage/budget.md"
+
+
 def test_live_mode_snapshot_endpoint_serves_the_mapped_state(session_dir):
     app = build_live_app(session_dir)
     with TestClient(app) as client:
@@ -121,6 +138,77 @@ def test_a_changed_buehne_json_produces_a_view_intent_within_two_seconds(session
 
         snapshot = client.get("/snapshot").json()
         assert snapshot["queue"]["speaking"]["pid"] == STEPS[1]["queue"]["speaking"]["pid"]
+
+
+def test_live_pointer_mode_answers_503_before_the_pointer_resolves(tmp_path):
+    """issue #161: a contract started before the consumer has opened its
+    session must not crash (and so not crash-loop into a 502); it answers
+    a plain 503 until the pointer names a readable session."""
+    pointer = tmp_path / "session.path"
+    app = build_live_app(session_pointer=pointer)
+    with TestClient(app) as client:
+        response = client.get("/snapshot")
+
+        assert response.status_code == 503
+
+
+def test_live_pointer_mode_serves_the_session_the_pointer_names_not_an_older_or_a_future_one(tmp_path):
+    """issue #161: a prepared future-dated folder (only `agenda.md`, no
+    `buehne.json` yet) and an older finished session both sit on disk; the
+    contract must serve neither -- only the session the pointer names."""
+    future = tmp_path / "2099-01-01-prepared"
+    future.mkdir()
+    (future / "agenda.md").write_text("- [ ] one\n", encoding="utf-8")
+
+    older = tmp_path / "2020-01-01-old"
+    older.mkdir()
+    _write_step(older, STEPS[2])
+
+    current = tmp_path / "2026-11-24-today"
+    current.mkdir()
+    _write_step(current, STEPS[0])
+
+    pointer = tmp_path / "session.path"
+    pointer.write_text(str(current), encoding="utf-8")
+
+    app = build_live_app(session_pointer=pointer)
+    with TestClient(app) as client:
+        response = client.get("/snapshot")
+
+        assert response.status_code == 200
+        body = response.json()
+        assert body["headline"] == STEPS[0]["headline"]
+
+
+def test_live_pointer_mode_switches_session_when_the_pointer_changes_without_restarting(tmp_path):
+    """issue #161: the consumer restarting into a new session must switch
+    the already-running contract process, not require a restart of it."""
+    first = tmp_path / "2026-11-24-first"
+    first.mkdir()
+    _write_step(first, STEPS[0])
+
+    second = tmp_path / "2026-11-24-second"
+    second.mkdir()
+    _write_step(second, STEPS[2])
+
+    pointer = tmp_path / "session.path"
+    pointer.write_text(str(first), encoding="utf-8")
+
+    app = build_live_app(session_pointer=pointer)
+    with TestClient(app) as client:
+        first_body = client.get("/snapshot").json()
+        assert first_body["headline"] == STEPS[0]["headline"]
+
+        pointer.write_text(str(second), encoding="utf-8")
+
+        deadline = time.monotonic() + 5.0
+        while True:
+            response = client.get("/snapshot")
+            if response.status_code == 200 and response.json()["headline"] == STEPS[2]["headline"]:
+                break
+            if time.monotonic() > deadline:
+                raise AssertionError("contract did not follow the pointer switch in time")
+            time.sleep(0.1)
 
 
 def test_fixture_and_live_mode_payloads_validate_against_the_same_models(session_dir):

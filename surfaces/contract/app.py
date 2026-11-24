@@ -11,7 +11,7 @@ from __future__ import annotations
 import asyncio
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
@@ -54,6 +54,11 @@ def create_app(player: ScenarioPlayer | None = None, cors_origins: list[str] | N
     def get_snapshot() -> StageStateSnapshot:
         """The current stage-state snapshot."""
         assert player is not None, "no fixture scenario loaded"
+        if player.snapshot is None:
+            # Live pointer mode (issue #161) before the consumer's session
+            # resolves: say so plainly rather than crash-looping the
+            # process (the 502 issue #161 reports) or serving a guess.
+            raise HTTPException(status_code=503, detail="no live session yet")
         return player.snapshot
 
     @app.post("/actions", status_code=202, tags=["actions"])

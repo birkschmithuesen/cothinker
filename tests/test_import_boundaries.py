@@ -51,10 +51,15 @@ def git_grep_import(module: str, path: str) -> str:
     is not an error here). A pathspec for a directory that does not exist
     in the tree also just yields no match. `--untracked` also covers new,
     not-yet-added files (still honouring .gitignore); `-I` skips binaries
-    such as stray bytecode."""
+    such as stray bytecode.
+
+    Excludes every `tests/` directory (ADR 0022 level 1 put block/module
+    tests there): these boundaries are about production code, and a
+    block's own tests legitimately exercise the real gateway/stage host
+    wiring that the block itself must not import."""
     r = subprocess.run(
         ["git", "grep", "--untracked", "-I", "-nE",
-         rf"^\s*(from|import) {module}", "--", path],
+         rf"^\s*(from|import) {module}", "--", path, ":(exclude)**/tests/**"],
         cwd=REPO, capture_output=True, text=True)
     assert r.returncode in (0, 1), r.stderr
     return r.stdout

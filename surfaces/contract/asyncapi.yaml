@@ -195,6 +195,83 @@ components:
       - id
       title: GraphIntent
       type: object
+    KnowledgeHit:
+      description: 'One matching note for the current topic (`blocks/knowledge_link`,
+
+        issue #148, closing design partner''s issue #144): no model, no
+
+        network -- notes whose name or tags occur in the topic title, plus
+
+        their link neighbours.'
+      properties:
+        kind:
+          description: The note's frontmatter `type:`, or its top folder when that
+            is absent.
+          examples:
+          - finance
+          title: Kind
+          type: string
+        title:
+          description: The note's frontmatter `title:`, its first `# ` heading, or
+            its file stem.
+          examples:
+          - Budget overview
+          title: Title
+          type: string
+        href:
+          description: The note's path, relative to the wiki root.
+          examples:
+          - ablage/budget.md
+          title: Href
+          type: string
+      required:
+      - kind
+      - title
+      - href
+      title: KnowledgeHit
+      type: object
+    KnowledgeIntent:
+      description: '`knowledge:<topic_id>`: the knowledge-link block''s view intent
+
+        (kind `knowledge`, issue #148); the same shape as
+
+        `StageStateSnapshot.knowledge`, plus the envelope''s `kind`/`id`.'
+      properties:
+        topic_id:
+          description: Identity of the topic these hits belong to.
+          examples:
+          - t1
+          title: Topic Id
+          type: string
+        query:
+          description: The topic title the hits were matched against.
+          examples:
+          - Budget and heating plan
+          title: Query
+          type: string
+        hits:
+          description: Matching notes, best first.
+          items:
+            $ref: '#/components/schemas/KnowledgeHit'
+          title: Hits
+          type: array
+        kind:
+          const: knowledge
+          default: knowledge
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - knowledge:t1
+          title: Id
+          type: string
+      required:
+      - topic_id
+      - query
+      - id
+      title: KnowledgeIntent
+      type: object
     PromptIntent:
       properties:
         kind:
@@ -701,6 +778,7 @@ components:
           artefact: '#/components/schemas/ArtefactIntent'
           choice_list: '#/components/schemas/ChoiceIntent'
           graph: '#/components/schemas/GraphIntent'
+          knowledge: '#/components/schemas/KnowledgeIntent'
           prompt: '#/components/schemas/PromptIntent'
           queue: '#/components/schemas/QueueIntent'
           share: '#/components/schemas/ShareIntent'
@@ -718,5 +796,6 @@ components:
       - $ref: '#/components/schemas/QueueIntent'
       - $ref: '#/components/schemas/ShareIntent'
       - $ref: '#/components/schemas/GraphIntent'
+      - $ref: '#/components/schemas/KnowledgeIntent'
       - $ref: '#/components/schemas/TranscriptRecentIntent'
       - $ref: '#/components/schemas/TasksIntent'

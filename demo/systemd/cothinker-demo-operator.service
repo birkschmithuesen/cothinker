@@ -1,0 +1,23 @@
+[Unit]
+Description=CoThinker demo: operator console (always on, survives demo.sh stop)
+
+[Service]
+Type=simple
+EnvironmentFile=-%h/.config/cothinker-demo/demo.env
+Environment=PYTHONPATH=@REPO@
+UnsetEnvironment=PYTHONHOME
+WorkingDirectory=@REPO@
+ExecStart=@REPO@/surfaces/.venv/bin/python -m surfaces.operator --demo-kit @KIT@/demo/demo.sh --projects-file %h/.config/cothinker-demo/operator-projects.json --token-file %h/.config/cothinker-demo/operator.token --host 127.0.0.1 --port @OPERATOR_PORT@
+StandardOutput=append:@DEMO_HOME@/logs/operator.log
+StandardError=inherit
+# Unlike the other units, this one is never started or stopped by
+# demo.sh: the operator console must survive `demo.sh stop` so whoever
+# runs the deployment can see the stopped state and start it again
+# (issue #159). Restart=always keeps it that way.
+Restart=always
+RestartSec=3
+KillMode=control-group
+TimeoutStopSec=15
+
+[Install]
+WantedBy=default.target

@@ -455,6 +455,77 @@
         "title": "HistoryEntry",
         "type": "object"
       },
+      "KnowledgeHit": {
+        "description": "One matching note for the current topic (`blocks/knowledge_link`,\nissue #148, closing design partner's issue #144): no model, no\nnetwork -- notes whose name or tags occur in the topic title, plus\ntheir link neighbours.",
+        "properties": {
+          "href": {
+            "description": "The note's path, relative to the wiki root.",
+            "examples": [
+              "ablage/budget.md"
+            ],
+            "title": "Href",
+            "type": "string"
+          },
+          "kind": {
+            "description": "The note's frontmatter `type:`, or its top folder when that is absent.",
+            "examples": [
+              "finance"
+            ],
+            "title": "Kind",
+            "type": "string"
+          },
+          "title": {
+            "description": "The note's frontmatter `title:`, its first `# ` heading, or its file stem.",
+            "examples": [
+              "Budget overview"
+            ],
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "title",
+          "href"
+        ],
+        "title": "KnowledgeHit",
+        "type": "object"
+      },
+      "KnowledgeSnapshot": {
+        "description": "`content()[\"knowledge\"]`: the knowledge-link block's\n`knowledge:<topic_id>` view-intent payload, filled by\n`blocks/knowledge_link/__init__.py::_emit_knowledge()`.",
+        "properties": {
+          "hits": {
+            "description": "Matching notes, best first.",
+            "items": {
+              "$ref": "#/components/schemas/KnowledgeHit"
+            },
+            "title": "Hits",
+            "type": "array"
+          },
+          "query": {
+            "description": "The topic title the hits were matched against.",
+            "examples": [
+              "Budget and heating plan"
+            ],
+            "title": "Query",
+            "type": "string"
+          },
+          "topic_id": {
+            "description": "Identity of the topic these hits belong to.",
+            "examples": [
+              "t1"
+            ],
+            "title": "Topic Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "topic_id",
+          "query"
+        ],
+        "title": "KnowledgeSnapshot",
+        "type": "object"
+      },
       "MessageAction": {
         "properties": {
           "intent_id": {
@@ -1262,6 +1333,17 @@
               }
             ],
             "description": "An image on request, by id; `None` otherwise."
+          },
+          "knowledge": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/KnowledgeSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The latest knowledge hits for the current topic, from the `knowledge-link` block; `None` until the block has emitted one (key-absent-means-hidden, `StageState._content()`)."
           },
           "links": {
             "description": "Links shown alongside the stage.",

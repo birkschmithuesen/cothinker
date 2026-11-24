@@ -32,7 +32,19 @@ it belongs in the private one.
 
 ## 3. Building against the contract
 
-The surface contract (ADR 0019) is the only meeting point between a surface and the core:
+The surface contract (ADR 0019) is the only meeting point between a surface and the core. There are two contract
+surfaces today:
+
+- **The participant/room surface** (`surfaces/contract/`, no prefix): the stage-state snapshot and view intents
+  described below.
+- **The operator console** (`surfaces/contract/openapi.json`'s sibling `surfaces/operator/openapi.json`, prefix
+  `/operator/`, issue #159): one page for whoever runs a deployment -- `services[]`, `meeting`, `stt`, `session`
+  (project, agenda, utterances), `call`, a redacted `errors[]`, `disk`, `running`/`can_switch_project`, plus the
+  `start`/`stop`/`project` commands. Its own token, never the participant one. `docs/surface-contract.md`'s
+  "Operator console" section is the source of truth for the field list; read its generated `openapi.json`/
+  `asyncapi.yaml` rather than this list drifting out of date.
+
+Building against either one follows the same rules:
 
 - **Read** the interactive docs of the contract server (`/docs`) and the committed `surfaces/contract/openapi.json`
   (request/answer) and `surfaces/contract/asyncapi.yaml` (push channels).

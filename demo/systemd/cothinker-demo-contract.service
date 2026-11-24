@@ -3,9 +3,14 @@ Description=CoThinker demo: contract (live mode, current session's buehne.json)
 
 [Service]
 Type=simple
-# contract.env holds DEMO_SESSION_DIR, written by demo.sh start right before
-# this unit starts: the session folder's name varies per run (date + title
-# slug), so demo.sh resolves the newest one under sessions/ each start.
+# contract.env holds DEMO_SESSION_POINTER, written by demo.sh start right
+# before this unit starts: the path of a small file the consumer writes
+# its current session directory into once it opens it
+# (COTHINKER_SESSION_POINTER, cothinker-demo-consumer.service). This unit
+# re-reads that file on change (--live-pointer), so it follows the
+# consumer's actual session instead of guessing a folder, and switches
+# when the consumer opens a new one without a restart of its own
+# (issue #161).
 # fastapi/uvicorn/pydantic are not on the system Python; @REPO@/surfaces/.venv
 # is created by deploy/demo/install.sh (uv venv + pip install).
 EnvironmentFile=%h/.config/cothinker-demo/secrets.env
@@ -14,7 +19,7 @@ EnvironmentFile=%t/cothinker-demo/contract.env
 Environment=PYTHONPATH=@REPO@
 UnsetEnvironment=PYTHONHOME
 WorkingDirectory=@REPO@
-ExecStart=@REPO@/surfaces/.venv/bin/python -m surfaces.contract --live ${DEMO_SESSION_DIR} --host 127.0.0.1 --port 8092
+ExecStart=@REPO@/surfaces/.venv/bin/python -m surfaces.contract --live-pointer ${DEMO_SESSION_POINTER} --host 127.0.0.1 --port 8092
 StandardOutput=append:@DEMO_HOME@/logs/contract.log
 StandardError=inherit
 Restart=on-failure

@@ -11,7 +11,7 @@ Ported from the archive `tests/test_status_line.py` (commit 3b4a843b),
 everything about the rendered German text: `status()`, `warning()`,
 `trouble()`, `STATES`, `WARNINGS`, `DURATION_MARK`. The precedence section
 (`pick()`) moved to `blocks/status_line/line.py` instead and is ported in
-`tests/test_block_status_line.py`.
+`blocks/status_line/tests/test_status_line.py`.
 """
 from __future__ import annotations
 

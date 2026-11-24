@@ -1,0 +1,3 @@
+# surfaces/operator: test-only dependency, not needed to run the app.
+# httpx is the package fastapi.testclient.TestClient imports.
+httpx
