@@ -11,11 +11,20 @@ The speaker queue (`StageStateSnapshot.queue`, the speaker-queue block's
 `queue:room` payload) turns over in step with `agenda.speaker` /
 `agenda.next_speaker` -- it is the same queue, viewed through the
 `speaker-queue` block's own wire shape rather than the agenda's.
+
+All wall-clock labels and epoch times are built relative to the moment
+the scenario is loaded (`build_frames`'s `now`, default `time.time()`),
+not to a fixed past date -- a hardcoded date drifts out of the future
+and the item's remaining time overruns (issue #147 point 2).
 """
 from __future__ import annotations
 
+import time
+from datetime import datetime, timezone
+
 from surfaces.contract.fixtures import Frame
 from surfaces.contract.models import (
+    AgendaItemSummary,
     AgendaSnapshot,
     Decision,
     HistoryEntry,
@@ -35,19 +44,32 @@ from surfaces.contract.models import (
 
 PEOPLE = ["Mira", "Jonas", "Tamar"]
 
-_T0 = "2026-11-23T09:00:00+01:00"
-_T1 = "2026-11-23T09:02:30+01:00"
-_T2 = "2026-11-23T09:05:00+01:00"
-_T3 = "2026-11-23T09:07:30+01:00"
-_T4 = "2026-11-23T09:10:00+01:00"
-_T5 = "2026-11-23T09:18:00+01:00"
-_T6 = "2026-11-23T09:20:00+01:00"
-
-_EPOCH_START = 1732352400.0  # 2026-11-23T09:00:00+01:00
+_AGENDA_TITLES = ["Opening round", "Decisions & risks", "Closing round"]
 
 # Participant ids (speaker-queue block terms: `pid`, resolved to a display
 # `name` via a `participant:name` edit -- a fixture just fixes both up front).
 _PIDS = {"Mira": "p-mira", "Jonas": "p-jonas", "Tamar": "p-tamar"}
+
+
+def _iso(ts: float) -> str:
+    return datetime.fromtimestamp(ts, tz=timezone.utc).astimezone().isoformat(timespec="seconds")
+
+
+def _agenda_items(current: int) -> list[AgendaItemSummary]:
+    """The whole agenda list, `current`'s item marked accordingly (issue
+    #147 point 4: a fixture must fill this, not leave it empty)."""
+    items = []
+    for position, title in enumerate(_AGENDA_TITLES, start=1):
+        if position < current:
+            status = "done"
+        elif position == current:
+            status = "current"
+        elif position == current + 1:
+            status = "next"
+        else:
+            status = "open"
+        items.append(AgendaItemSummary(title=title, budget_s=300.0, status=status))
+    return items
 
 
 def _seat(person: str) -> QueueSeat:
@@ -57,187 +79,199 @@ def _seat(person: str) -> QueueSeat:
 def _queue(speaking: str, waiting: list[str]) -> QueueSnapshot:
     return QueueSnapshot(speaking=_seat(speaking), waiting=[_seat(p) for p in waiting])
 
-_OPENING = HistoryEntry(
-    id="M1", title="Opening round",
-    markdown="## Opening round\n\nEveryone names one expectation for today.",
-    set_at=_T0,
-)
-_DECISIONS_RISKS = HistoryEntry(
-    id="M2", title="Decisions & risks",
-    markdown="## Decisions & risks\n\nWhat do we lock in, what is still open?",
-    set_at=_T2,
-)
-_CLOSING = HistoryEntry(
-    id="M3", title="Closing round",
-    markdown="## Closing round\n\nTasks and who owns them.",
-    set_at=_T5,
-)
 
+def build_frames(now: float | None = None) -> list[Frame]:
+    """The scenario's frames, with every wall-clock label and epoch time
+    anchored to `now` (default: the moment this is called)."""
+    now = time.time() if now is None else now
 
-def _snapshot(**overrides) -> StageStateSnapshot:
-    base = dict(
-        version=7,
-        updated=_T0,
-        mirror="",
-        headline="Quarterly planning",
-        main=StageMain(id="M1", markdown=_OPENING.markdown, set_at=_T0),
-        history=[_OPENING],
-        decisions=[],
-        notices=[],
-        question=None,
-        links=[],
-        parked=0,
-        parked_entries=[],
-        pending=[],
-        age_visible_after_s=20,
-        follow_up_after_s=300,
-        image=None,
-        agenda=AgendaSnapshot(
-            current=1, current_text="Opening round",
-            next=2, next_text="Decisions & risks",
-            total=3, item_started_at=_EPOCH_START, item_budget_s=300.0,
-            meeting_deadline=_EPOCH_START + 1200.0,
-            people=PEOPLE, speaker="Mira", next_speaker="Jonas",
-        ),
-        queue=_queue("Mira", ["Jonas", "Tamar"]),
+    t0 = _iso(now)
+    t1 = _iso(now + 150.0)
+    t2 = _iso(now + 300.0)
+    t3 = _iso(now + 450.0)
+    t5 = _iso(now + 1080.0)
+
+    opening = HistoryEntry(
+        id="M1", title="Opening round",
+        markdown="## Opening round\n\nEveryone names one expectation for today.",
+        set_at=t0,
     )
-    base.update(overrides)
-    return StageStateSnapshot(**base)
+    decisions_risks = HistoryEntry(
+        id="M2", title="Decisions & risks",
+        markdown="## Decisions & risks\n\nWhat do we lock in, what is still open?",
+        set_at=t2,
+    )
+    closing = HistoryEntry(
+        id="M3", title="Closing round",
+        markdown="## Closing round\n\nTasks and who owns them.",
+        set_at=t5,
+    )
 
-
-FRAMES: list[Frame] = [
-    # The meeting opens: item 1 current, Mira has the floor.
-    Frame(
-        delay_s=1.5,
-        snapshot=_snapshot(),
-        view_intents=[
-            PromptIntent(id="VI1", to_person="Mira", text="What is one expectation for today?"),
-            TimerIntent(id="VI2", label="Opening round", remaining_s=300.0, budget_s=300.0),
-        ],
-    ),
-    # Mira's contribution comes in; the recent-transcript field (planned,
-    # issue #129) carries it with her name attached.
-    Frame(
-        delay_s=1.5,
-        snapshot=_snapshot(
-            mirror="Mira: I'd like us to leave with one clear owner per open risk.",
-        ),
-        view_intents=[
-            TranscriptRecentIntent(
-                id="VI3",
-                lines=[
-                    TranscriptLine(
-                        speaker="Mira", started_at=_T1,
-                        text="I'd like us to leave with one clear owner per open risk.",
-                    ),
-                ],
-            ),
-            TimerIntent(id="VI2", label="Opening round", remaining_s=180.0, budget_s=300.0),
-        ],
-    ),
-    # Agenda advances to item 2; a decision and an open question land.
-    Frame(
-        delay_s=1.5,
-        snapshot=_snapshot(
-            mirror="Jonas: Let's lock the vendor timeline now and park the rest.",
-            main=StageMain(id="M2", markdown=_DECISIONS_RISKS.markdown, set_at=_T2),
-            history=[_OPENING, _DECISIONS_RISKS],
-            decisions=[Decision(id="D1", time="from next week", text="We lock the vendor timeline as proposed.", added_at=_T2)],
-            question=Question(id="Q1", text="Who owns the migration runbook?", raised_at=_T2),
-            agenda=AgendaSnapshot(
-                current=2, current_text="Decisions & risks",
-                next=3, next_text="Closing round",
-                total=3, item_started_at=_EPOCH_START + 300.0, item_budget_s=300.0,
-                meeting_deadline=_EPOCH_START + 1200.0,
-                people=PEOPLE, speaker="Jonas", next_speaker="Tamar",
-            ),
-            queue=_queue("Jonas", ["Tamar", "Mira"]),
-        ),
-        view_intents=[
-            TranscriptRecentIntent(
-                id="VI4",
-                lines=[
-                    TranscriptLine(speaker="Mira", started_at=_T1, text="I'd like us to leave with one clear owner per open risk."),
-                    TranscriptLine(speaker="Jonas", started_at=_T2, text="Let's lock the vendor timeline now and park the rest."),
-                ],
-            ),
-        ],
-    ),
-    # Speaker queue turns over to Tamar; another contribution comes in.
-    Frame(
-        delay_s=1.5,
-        snapshot=_snapshot(
-            mirror="Tamar: I can take the migration runbook, but need a week.",
-            main=StageMain(id="M2", markdown=_DECISIONS_RISKS.markdown, set_at=_T2),
-            history=[_OPENING, _DECISIONS_RISKS],
-            decisions=[Decision(id="D1", time="from next week", text="We lock the vendor timeline as proposed.", added_at=_T2)],
-            question=Question(id="Q1", text="Who owns the migration runbook?", raised_at=_T2),
-            agenda=AgendaSnapshot(
-                current=2, current_text="Decisions & risks",
-                next=3, next_text="Closing round",
-                total=3, item_started_at=_EPOCH_START + 300.0, item_budget_s=300.0,
-                meeting_deadline=_EPOCH_START + 1200.0,
-                people=PEOPLE, speaker="Tamar", next_speaker="Mira",
-            ),
-            queue=_queue("Tamar", ["Mira", "Jonas"]),
-        ),
-        view_intents=[
-            TranscriptRecentIntent(
-                id="VI5",
-                lines=[
-                    TranscriptLine(speaker="Jonas", started_at=_T2, text="Let's lock the vendor timeline now and park the rest."),
-                    TranscriptLine(speaker="Tamar", started_at=_T3, text="I can take the migration runbook, but need a week."),
-                ],
-            ),
-        ],
-    ),
-    # A short pause.
-    Frame(
-        delay_s=1.5,
-        snapshot=_snapshot(
+    def snapshot(**overrides) -> StageStateSnapshot:
+        base = dict(
+            version=7,
+            updated=t0,
             mirror="",
-            main=StageMain(id="M2", markdown=_DECISIONS_RISKS.markdown, set_at=_T2),
-            history=[_OPENING, _DECISIONS_RISKS],
-            decisions=[Decision(id="D1", time="from next week", text="We lock the vendor timeline as proposed.", added_at=_T2)],
-            question=Question(id="Q1", text="Who owns the migration runbook?", raised_at=_T2),
+            headline="Quarterly planning",
+            main=StageMain(id="M1", markdown=opening.markdown, set_at=t0),
+            history=[opening],
+            decisions=[],
+            notices=[],
+            question=None,
+            links=[],
+            parked=0,
+            parked_entries=[],
+            pending=[],
+            age_visible_after_s=20,
+            follow_up_after_s=300,
+            image=None,
             agenda=AgendaSnapshot(
-                current=2, current_text="Decisions & risks",
-                next=3, next_text="Closing round",
-                total=3, item_started_at=_EPOCH_START + 300.0, item_budget_s=300.0,
-                meeting_deadline=_EPOCH_START + 1200.0,
-                people=PEOPLE, speaker="Tamar", next_speaker="Mira",
-            ),
-            queue=_queue("Tamar", ["Mira", "Jonas"]),
-        ),
-        view_intents=[StatusIntent(id="VI6", text="Pause for coffee", severity="info")],
-    ),
-    # The meeting resumes at the closing round; the question is resolved
-    # and tasks are named -- the tasks field (planned, issue #129) is
-    # populated for the fixture.
-    Frame(
-        delay_s=1.5,
-        snapshot=_snapshot(
-            mirror="Mira: Good, let's close with who does what.",
-            main=StageMain(id="M3", markdown=_CLOSING.markdown, set_at=_T5),
-            history=[_OPENING, _DECISIONS_RISKS, _CLOSING],
-            decisions=[Decision(id="D1", time="from next week", text="We lock the vendor timeline as proposed.", added_at=_T2)],
-            question=Question(id="Q1", text="Who owns the migration runbook?", raised_at=_T2, state="resolved", resolution="Tamar"),
-            agenda=AgendaSnapshot(
-                current=3, current_text="Closing round",
-                next=None, next_text=None,
-                total=3, item_started_at=_EPOCH_START + 600.0, item_budget_s=300.0,
-                meeting_deadline=_EPOCH_START + 1200.0,
+                current=1, current_text="Opening round",
+                next=2, next_text="Decisions & risks",
+                total=3, item_started_at=now, item_budget_s=300.0,
+                meeting_deadline=now + 1200.0,
                 people=PEOPLE, speaker="Mira", next_speaker="Jonas",
+                items=_agenda_items(1),
             ),
+            queue=_queue("Mira", ["Jonas", "Tamar"]),
+            tasks=[],
+            transcript_recent=[],
+        )
+        base.update(overrides)
+        return StageStateSnapshot(**base)
+
+    transcript_after_mira = [
+        TranscriptLine(speaker="Mira", started_at=t1, text="I'd like us to leave with one clear owner per open risk."),
+    ]
+    transcript_after_jonas = transcript_after_mira + [
+        TranscriptLine(speaker="Jonas", started_at=t2, text="Let's lock the vendor timeline now and park the rest."),
+    ]
+    transcript_after_tamar = [
+        TranscriptLine(speaker="Jonas", started_at=t2, text="Let's lock the vendor timeline now and park the rest."),
+        TranscriptLine(speaker="Tamar", started_at=t3, text="I can take the migration runbook, but need a week."),
+    ]
+    tasks_named = [
+        Task(text="Send the updated timeline to the vendor.", person="Jonas", due="2026-12-01"),
+        Task(text="Draft the migration runbook.", person="Tamar", due="2026-11-30"),
+    ]
+
+    return [
+        # The meeting opens: item 1 current, Mira has the floor.
+        Frame(
+            delay_s=1.5,
+            snapshot=snapshot(),
+            view_intents=[
+                PromptIntent(id="VI1", to_person="Mira", text="What is one expectation for today?"),
+                TimerIntent(id="VI2", label="Opening round", remaining_s=300.0, budget_s=300.0, items=_agenda_items(1)),
+            ],
         ),
-        view_intents=[
-            TasksIntent(
-                id="VI7",
-                tasks=[
-                    Task(text="Send the updated timeline to the vendor.", person="Jonas", due="2026-12-01"),
-                    Task(text="Draft the migration runbook.", person="Tamar", due="2026-11-30"),
-                ],
+        # Mira's contribution comes in; the recent-transcript field (planned,
+        # issue #129) carries it with her name attached.
+        Frame(
+            delay_s=1.5,
+            snapshot=snapshot(
+                mirror="Mira: I'd like us to leave with one clear owner per open risk.",
+                transcript_recent=transcript_after_mira,
             ),
-        ],
-    ),
-]
+            view_intents=[
+                TranscriptRecentIntent(id="VI3", lines=transcript_after_mira),
+                TimerIntent(id="VI2", label="Opening round", remaining_s=180.0, budget_s=300.0, items=_agenda_items(1)),
+            ],
+        ),
+        # Agenda advances to item 2; a decision and an open question land.
+        Frame(
+            delay_s=1.5,
+            snapshot=snapshot(
+                mirror="Jonas: Let's lock the vendor timeline now and park the rest.",
+                main=StageMain(id="M2", markdown=decisions_risks.markdown, set_at=t2),
+                history=[opening, decisions_risks],
+                decisions=[Decision(id="D1", time="from next week", text="We lock the vendor timeline as proposed.", added_at=t2)],
+                question=Question(id="Q1", text="Who owns the migration runbook?", raised_at=t2),
+                agenda=AgendaSnapshot(
+                    current=2, current_text="Decisions & risks",
+                    next=3, next_text="Closing round",
+                    total=3, item_started_at=now + 300.0, item_budget_s=300.0,
+                    meeting_deadline=now + 1200.0,
+                    people=PEOPLE, speaker="Jonas", next_speaker="Tamar",
+                    items=_agenda_items(2),
+                ),
+                queue=_queue("Jonas", ["Tamar", "Mira"]),
+                transcript_recent=transcript_after_jonas,
+            ),
+            view_intents=[
+                TranscriptRecentIntent(id="VI4", lines=transcript_after_jonas),
+            ],
+        ),
+        # Speaker queue turns over to Tamar; another contribution comes in.
+        Frame(
+            delay_s=1.5,
+            snapshot=snapshot(
+                mirror="Tamar: I can take the migration runbook, but need a week.",
+                main=StageMain(id="M2", markdown=decisions_risks.markdown, set_at=t2),
+                history=[opening, decisions_risks],
+                decisions=[Decision(id="D1", time="from next week", text="We lock the vendor timeline as proposed.", added_at=t2)],
+                question=Question(id="Q1", text="Who owns the migration runbook?", raised_at=t2),
+                agenda=AgendaSnapshot(
+                    current=2, current_text="Decisions & risks",
+                    next=3, next_text="Closing round",
+                    total=3, item_started_at=now + 300.0, item_budget_s=300.0,
+                    meeting_deadline=now + 1200.0,
+                    people=PEOPLE, speaker="Tamar", next_speaker="Mira",
+                    items=_agenda_items(2),
+                ),
+                queue=_queue("Tamar", ["Mira", "Jonas"]),
+                transcript_recent=transcript_after_tamar,
+            ),
+            view_intents=[
+                TranscriptRecentIntent(id="VI5", lines=transcript_after_tamar),
+            ],
+        ),
+        # A short pause.
+        Frame(
+            delay_s=1.5,
+            snapshot=snapshot(
+                mirror="",
+                main=StageMain(id="M2", markdown=decisions_risks.markdown, set_at=t2),
+                history=[opening, decisions_risks],
+                decisions=[Decision(id="D1", time="from next week", text="We lock the vendor timeline as proposed.", added_at=t2)],
+                question=Question(id="Q1", text="Who owns the migration runbook?", raised_at=t2),
+                agenda=AgendaSnapshot(
+                    current=2, current_text="Decisions & risks",
+                    next=3, next_text="Closing round",
+                    total=3, item_started_at=now + 300.0, item_budget_s=300.0,
+                    meeting_deadline=now + 1200.0,
+                    people=PEOPLE, speaker="Tamar", next_speaker="Mira",
+                    items=_agenda_items(2),
+                ),
+                queue=_queue("Tamar", ["Mira", "Jonas"]),
+                transcript_recent=transcript_after_tamar,
+            ),
+            view_intents=[StatusIntent(id="VI6", text="Pause for coffee", severity="info")],
+        ),
+        # The meeting resumes at the closing round; the question is resolved
+        # and tasks are named -- the tasks field (planned, issue #129) is
+        # populated for the fixture.
+        Frame(
+            delay_s=1.5,
+            snapshot=snapshot(
+                mirror="Mira: Good, let's close with who does what.",
+                main=StageMain(id="M3", markdown=closing.markdown, set_at=t5),
+                history=[opening, decisions_risks, closing],
+                decisions=[Decision(id="D1", time="from next week", text="We lock the vendor timeline as proposed.", added_at=t2)],
+                question=Question(id="Q1", text="Who owns the migration runbook?", raised_at=t2, state="resolved", resolution="Tamar"),
+                agenda=AgendaSnapshot(
+                    current=3, current_text="Closing round",
+                    next=None, next_text=None,
+                    total=3, item_started_at=now + 600.0, item_budget_s=300.0,
+                    meeting_deadline=now + 1200.0,
+                    people=PEOPLE, speaker="Mira", next_speaker="Jonas",
+                    items=_agenda_items(3),
+                ),
+                transcript_recent=transcript_after_tamar,
+                tasks=tasks_named,
+            ),
+            view_intents=[
+                TasksIntent(id="VI7", tasks=tasks_named),
+            ],
+        ),
+    ]

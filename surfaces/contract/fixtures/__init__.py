@@ -27,9 +27,10 @@ class Frame:
 
 
 def load_scenario(name: str) -> list[Frame]:
-    """The frames of fixture scenario `name`, raising for an unknown one."""
+    """The frames of fixture scenario `name`, built anew (times anchored to
+    now) each call; raises for an unknown scenario."""
     if name == "meeting":
         from surfaces.contract.fixtures import meeting
 
-        return meeting.FRAMES
+        return meeting.build_frames()
     raise ValueError(f"unknown fixture scenario: {name!r}")
