@@ -6,7 +6,8 @@ room, feeds each participant's audio track into the STT server, and the
 consumer writes the protocol with the Jitsi display names as speakers.
 
 ```
-browser --> nginx --> /demo/            demo/page/index.html (static)
+browser --> nginx --> /meeting/          demo/page/index.html (static, call only)
+                      /meeting-split/    demo/page/split.html (static, call + stage)
                       /demo/api/        demo/session_server.py   (127.0.0.1:8091)
                       /demo/stage/      stage                    (127.0.0.1:8020)
                       /demo/contract/   surfaces.contract --live (127.0.0.1:8092)
@@ -15,10 +16,17 @@ Robo: Chrome (CDP 9223) -> tap -> STT (5051, PCM 5053) -> consumer -> project di
 Design partner: surfaces.contract --fixtures meeting (127.0.0.1:8093, always on, outside demo.sh)
 ```
 
-The page asks for a display name (cookie `ct_demo_name`), calls
-`api/session?t=<demo token>&name=<name>` and gets `{domain, room, jwt,
-stage_path}`. The JWT is minted server side; nothing is minted in the
-browser. A wrong token gets an empty 404.
+Two static pages, one session endpoint (ADR 0021). `demo/page/index.html`
+is call-only, full screen; it is the link handed to participants.
+`demo/page/split.html` is the call and the stage side by side, for
+single-screen setups. Both ask for a display name once (cookie
+`ct_demo_name`, `path=/` so it covers either page) and call the one
+session endpoint (`api/session?t=<demo token>&name=<name>`), which
+returns `{domain, room, jwt, stage_path}`. The JWT is minted server side;
+nothing is minted in the browser. A wrong token gets an empty 404.
+`split.html` is served from a different nginx location than the session
+endpoint it calls, so it addresses it by absolute path rather than a
+relative one, and resolves `stage_path` against that same prefix.
 
 ## Commands
 
@@ -50,7 +58,8 @@ with `repo/`, `project/`, `audio/`, `logs/`), `@REPO@` (CoThinker checkout)
 `@KIT@` (directory that contains this `demo/` folder; set `DEMO_KIT` in
 `demo.env` if it is not the checkout) and `@HERMES_PY@` (Python that can import the hermes worker), copy them to
 `~/.config/systemd/user/`, run `systemctl --user daemon-reload`. Serve
-`demo/page/` under `/demo/` and proxy the paths above (nginx). Run
+`demo/page/index.html` under `/meeting/` and `demo/page/split.html` under
+`/meeting-split/` (one nginx location each) and proxy the paths above. Run
 `git init` once in `@DEMO_HOME@/project`.
 
 ## Environment files (names only, values never committed)
@@ -68,7 +77,7 @@ certificate is self-signed), `HERMES_PROFILE_DIR`, `LANE_MODEL`,
 `LANE_PROVIDER`.
 
 Jitsi needs `config.disableInitialGUM=false` (the image default is true, so
-nobody would get a microphone track); the page sets it in `configOverwrite`.
+nobody would get a microphone track); both pages set it in `configOverwrite`.
 
 ## Acceptance helpers (`demo/acceptance/`)
 
