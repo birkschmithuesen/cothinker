@@ -1401,6 +1401,17 @@
             ],
             "title": "Version",
             "type": "integer"
+          },
+          "voice": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/VoiceSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Who is talking right now, from the `voice-attribution` block's per-track/STT speaker attribution; `None` when that block is absent from the session (key-absent-means-hidden, `StageState._content()`). Separate from `queue`: `queue` describes who holds the floor by TAPPING to join the speaker queue, `voice` describes who is actually talking, independent of anyone using the queue at all -- an online meeting where nobody taps still has a non-empty `voice.speaking`."
           }
         },
         "required": [
@@ -1614,6 +1625,78 @@
           "text"
         ],
         "title": "VoiceAction",
+        "type": "object"
+      },
+      "VoiceRecentEntry": {
+        "description": "One entry of `voice.recent`: a distinct past speaker and when they\nwere last heard.",
+        "properties": {
+          "last_at": {
+            "description": "Wall-clock label of when this person was last heard speaking.",
+            "examples": [
+              "2026-11-23T09:10:00+01:00"
+            ],
+            "title": "Last At",
+            "type": "string"
+          },
+          "name": {
+            "description": "Display name of a past speaker.",
+            "examples": [
+              "Jonas"
+            ],
+            "title": "Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "name",
+          "last_at"
+        ],
+        "title": "VoiceRecentEntry",
+        "type": "object"
+      },
+      "VoiceSnapshot": {
+        "description": "`content()[\"voice\"]`: who is talking right now, attributed from the\naudio track / STT speaker label (`blocks/voice_attribution/`) -- NOT\nwho holds the floor by tapping to join the speaker queue (`queue`).\n`None` fields mean nobody is currently attributed as speaking.",
+        "properties": {
+          "recent": {
+            "description": "The last 5 distinct speakers before `speaking`, newest first.",
+            "items": {
+              "$ref": "#/components/schemas/VoiceRecentEntry"
+            },
+            "title": "Recent",
+            "type": "array"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Wall-clock label of when `speaking` started; `None` when `speaking` is `None`.",
+            "examples": [
+              "2026-11-23T09:12:00+01:00"
+            ],
+            "title": "Since"
+          },
+          "speaking": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Display name of the participant whose track is currently active; `None` when nobody is.",
+            "examples": [
+              "Mira"
+            ],
+            "title": "Speaking"
+          }
+        },
+        "title": "VoiceSnapshot",
         "type": "object"
       }
     }

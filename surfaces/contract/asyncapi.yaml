@@ -695,6 +695,77 @@ components:
       type: object
       x-issue: https://github.com/birkschmithuesen/cothinker/issues/129
       x-status: planned
+    VoiceIntent:
+      description: '`voice:room`: the voice-attribution block''s view intent (kind
+
+        `voice`, `blocks/voice_attribution/__init__.py`); the same shape as
+
+        `StageStateSnapshot.voice`.'
+      properties:
+        kind:
+          const: voice
+          default: voice
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - voice:room
+          title: Id
+          type: string
+        speaking:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Display name of the participant whose track is currently active;
+            `None` when nobody is.
+          examples:
+          - Mira
+          title: Speaking
+        since:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: Wall-clock label of when `speaking` started; `None` when `speaking`
+            is `None`.
+          examples:
+          - '2026-11-23T09:12:00+01:00'
+          title: Since
+        recent:
+          description: The last 5 distinct speakers before `speaking`, newest first.
+          items:
+            $ref: '#/components/schemas/VoiceRecentEntry'
+          title: Recent
+          type: array
+      required:
+      - id
+      title: VoiceIntent
+      type: object
+    VoiceRecentEntry:
+      description: 'One entry of `voice.recent`: a distinct past speaker and when
+        they
+
+        were last heard.'
+      properties:
+        name:
+          description: Display name of a past speaker.
+          examples:
+          - Jonas
+          title: Name
+          type: string
+        last_at:
+          description: Wall-clock label of when this person was last heard speaking.
+          examples:
+          - '2026-11-23T09:10:00+01:00'
+          title: Last At
+          type: string
+      required:
+      - name
+      - last_at
+      title: VoiceRecentEntry
+      type: object
     ViewIntent:
       discriminator:
         mapping:
@@ -708,6 +779,7 @@ components:
           tasks: '#/components/schemas/TasksIntent'
           timer: '#/components/schemas/TimerIntent'
           transcript:recent: '#/components/schemas/TranscriptRecentIntent'
+          voice: '#/components/schemas/VoiceIntent'
         propertyName: kind
       oneOf:
       - $ref: '#/components/schemas/PromptIntent'
@@ -716,6 +788,7 @@ components:
       - $ref: '#/components/schemas/StatusIntent'
       - $ref: '#/components/schemas/ArtefactIntent'
       - $ref: '#/components/schemas/QueueIntent'
+      - $ref: '#/components/schemas/VoiceIntent'
       - $ref: '#/components/schemas/ShareIntent'
       - $ref: '#/components/schemas/GraphIntent'
       - $ref: '#/components/schemas/TranscriptRecentIntent'
