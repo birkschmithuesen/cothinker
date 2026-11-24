@@ -45,6 +45,10 @@
         box.textContent = "Status: " + intent.text;
       } else if (intent.kind === "transcript:recent") {
         box.innerHTML = "Transcript: " + renderList(intent.lines, (line) => (line.speaker || "?") + ": " + line.text);
+      } else if (intent.kind === "transcript_partial") {
+        box.textContent = intent.text
+          ? "Partial: " + (intent.speaker || "?") + ": " + intent.text
+          : "Partial: (cleared)";
       } else if (intent.kind === "tasks") {
         box.innerHTML = "Tasks: " + renderList(intent.tasks, (task) => task.text + (task.person ? " (" + task.person + ")" : ""));
       } else {

@@ -834,8 +834,68 @@ components:
       - text
       title: TranscriptLine
       type: object
+    TranscriptPartialIntent:
+      description: '`transcript:partial`: the live-transcript block''s utterance in
+
+        progress (issue #181) -- the tentative tail the stage panel shows
+
+        grey until the matching final arrives. No snapshot field of its own:
+
+        it is transient by design, cleared (empty `text`) the moment its
+
+        final lands, so a surface loading mid-session simply waits for the
+
+        next partial rather than seeing a stale one.'
+      properties:
+        kind:
+          const: transcript_partial
+          default: transcript_partial
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - transcript:partial
+          title: Id
+          type: string
+        turn_id:
+          description: Groups every partial of one utterance with the final that closes
+            it.
+          examples:
+          - 01HX7Z
+          title: Turn Id
+          type: string
+        speaker:
+          default: ''
+          description: Who is talking; empty when attribution is unsure.
+          examples:
+          - Tamar
+          title: Speaker
+          type: string
+        text:
+          description: The tentative text so far; empty once the final for this turn_id
+            has landed.
+          examples:
+          - Let's park the vendor q
+          title: Text
+          type: string
+        started_at:
+          description: Wall-clock label of when this turn started.
+          examples:
+          - '2026-11-23T09:14:02+01:00'
+          title: Started At
+          type: string
+      required:
+      - id
+      - turn_id
+      - text
+      - started_at
+      title: TranscriptPartialIntent
+      type: object
     TranscriptRecentIntent:
-      description: 'The last three contributions. Not wired yet, see issue #129.'
+      description: '`transcript:recent`: the live-transcript block''s last 10 finished
+
+        lines (issue #181), the same shape as `StageStateSnapshot.transcript_recent`.'
       properties:
         kind:
           const: transcript:recent
@@ -849,7 +909,7 @@ components:
           title: Id
           type: string
         lines:
-          description: The last three contributions, oldest first.
+          description: The last 10 finished lines, oldest first.
           examples:
           - []
           items:
@@ -861,8 +921,6 @@ components:
       - lines
       title: TranscriptRecentIntent
       type: object
-      x-issue: https://github.com/birkschmithuesen/cothinker/issues/129
-      x-status: planned
     VoiceIntent:
       description: '`voice:room`: the voice-attribution block''s view intent (kind
 
@@ -949,6 +1007,7 @@ components:
           tasks: '#/components/schemas/TasksIntent'
           timer: '#/components/schemas/TimerIntent'
           transcript:recent: '#/components/schemas/TranscriptRecentIntent'
+          transcript_partial: '#/components/schemas/TranscriptPartialIntent'
           voice: '#/components/schemas/VoiceIntent'
         propertyName: kind
       oneOf:
@@ -963,5 +1022,6 @@ components:
       - $ref: '#/components/schemas/GraphIntent'
       - $ref: '#/components/schemas/KnowledgeIntent'
       - $ref: '#/components/schemas/TranscriptRecentIntent'
+      - $ref: '#/components/schemas/TranscriptPartialIntent'
       - $ref: '#/components/schemas/TasksIntent'
       - $ref: '#/components/schemas/ListenIntent'

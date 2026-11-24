@@ -384,13 +384,12 @@ class StageStateSnapshot(BaseModel):
     )
     transcript_recent: list[TranscriptLine] = Field(
         default_factory=list,
-        description="The last three contributions, oldest first; carries"
+        description="The last 10 finished lines, oldest first; carries"
         " the same content as the latest `transcript:recent` view intent,"
         " so a surface loaded mid-session sees it without waiting for the"
-        " next event. The core does not wire this up yet (issue #129); a"
-        " fixture populates it.",
+        " next event. Filled live by the `live-transcript` block"
+        " (issue #181).",
         examples=[[]],
-        json_schema_extra=_planned(),
     )
     knowledge: KnowledgeSnapshot | None = Field(
         default=None,
@@ -555,13 +554,28 @@ class ListenIntent(BaseModel):
 
 
 class TranscriptRecentIntent(BaseModel):
-    """The last three contributions. Not wired yet, see issue #129."""
-
-    model_config = ConfigDict(json_schema_extra=_planned())
+    """`transcript:recent`: the live-transcript block's last 10 finished
+    lines (issue #181), the same shape as `StageStateSnapshot.transcript_recent`."""
 
     kind: Literal["transcript:recent"] = "transcript:recent"
     id: str = Field(description="Identity a user action refers back to.", examples=["VI6"])
-    lines: list[TranscriptLine] = Field(description="The last three contributions, oldest first.", examples=[[]])
+    lines: list[TranscriptLine] = Field(description="The last 10 finished lines, oldest first.", examples=[[]])
+
+
+class TranscriptPartialIntent(BaseModel):
+    """`transcript:partial`: the live-transcript block's utterance in
+    progress (issue #181) -- the tentative tail the stage panel shows
+    grey until the matching final arrives. No snapshot field of its own:
+    it is transient by design, cleared (empty `text`) the moment its
+    final lands, so a surface loading mid-session simply waits for the
+    next partial rather than seeing a stale one."""
+
+    kind: Literal["transcript_partial"] = "transcript_partial"
+    id: str = Field(description="Identity a user action refers back to.", examples=["transcript:partial"])
+    turn_id: str = Field(description="Groups every partial of one utterance with the final that closes it.", examples=["01HX7Z"])
+    speaker: str = Field(default="", description="Who is talking; empty when attribution is unsure.", examples=["Tamar"])
+    text: str = Field(description="The tentative text so far; empty once the final for this turn_id has landed.", examples=["Let's park the vendor q"])
+    started_at: str = Field(description="Wall-clock label of when this turn started.", examples=["2026-11-23T09:14:02+01:00"])
 
 
 class TasksIntent(BaseModel):
@@ -587,6 +601,7 @@ ViewIntent = Annotated[
         GraphIntent,
         KnowledgeIntent,
         TranscriptRecentIntent,
+        TranscriptPartialIntent,
         TasksIntent,
         ListenIntent,
     ],

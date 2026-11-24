@@ -1581,7 +1581,7 @@
             "x-status": "planned"
           },
           "transcript_recent": {
-            "description": "The last three contributions, oldest first; carries the same content as the latest `transcript:recent` view intent, so a surface loaded mid-session sees it without waiting for the next event. The core does not wire this up yet (issue #129); a fixture populates it.",
+            "description": "The last 10 finished lines, oldest first; carries the same content as the latest `transcript:recent` view intent, so a surface loaded mid-session sees it without waiting for the next event. Filled live by the `live-transcript` block (issue #181).",
             "examples": [
               []
             ],
@@ -1589,9 +1589,7 @@
               "$ref": "#/components/schemas/TranscriptLine"
             },
             "title": "Transcript Recent",
-            "type": "array",
-            "x-issue": "https://github.com/birkschmithuesen/cothinker/issues/129",
-            "x-status": "planned"
+            "type": "array"
           },
           "updated": {
             "description": "Wall-clock label of the last update.",

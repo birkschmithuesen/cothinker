@@ -7,6 +7,13 @@ Two of the pushed view intents (`transcript:recent`, `tasks`) are fields
 the core cannot fill yet (issue #129); this fixture populates them anyway
 so a surface can design against their shape, per ADR 0019 point 3.
 
+`transcript:partial` (issue #181) plays Mira's opening contribution as a
+growing partial -- two tentative updates, then the final that clears it
+(empty text) in the same frame `transcript:recent` picks the finished
+line up. It carries no snapshot field of its own (unlike
+`transcript:recent`): it is transient by design, so a surface that loads
+mid-session simply sees no in-progress line until the next partial.
+
 The speaker queue (`StageStateSnapshot.queue`, the speaker-queue block's
 `queue:room` payload) turns over in step with `agenda.speaker` /
 `agenda.next_speaker` -- it is the same queue, viewed through the
@@ -52,6 +59,7 @@ from surfaces.contract.models import (
     TasksIntent,
     TimerIntent,
     TranscriptLine,
+    TranscriptPartialIntent,
     TranscriptRecentIntent,
     VoiceIntent,
     VoiceSnapshot,
@@ -199,8 +207,29 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 VoiceIntent(id="voice:room", speaking="Jonas", since=t0, recent=[]),
             ],
         ),
+        # Mira's contribution builds up live: two tentative partials for
+        # the same turn, growing (issue #181), before the final below
+        # clears it.
+        Frame(
+            delay_s=0.5,
+            snapshot=snapshot(),
+            view_intents=[
+                TranscriptPartialIntent(id="transcript:partial", turn_id="mira-1",
+                                        speaker="Mira", text="I'd like us to", started_at=t1),
+            ],
+        ),
+        Frame(
+            delay_s=0.5,
+            snapshot=snapshot(),
+            view_intents=[
+                TranscriptPartialIntent(id="transcript:partial", turn_id="mira-1",
+                                        speaker="Mira", text="I'd like us to leave with one clear owner",
+                                        started_at=t1),
+            ],
+        ),
         # Mira's contribution comes in; the recent-transcript field (planned,
-        # issue #129) carries it with her name attached.
+        # issue #129) carries it with her name attached, and the partial
+        # above clears (empty text, same turn_id).
         Frame(
             delay_s=1.5,
             snapshot=snapshot(
@@ -210,6 +239,8 @@ def build_frames(now: float | None = None) -> list[Frame]:
             ),
             view_intents=[
                 TranscriptRecentIntent(id="VI3", lines=transcript_after_mira),
+                TranscriptPartialIntent(id="transcript:partial", turn_id="mira-1",
+                                        speaker="Mira", text="", started_at=t1),
                 TimerIntent(id="VI2", label="Opening round", remaining_s=180.0, budget_s=300.0, items=_agenda_items(1)),
                 VoiceIntent(id="voice:room", speaking="Tamar", since=t1, recent=[{"name": "Jonas", "last_at": t0}]),
             ],
