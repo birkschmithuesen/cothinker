@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<!--
+  Minimal reference surface (ADR 0019 point 4, issue #142): the surface
+  conformance check's "good" example. Uses only what the contract serves
+  -- GET /snapshot, GET /events (SSE) -- renders every intent kind the
+  "meeting" fixture scenario sends, and logs `dropped <kind>` for any
+  other kind instead of guessing at its shape (ADR 0006).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Minimal reference surface</title>
+</head>
+<body>
+  <h1 id="headline"></h1>
+  <div id="view"></div>
+  <script>
+    const api = new URLSearchParams(location.search).get("api") || "/";
+
+    fetch(api + "snapshot")
+      .then((response) => response.json())
+      .then((snapshot) => {
+        document.getElementById("headline").textContent = snapshot.headline || "";
+      });
+
+    const view = document.getElementById("view");
+
+    function renderList(items, toLine) {
+      if (!items || items.length === 0) {
+        return "(none yet)";
+      }
+      return items.map(toLine).join("<br>");
+    }
+
+    function render(intent) {
+      const box = document.createElement("div");
+      box.className = "intent intent-" + intent.kind.replace(":", "-");
+      box.dataset.intentId = intent.id;
+
+      if (intent.kind === "prompt") {
+        box.textContent = "Prompt: " + intent.text;
+      } else if (intent.kind === "timer") {
+        box.textContent = intent.label + ": " + intent.remaining_s + "s";
+      } else if (intent.kind === "status") {
+        box.textContent = "Status: " + intent.text;
+      } else if (intent.kind === "transcript:recent") {
+        box.innerHTML = "Transcript: " + renderList(intent.lines, (line) => (line.speaker || "?") + ": " + line.text);
+      } else if (intent.kind === "tasks") {
+        box.innerHTML = "Tasks: " + renderList(intent.tasks, (task) => task.text + (task.person ? " (" + task.person + ")" : ""));
+      } else {
+        console.log("dropped " + intent.kind);
+        return;
+      }
+
+      view.appendChild(box);
+    }
+
+    const events = new EventSource(api + "events");
+    events.addEventListener("view-intent", (event) => {
+      render(JSON.parse(event.data));
+    });
+  </script>
+</body>
+</html>

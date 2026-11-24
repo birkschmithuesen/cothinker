@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<!--
+  Deliberately broken surface (issue #142's mutation proof): otherwise
+  identical to surfaces/contract/examples/minimal/index.html, except it
+  also fetches a host outside the contract -- the "no own simulation
+  data" rule the check must catch.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Broken reference surface</title>
+</head>
+<body>
+  <h1 id="headline"></h1>
+  <div id="view"></div>
+  <script>
+    const api = new URLSearchParams(location.search).get("api") || "/";
+
+    fetch(api + "snapshot")
+      .then((response) => response.json())
+      .then((snapshot) => {
+        document.getElementById("headline").textContent = snapshot.headline || "";
+      });
+
+    // The bug: a request outside the contract and the surface's own
+    // static files -- its own simulation data, fetched from elsewhere.
+    fetch("https://example.invalid/own-simulation-data.json").catch(() => {});
+
+    const view = document.getElementById("view");
+
+    function renderList(items, toLine) {
+      if (!items || items.length === 0) {
+        return "(none yet)";
+      }
+      return items.map(toLine).join("<br>");
+    }
+
+    function render(intent) {
+      const box = document.createElement("div");
+      box.className = "intent intent-" + intent.kind.replace(":", "-");
+      box.dataset.intentId = intent.id;
+
+      if (intent.kind === "prompt") {
+        box.textContent = "Prompt: " + intent.text;
+      } else if (intent.kind === "timer") {
+        box.textContent = intent.label + ": " + intent.remaining_s + "s";
+      } else if (intent.kind === "status") {
+        box.textContent = "Status: " + intent.text;
+      } else if (intent.kind === "transcript:recent") {
+        box.innerHTML = "Transcript: " + renderList(intent.lines, (line) => (line.speaker || "?") + ": " + line.text);
+      } else if (intent.kind === "tasks") {
+        box.innerHTML = "Tasks: " + renderList(intent.tasks, (task) => task.text + (task.person ? " (" + task.person + ")" : ""));
+      } else {
+        console.log("dropped " + intent.kind);
+        return;
+      }
+
+      view.appendChild(box);
+    }
+
+    const events = new EventSource(api + "events");
+    events.addEventListener("view-intent", (event) => {
+      render(JSON.parse(event.data));
+    });
+  </script>
+</body>
+</html>
