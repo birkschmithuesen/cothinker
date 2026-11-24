@@ -229,8 +229,10 @@ def test_link_is_set():
     # where they actually lead is checked by the HTTP tests further below.
     setze(v2(headline="Punkt 2: Budget",
              main={"markdown": "## Beschlossen\n- 12.000 EUR\n"},
-             links=[{"file": "usecases", "label": "Use-Case-Tabelle"}]))
-    assert 'href="file/usecases"' in b.stage_parts()["links"]
+             knowledge={"topic_id": "t1", "query": "Budget",
+                       "hits": [{"kind": "", "title": "Use-Case-Tabelle",
+                                 "href": "usecases.md"}]}))
+    assert 'href="file/usecases.md"' in b.stage_parts()["links"]
 
 
 def _good_then(kaputt):
@@ -290,8 +292,10 @@ def test_the_thresholds_fall_back_to_their_defaults():
 
 def test_stage_holds_up_on_broken_links():
     setze(v2(main={"markdown": "Text"},
-             links=[None, "kaputt", {"label": "ohne Datei"}, {"file": "usecases"}]))
-    assert 'href="file/usecases"' in b.stage_parts()["links"]
+             knowledge={"topic_id": "t1", "query": "x",
+                       "hits": [None, "kaputt", {"title": "ohne Href"},
+                                {"href": "usecases.md"}]}))
+    assert 'href="file/usecases.md"' in b.stage_parts()["links"]
 
 
 def test_very_long_text_gets_capped():
@@ -672,7 +676,10 @@ SCHEMA_V2_FULL = {
     "question": {"id": "Q1", "text": "Fünfter oder sechster Oktober?",
                  "raised_at": "2026-09-08T19:11:00", "state": "open",
                  "resolution": "", "follow_up": False},
-    "links": [{"file": "protokoll-2026-09-08", "label": "Protokoll 08.09."}],
+    "links": [],
+    "knowledge": {"topic_id": "T1", "query": "Planung",
+                 "hits": [{"kind": "", "title": "Protokoll 08.09.",
+                           "href": "protokoll-2026-09-08.md"}]},
     "parked": 0, "parked_entries": [],
     "age_visible_after_s": 20, "follow_up_after_s": 120,
 }
@@ -759,7 +766,7 @@ def test_the_question_carries_its_own_mark(p):
 
 
 def test_the_link_points_at_the_file_view(p):
-    assert 'href="file/protokoll-2026-09-08"' in p["links"]
+    assert 'href="file/protokoll-2026-09-08.md"' in p["links"]
 
 
 def test_the_sidebar_label_is_german(p):

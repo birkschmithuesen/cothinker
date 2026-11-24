@@ -20,8 +20,10 @@ table of the migration plan:
                                  entry itself, not this row)
     pending:<n>     status    -> announce / settle / warn, via the writer
     status:line     status    -> the operating line, clock stamped here
-    links:<topic>   artefact  -> `links` (generic sink; no current producer,
-                                 kept for the stage's own "Vertiefen" sidebar)
+    links:<topic>   artefact  -> `links` (generic sink; no producer since
+                                 issue #148's knowledge-link rename, and no
+                                 longer read by the stage's "Vertiefen"
+                                 sidebar either -- see `knowledge:<id>` below)
     mirror:<n>      prompt    -> file the coach's contribution into the
                                  topic history (or the JSONL record when
                                  it did not land), the Nachtrag notice
@@ -190,7 +192,12 @@ class StageSurface:
         return True
 
     def _links(self, intent: ViewIntent) -> bool:
-        """`links:<topic_id>` (knowledge-link): the stage's link list."""
+        """`links:<topic_id>`: dead since issue #148's knowledge-link
+        rename -- nothing emits this kind any more, and the stage's own
+        "Vertiefen" sidebar now reads `knowledge:<id>` instead (see
+        `_region("knowledge")`). The rule stays registered only so an
+        intent of this prefix is rejected cleanly rather than falling
+        through to the "no mapping rule" log line."""
         items = [{"file": str(path),
                   "label": str(path).rsplit("/", 1)[-1].removesuffix(".md")}
                  for path in intent.payload.get("links", ())]

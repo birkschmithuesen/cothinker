@@ -37,7 +37,9 @@ folder; `gateway/stage_state.py` produces its content fields:
      "notices": [{"id": "N1", "kind": "value_conflict", "text": "…",
                   "raised_at": "…", "state": "open", "follow_up": false}],
      "question": {"id": "Q1", "text": "…", "raised_at": "…", …},
-     "links": [{"file": "usecases", "label": "Use-Case-Tabelle"}],
+     "knowledge": {"topic_id": "T1", "query": "Use cases",
+                   "hits": [{"kind": "ablage", "title": "Use-Case-Tabelle",
+                             "href": "ablage/usecases.md"}]},
      "parked": 1, "parked_entries": [{"text": "…", "parked_at": "…"}],
      "age_visible_after_s": 20, "follow_up_after_s": 120}
 
@@ -1309,15 +1311,21 @@ def stage_parts() -> dict:
     letzte_position = verlauf[-1] if verlauf and isinstance(verlauf[-1],
                                                             dict) else {}
 
-    ziele = b.get("links")
-    ziele = ziele if isinstance(ziele, list) else []
+    # `knowledge`, not the dead `links` key (issue #148's knowledge-link
+    # rename retired the `links:<topic_id>` emitter for a named
+    # `knowledge:<topic_id>` view intent; nothing has written `links`
+    # since).
+    knowledge = b.get("knowledge")
+    knowledge = knowledge if isinstance(knowledge, dict) else {}
+    hits = knowledge.get("hits")
+    hits = hits if isinstance(hits, list) else []
     knoepfe = []
-    for z in ziele:
-        if not isinstance(z, dict) or not z.get("file"):
+    for hit in hits:
+        if not isinstance(hit, dict) or not hit.get("href"):
             continue
-        datei = _as_text(z.get("file"))
-        label = _as_text(z.get("label")) or datei
-        knoepfe.append(f'<a href="file/{html.escape(quote(datei, safe=""))}">'
+        href = _as_text(hit.get("href"))
+        label = _as_text(hit.get("title")) or href
+        knoepfe.append(f'<a href="file/{html.escape(quote(href, safe=""))}">'
                        f'{html.escape(label)}</a>')
 
     return {
