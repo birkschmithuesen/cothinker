@@ -36,10 +36,11 @@ function detailText(detail) {
   return "";
 }
 
-export async function stream(onStatus, onDown) {
+export async function stream(onStatus, onDown, onOpen) {
   try {
     const response = await fetch(base + "events", { headers });
     if (!response.ok) throw new Error(`events ${response.status}`);
+    if (onOpen) onOpen();
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
     let buffer = "";

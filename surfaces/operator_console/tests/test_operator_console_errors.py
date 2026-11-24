@@ -82,6 +82,23 @@ def test_stream_reconnects_and_clears_the_connection_state(operator, surface_url
     assert len(calls) >= 2
 
 
+def test_quiet_reconnect_clears_the_connection_state_after_status_reload(operator, surface_url, page):
+    api, _ = _goto(operator, surface_url, page)
+    calls = []
+
+    def events(route):
+        calls.append(1)
+        if len(calls) == 1:
+            route.abort()
+        # later attempts are left pending: the stream never sends a frame
+
+    page.route("**/operator/events", events)
+    page.goto(f"{surface_url}?api={api}&token={TOKEN}")
+    page.wait_for_selector("#connection-state:not(:empty)")
+    page.wait_for_function("document.getElementById('connection-state').textContent === ''", timeout=15000)
+    assert len(calls) >= 2
+
+
 def test_command_success_keeps_a_stale_connection_message(operator, surface_url, page):
     api, _ = _goto(operator, surface_url, page)
     page.route("**/operator/events", lambda route: route.abort())

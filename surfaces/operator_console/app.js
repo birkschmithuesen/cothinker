@@ -38,7 +38,9 @@ function statusFailure(err) {
 
 async function loadStatus() {
   try {
-    onPush(await getJson("status"));
+    const next = await getJson("status");
+    if (!streamDown) views.showConnection("");
+    onPush(next);
     return true;
   } catch (err) {
     statusFailure(err);
@@ -46,13 +48,24 @@ async function loadStatus() {
   }
 }
 
+// True from a lost stream until its next attempt; a status reload alone must not
+// hide the warning while the push channel is known to be down.
+let streamDown = false;
+
+function streamUp() {
+  streamDown = false;
+  views.showConnection("");
+}
+
 function connect() {
-  stream((next) => { views.showConnection(""); onPush(next); }, async () => {
+  stream((next) => { streamUp(); onPush(next); }, async () => {
+    streamDown = true;
     views.showConnection(TEXT.connectionLost);
     await new Promise((resolve) => setTimeout(resolve, RECONNECT_MS));
+    streamDown = false;
     connect();
     await loadStatus();
-  });
+  }, streamUp);
 }
 
 views.applyLabels();
