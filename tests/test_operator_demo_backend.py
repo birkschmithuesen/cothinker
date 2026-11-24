@@ -166,7 +166,8 @@ def test_session_folder_is_read_from_the_contract_env_file(tmp_path, monkeypatch
     run_dir = tmp_path / "xdg-runtime"
     (run_dir / "cothinker-demo").mkdir(parents=True)
     (run_dir / "cothinker-demo" / "contract.env").write_text(
-        "DEMO_SESSION_DIR=/some/project/sessions/2026-11-24-quarterly-planning\n", encoding="utf-8",
+        "DEMO_SESSION_DIR=/some/project/sessions/2026-11-24-quarterly-planning\n",  # pragma: allowlist secret
+        encoding="utf-8",
     )
     monkeypatch.setenv("XDG_RUNTIME_DIR", str(run_dir))
 
