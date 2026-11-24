@@ -91,6 +91,30 @@ view intents, and — once your surface needs to answer back — `POST
 event; it renders what the schema says, or drops what it does not render
 (ADR 0006) and logs the drop.
 
+## Sending actions
+
+`POST /actions` is the one write path every surface shares (issue #183):
+the stage's own `/action` and this endpoint both end up appending to the
+same session's action spool (`shared/actions_spool.py`), the file
+`gateway/actions_reader.py` reads into the block host.
+
+In **fixture mode** the request is accepted but nothing is written:
+`202 {"received": "<kind>", "mode": "fixture"}`.
+
+In **live mode** the action is validated against an allowlist before it
+is spooled -- today only a `queue:room` floor request or hand-off
+(`TapAction` with `intent_id: "queue:room"` and `payload: {"op": "request"
+| "done"}`); anything else answers `422`. `503` answers instead of acting
+if no live session has resolved yet (the same condition `GET /snapshot`
+reports). On success: `202 {"received": "<kind>", "mode": "live"}`.
+
+The first request without a `cothinker_pid` cookie gets one assigned (an
+HttpOnly, `SameSite=Strict` cookie, same pattern as the stage's own) --
+this id is the spooled action's `person`, and it is always opaque; a
+display name is set only through the existing `participant:name` edit
+action, never read from this cookie. Repeated actions from the same person
+are rate-limited (`429` on excess, same gap as the stage's `/action`).
+
 ## Run the conformance test
 
 A surface is done when it passes the conformance check (ADR 0019 point 4).
