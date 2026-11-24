@@ -46,7 +46,7 @@ app_format = "example-app/1"
 poster_format = "example-poster/1"
 
 [secrets]
-hub_secret = "literal-value"
+hub_secret = "literal-value"  # pragma: allowlist secret
 """
 
 

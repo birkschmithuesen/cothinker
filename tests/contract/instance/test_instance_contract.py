@@ -88,7 +88,7 @@ app_format = "example-app/1"
 poster_format = "example-poster/1"
 
 [secrets]
-hub_secret = "s3cr3t-literal-value"
+hub_secret = "s3cr3t-literal-value"  # pragma: allowlist secret
 """
 
 
