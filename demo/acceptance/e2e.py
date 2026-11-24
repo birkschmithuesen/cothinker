@@ -659,6 +659,7 @@ def main(argv: list[str]) -> int:
     # still in the call (point 5: "while audio plays"; point 7: the wake
     # check polls after the probe audio, before anyone has hung up).
     connect_s = max(args.minutes * 60, timeline["total_s"] + 90)
+    script_end_wall = time.time() + timeline["total_s"]
     procs = start_participants(args.base_url, token, out_dir, args.chrome, connect_s)
 
     # 5. Surfaces: connect NOW, not after the script has finished --
@@ -671,19 +672,27 @@ def main(argv: list[str]) -> int:
         args.base_url, token, ["Alex", "Sam"], out_dir,
         wait_s=timeline["total_s"] + 10)
 
-    # 6. Contract.
-    monitor_url = build_public_url(args.base_url, "/monitor/", token)
-    contract_check = run_contract_check(monitor_url, token, out_dir)
-
-    # 7. Results that depend on the call still being live: the wake check
-    # polls for a call-lane answer with the script's probe audio.
+    # 7 (wake check only): the issue's "within 60s" means 60s from the
+    # probe audio actually finishing, not from whenever this script
+    # happens to get around to polling -- check_surfaces() above already
+    # spent some of that budget on its own asserting/screenshotting, so
+    # only the remainder is left here. Point 6 (contract) runs after:
+    # it does not need the call to still be live, and its own replay
+    # would otherwise eat further into the 60s window for no reason.
     def poll_snapshot() -> dict:
         try:
             return fetch_snapshot(args.base_url, token)
         except Exception:
             return {}
 
-    lane_answer_seen, elapsed_s = wait_for_call_answer(poll_snapshot)
+    already_spent_s = max(0.0, time.time() - script_end_wall)
+    lane_answer_seen, remaining_elapsed_s = wait_for_call_answer(
+        poll_snapshot, timeout_s=max(0.0, 60.0 - already_spent_s))
+    elapsed_s = already_spent_s + remaining_elapsed_s
+
+    # 6. Contract.
+    monitor_url = build_public_url(args.base_url, "/monitor/", token)
+    contract_check = run_contract_check(monitor_url, token, out_dir)
 
     # 4. Media path proof, and the rest of point 3: block for the
     # participants to actually finish (they will have, or will any
