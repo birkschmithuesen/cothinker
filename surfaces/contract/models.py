@@ -385,10 +385,9 @@ class StageStateSnapshot(BaseModel):
         description="Tasks named by the meeting so far, from"
         " `decisions-tasks-questions`; carries the same content as the"
         " latest `tasks` view intent, so a surface loaded mid-session sees"
-        " it without waiting for the next event. The core does not wire"
-        " this up yet (issue #129); a fixture populates it.",
-        examples=[[]],
-        json_schema_extra=_planned(),
+        " it without waiting for the next event. Absent from `buehne.json`"
+        " (read as empty) until the meeting has named a task.",
+        examples=[[{"text": "Order the material.", "person": "Sam", "due": "Thursday"}]],
     )
     transcript_recent: list[TranscriptLine] = Field(
         default_factory=list,
@@ -594,9 +593,9 @@ class TranscriptPartialIntent(BaseModel):
 
 
 class TasksIntent(BaseModel):
-    """Tasks named by the meeting, from `decisions-tasks-questions`. Not wired yet, see issue #129."""
-
-    model_config = ConfigDict(json_schema_extra=_planned())
+    """Tasks named by the meeting, from `decisions-tasks-questions` (issue
+    #129): the whole list each time, the same shape as
+    `StageStateSnapshot.tasks`."""
 
     kind: Literal["tasks"] = "tasks"
     id: str = Field(description="Identity a user action refers back to.", examples=["VI7"])
