@@ -172,11 +172,9 @@ class AgendaSnapshot(BaseModel):
     next_speaker: str | None = Field(default=None, description="Who speaks next, if the queue has more than one person.", examples=["Jonas"])
     items: list[AgendaItemSummary] | None = Field(
         default=None,
-        description="The whole agenda as a list, not just current/next; the"
-        " core does not wire this up yet (issue #129). A fixture populates"
-        " it so a surface can design against it.",
+        description="The whole agenda as a list, not just current/next,"
+        " filled live from the session's `agenda.md` (issue #129).",
         examples=[None],
-        json_schema_extra=_planned(),
     )
 
 

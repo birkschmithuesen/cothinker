@@ -126,13 +126,11 @@
                 "type": "null"
               }
             ],
-            "description": "The whole agenda as a list, not just current/next; the core does not wire this up yet (issue #129). A fixture populates it so a surface can design against it.",
+            "description": "The whole agenda as a list, not just current/next, filled live from the session's `agenda.md` (issue #129).",
             "examples": [
               null
             ],
-            "title": "Items",
-            "x-issue": "https://github.com/birkschmithuesen/cothinker/issues/129",
-            "x-status": "planned"
+            "title": "Items"
           },
           "meeting_deadline": {
             "anyOf": [

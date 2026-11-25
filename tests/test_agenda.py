@@ -655,3 +655,12 @@ def test_consumer_exits_on_ctrl_c(voice_command_end_to_end_scenario):
     assert not scenario.timed_out, "timeout"
     assert scenario.p.returncode == 0, (
         f"return value {scenario.p.returncode}: {scenario.ausgabe[-800:]}")
+
+
+def test_agenda_payload_carries_the_whole_list(agenda_payload_scenario):
+    """Found live: the stage/monitor showed only current + next because the
+    core never filled `items` (issue #129). Every item, with its status."""
+    s = agenda_payload_scenario
+    assert [(i["title"], i["status"]) for i in s.payload2["items"]] == [
+        ("Eins", "done"), ("Zwei", "current"), ("Drei", "next")]
+    assert s.payload2["items"][1]["budget_s"] == 300

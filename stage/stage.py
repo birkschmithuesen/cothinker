@@ -1100,7 +1100,23 @@ def agenda_part(raw: object) -> dict | None:
         "people": people,
         "speaker": speaker or None,
         "next_speaker": next_speaker or None,
+        "items": _agenda_items(raw.get("items")),
     }
+
+
+def _agenda_items(raw: object) -> list | None:
+    """The whole agenda list (issue #129), defensively: only title +
+    status survive, capped at 30 rows; None when absent or foreign."""
+    if not isinstance(raw, list):
+        return None
+    out = []
+    for item in raw[:30]:
+        if not isinstance(item, dict):
+            continue
+        status = item.get("status")
+        out.append({"title": _agenda_text(item.get("title")),
+                    "status": status if status in ("done", "current", "next", "open") else "open"})
+    return out or None
 
 
 # The speaker queue and the speaking share (ADR 0010, ADR 0018 intent
@@ -1809,6 +1825,9 @@ summary{cursor:pointer;padding:.4rem 0;color:var(--akz);font-size:.94rem}
 /* Live transcript side panel (issue #181): a fixed window bottom left,
    at most ~10 lines, newest on top, older lines fade; never scrolls and
    never covers the participant buttons (#teiln, bottom right). */
+.agenda-item{font-size:.85rem;line-height:1.4;color:var(--dim)}
+.agenda-item.agenda-done{opacity:.45;text-decoration:line-through}
+.agenda-item.agenda-current{color:inherit;font-weight:600}
 #transcript{position:fixed;left:.8rem;bottom:3.8rem;z-index:35;
  width:min(30rem,calc(100vw - 1.6rem));max-height:15.5rem;overflow:hidden;
  background:rgba(14,17,22,.88);border:1px solid var(--lin);border-radius:6px;
@@ -2591,8 +2610,19 @@ sgBlockAnchorJump();
     }
     document.getElementById('agenda-current').textContent=
       'Punkt '+data.current+'/'+data.total+': '+(data.current_text||'');
-    document.getElementById('agenda-next').textContent=
-      data.next ? ('Weiter: '+data.next_text) : '';
+    var nextEl=document.getElementById('agenda-next');
+    if(data.items && data.items.length){
+      // The whole list (issue #129): done items dimmed, current bold.
+      nextEl.innerHTML='';
+      data.items.forEach(function(it, i){
+        var row=document.createElement('div');
+        row.className='agenda-item agenda-'+it.status;
+        row.textContent=(i+1)+'. '+it.title;
+        nextEl.appendChild(row);
+      });
+    } else {
+      nextEl.textContent=data.next ? ('Weiter: '+data.next_text) : '';
+    }
     var wer=data.speaker
       ? ('Dran: '+data.speaker
          +(data.next_speaker ? ' · weiter: '+data.next_speaker : ''))

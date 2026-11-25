@@ -2995,7 +2995,9 @@ def test_a_tap_posts_the_listen_toggle_action_to_the_actions_api(part_page):
     v = _run_part(part_page, """
       await tap('listen-toggle');
       out.posts = posts.map(function(p){ return {url: p.url, body: p.body}; });""")
-    assert v["posts"] == [{"url": "/api/actions",
+    # The page token rides along: behind the public proxy /api/ is gated on
+    # it, and without it the tap was a 404 live (outside acceptance run).
+    assert v["posts"] == [{"url": "/api/actions?t=js-test-fixed-token",
                            "body": {"kind": "tap", "intent_id": "listen:room",
                                     "target": "listen-toggle",
                                     "payload": {"op": "toggle"}}}]

@@ -1632,4 +1632,10 @@ def agenda_payload(doc: AgendaDoc, runtime: AgendaRuntime, *,
         "speaker": people[runtime.speaker_index] if people else None,
         "next_speaker": (people[(runtime.speaker_index + 1) % len(people)]
                         if len(people) > 1 else None),
+        # The whole list (issue #129): a surface shows every item, not just
+        # current/next. `None` without an agenda, same as before.
+        "items": ([{"title": item.text, "budget_s": item.budget_s,
+                    "status": ("done" if i < idx else "current" if i == idx
+                               else "next" if i == idx + 1 else "open")}
+                   for i, item in enumerate(items)] if items else None),
     }
