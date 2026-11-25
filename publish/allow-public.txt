@@ -16,3 +16,8 @@
 # earlier non-GitHub identity this repo may have used, still trips the
 # email-real class.
 re:\d+\+[a-z0-9-]+@users\.noreply\.github\.com
+
+# github-web-committer: the committer GitHub writes on every merge made with
+# the web merge button (`GitHub <noreply@github.com>`). Not a person, not an
+# operator value; allowed since web merges are allowed (Birk 2026-11-25).
+noreply@github.com
