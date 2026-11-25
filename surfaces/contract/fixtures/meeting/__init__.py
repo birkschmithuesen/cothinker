@@ -7,6 +7,13 @@ Two of the pushed view intents (`transcript:recent`, `tasks`) are fields
 the core cannot fill yet (issue #129); this fixture populates them anyway
 so a surface can design against their shape, per ADR 0019 point 3.
 
+`transcript:partial` (issue #181) plays Mira's opening contribution as a
+growing partial -- two tentative updates, then the final that clears it
+(empty text) in the same frame `transcript:recent` picks the finished
+line up. It carries no snapshot field of its own (unlike
+`transcript:recent`): it is transient by design, so a surface that loads
+mid-session simply sees no in-progress line until the next partial.
+
 The speaker queue (`StageStateSnapshot.queue`, the speaker-queue block's
 `queue:room` payload) turns over in step with `agenda.speaker` /
 `agenda.next_speaker` -- it is the same queue, viewed through the
@@ -38,6 +45,9 @@ from surfaces.contract.models import (
     KnowledgeHit,
     KnowledgeIntent,
     KnowledgeSnapshot,
+    ListenClose,
+    ListenIntent,
+    ListenSnapshot,
     PromptIntent,
     QueueSeat,
     QueueSnapshot,
@@ -49,6 +59,7 @@ from surfaces.contract.models import (
     TasksIntent,
     TimerIntent,
     TranscriptLine,
+    TranscriptPartialIntent,
     TranscriptRecentIntent,
     VoiceIntent,
     VoiceSnapshot,
@@ -163,6 +174,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
             ),
             queue=_queue("Mira", ["Jonas", "Tamar"]),
             voice=_voice("Jonas", t0, []),
+            listen=ListenSnapshot(),
             tasks=[],
             transcript_recent=[],
         )
@@ -195,8 +207,29 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 VoiceIntent(id="voice:room", speaking="Jonas", since=t0, recent=[]),
             ],
         ),
+        # Mira's contribution builds up live: two tentative partials for
+        # the same turn, growing (issue #181), before the final below
+        # clears it.
+        Frame(
+            delay_s=0.5,
+            snapshot=snapshot(),
+            view_intents=[
+                TranscriptPartialIntent(id="transcript:partial", turn_id="mira-1",
+                                        speaker="Mira", text="I'd like us to", started_at=t1),
+            ],
+        ),
+        Frame(
+            delay_s=0.5,
+            snapshot=snapshot(),
+            view_intents=[
+                TranscriptPartialIntent(id="transcript:partial", turn_id="mira-1",
+                                        speaker="Mira", text="I'd like us to leave with one clear owner",
+                                        started_at=t1),
+            ],
+        ),
         # Mira's contribution comes in; the recent-transcript field (planned,
-        # issue #129) carries it with her name attached.
+        # issue #129) carries it with her name attached, and the partial
+        # above clears (empty text, same turn_id).
         Frame(
             delay_s=1.5,
             snapshot=snapshot(
@@ -206,6 +239,8 @@ def build_frames(now: float | None = None) -> list[Frame]:
             ),
             view_intents=[
                 TranscriptRecentIntent(id="VI3", lines=transcript_after_mira),
+                TranscriptPartialIntent(id="transcript:partial", turn_id="mira-1",
+                                        speaker="Mira", text="", started_at=t1),
                 TimerIntent(id="VI2", label="Opening round", remaining_s=180.0, budget_s=300.0, items=_agenda_items(1)),
                 VoiceIntent(id="voice:room", speaking="Tamar", since=t1, recent=[{"name": "Jonas", "last_at": t0}]),
             ],
@@ -229,6 +264,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 ),
                 queue=_queue("Jonas", ["Tamar", "Mira"]),
                 voice=_voice("Mira", t2, [("Tamar", t1), ("Jonas", t0)]),
+                listen=ListenSnapshot(state="listening", since=now + 300.0, opened_by="voice", closes_in_s=8.0),
                 transcript_recent=transcript_after_jonas,
                 knowledge=KnowledgeSnapshot(topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
             ),
@@ -237,6 +273,10 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 VoiceIntent(id="voice:room", speaking="Mira", since=t2,
                            recent=[{"name": "Tamar", "last_at": t1}, {"name": "Jonas", "last_at": t0}]),
                 KnowledgeIntent(id="knowledge:M2", topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
+                # Jonas calls Robo to lock the vendor timeline ("Hey Robo,
+                # ..."); the call window opens (issue #180, ADR 0024).
+                ListenIntent(id="listen:room", state="listening", since=now + 300.0,
+                            opened_by="voice", closes_in_s=8.0),
             ],
         ),
         # Speaker queue turns over to Tamar; another contribution comes in.
@@ -258,6 +298,7 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 ),
                 queue=_queue("Tamar", ["Mira", "Jonas"]),
                 voice=_voice("Tamar", t3, [("Mira", t2), ("Jonas", t0)]),
+                listen=ListenSnapshot(last_close=ListenClose(reason="end", at=now + 450.0)),
                 transcript_recent=transcript_after_tamar,
                 knowledge=KnowledgeSnapshot(topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
             ),
@@ -265,6 +306,10 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 TranscriptRecentIntent(id="VI5", lines=transcript_after_tamar),
                 VoiceIntent(id="voice:room", speaking="Tamar", since=t3,
                            recent=[{"name": "Mira", "last_at": t2}, {"name": "Jonas", "last_at": t0}]),
+                # "Robo, Ende" closes the call window the previous frame
+                # opened.
+                ListenIntent(id="listen:room", state="idle",
+                            last_close=ListenClose(reason="end", at=now + 450.0)),
             ],
         ),
         # A short pause.

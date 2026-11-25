@@ -36,6 +36,15 @@ table of the migration plan:
     knowledge:<id>  knowledge -> content()["knowledge"] (issue #148: the
                                  knowledge-link block's named hit payload,
                                  replacing the old bare-path `links:` kind)
+    listen:room     listen    -> content()["listen"] (issue #180, ADR 0024:
+                                 the call-window block's state)
+    transcript:recent transcript -> content()["transcript_recent"] (issue
+                                 #181: the live-transcript block's last 10
+                                 finished lines; `transcript:partial`, the
+                                 same block's in-progress line, is not
+                                 mapped here yet -- it stays an unmapped
+                                 kind, logged once and dropped, until a
+                                 follow-up wires the panel's live delivery)
 
 Rendering is idempotent: an intent whose payload is unchanged since the
 last call is not applied again, so passing the whole snapshot each time is
@@ -58,7 +67,8 @@ from blocks.mirroring_coach.coach import NACHTRAG_PREFIX  # the block owns the c
 from shared.surface import UserAction, ViewIntent
 
 KINDS = frozenset({"prompt", "status", "artefact", "graph", "timer", "queue",
-                   "voice", "share", "knowledge"})
+                   "voice", "share", "knowledge", "listen", "transcript",
+                   "transcript_partial"})
 
 # Keys of the agenda the legacy AgendaController owns and the timer intent
 # does not carry; they survive a timer render.
@@ -104,6 +114,11 @@ class StageSurface:
             "graph": ("graph", self._region("session_graph")),
             "timer": ("timer", self._timer),
             "knowledge": ("knowledge", self._region("knowledge")),
+            "listen": ("listen", self._region("listen")),
+            "transcript": ("transcript", self._region("transcript_recent")),
+            # Keyed by the full id: it shares the `transcript` prefix with
+            # `transcript:recent` but has its own kind (issue #181).
+            "transcript:partial": ("transcript_partial", self._partial),
         }
 
     # ------------------------------------------------------------ Surface
@@ -117,7 +132,7 @@ class StageSurface:
                                    f"stage surface: dropped intent of unknown kind {intent.kind!r}")
                     continue
                 prefix = _prefix(intent.id)
-                rule = self._rules.get(prefix)
+                rule = self._rules.get(intent.id) or self._rules.get(prefix)
                 if rule is None or rule[0] != intent.kind:
                     self._log_once(f"prefix:{prefix}:{intent.kind}",
                                    f"stage surface: no mapping rule for intent prefix "
@@ -291,6 +306,16 @@ class StageSurface:
         self._log(f"stage surface: {intent.id} noted, nothing to show")
         return False
 
+    def _partial(self, intent: ViewIntent) -> bool:
+        """`transcript:partial` (issue #181): the utterance in progress; an
+        empty `text` means its final landed, so the field is cleared."""
+        payload = dict(intent.payload or {})
+        new = payload if payload.get("text") else None
+        if new == self._state.transcript_partial:
+            return False
+        self._state.transcript_partial = new
+        return True
+
     def _region(self, attribute: str) -> Callable[[ViewIntent], bool]:
         def rule(intent: ViewIntent) -> bool:
             setattr(self._state, attribute, intent.payload)
@@ -315,7 +340,8 @@ class StageSurface:
             del self._seen[intent_id]
             attribute = {"queue": "queue", "voice": "voice", "share": "share",
                          "graph": "session_graph",
-                         "knowledge": "knowledge"}.get(_prefix(intent_id))
+                         "knowledge": "knowledge",
+                         "listen": "listen"}.get(_prefix(intent_id))
             if attribute is not None and getattr(self._state, attribute) is not None:
                 setattr(self._state, attribute, None)
                 changed = True

@@ -291,3 +291,22 @@ def test_fixture_and_live_mode_payloads_validate_against_the_same_models(session
             _write_step(session_dir, STEPS[1])
             payload = _next_event_payload(stream, started + 2.0)
             VIEW_INTENT_ADAPTER.validate_python(payload)
+
+
+def test_diff_emits_listen_and_a_growing_then_cleared_partial(session_dir):
+    """Found live (issue #180/#181): `listen` and `transcript_partial` were
+    never pushed on /events, so the stage toggle and the panel's grey line
+    could not react. A listen change is a `listen` intent; a partial grows
+    as `transcript_partial` and its disappearance is an empty-text one."""
+    from surfaces.contract.models import ListenSnapshot, TranscriptPartialSnapshot
+    player = LivePlayer(session_dir)
+    base = player.snapshot
+    listening = base.model_copy(update={"listen": ListenSnapshot(state="listening", opened_by="tap")})
+    assert [(i.kind, i.state) for i in player._diff(base, listening)] == [("listen", "listening")]
+    p1 = listening.model_copy(update={"transcript_partial": TranscriptPartialSnapshot(
+        turn_id="t1", speaker="Mira", text="Hallo zu")})
+    out = player._diff(listening, p1)
+    assert [(i.kind, i.text) for i in out] == [("transcript_partial", "Hallo zu")]
+    final = p1.model_copy(update={"transcript_partial": None})
+    out = player._diff(p1, final)
+    assert [(i.kind, i.turn_id, i.text) for i in out] == [("transcript_partial", "t1", "")]

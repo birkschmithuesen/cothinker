@@ -2744,7 +2744,7 @@ El.prototype.removeAttribute = function(k){ delete this.attrs[k]; };
 El.prototype.focus = function(){ this.focused = true; };
 ['join-dlg','join-form','join-name','join-err','teiln-wort','teiln-fertig',
  'teiln-teilen','teiln-status','share-dlg','share-link','share-qr',
- 'share-close','join-later'].forEach(el);
+ 'share-close','join-later','listen-toggle'].forEach(el);
 // Both dialogs ship `hidden` in the markup.
 el('join-dlg').attrs.hidden = ''; el('share-dlg').attrs.hidden = '';
 var preset = JSON.parse(process.argv[3] || '{}');
@@ -2765,7 +2765,9 @@ global.fetch = async function(u, o){
     return {status: status, ok: status >= 200 && status < 300,
             json: async function(){ return {ok: true}; }};
   }
-  return plainFetch(u, o);
+  var r = await plainFetch(u, o);
+  r.ok = true; r.status = 200;
+  return r;
 };
 var qrCalls = [];
 global.qrcode = function(type, level){
@@ -2890,7 +2892,8 @@ def part_page(tmp_path_factory):
                            qr_js=qr_js, dir=projekt)
 
 
-def _run_part(part_page, treiber: str, preset: dict | None = None) -> dict:
+def _run_part(part_page, treiber: str, preset: dict | None = None,
+              payloads: list | None = None) -> dict:
     assert part_page.skript, "the page carries no script"
     laeufer = part_page.dir / "part.js"
     laeufer.write_text(
@@ -2898,7 +2901,7 @@ def _run_part(part_page, treiber: str, preset: dict | None = None) -> dict:
         + treiber + "\nconsole.log(JSON.stringify(out));\n})();\n",
         encoding="utf-8")
     run = subprocess.run(
-        [shutil.which("node") or "node", str(laeufer), "[]",
+        [shutil.which("node") or "node", str(laeufer), json.dumps(payloads or []),
          json.dumps(preset or {})], capture_output=True, text=True, timeout=60)
     assert run.returncode == 0, _out(run)
     return _last_json(run)
@@ -2966,6 +2969,38 @@ def test_the_buttons_post_the_right_queue_op(part_page, button, op):
                   {"cothinker-joined-name": "Anna"})
     assert v["posts"] == [{"url": f"action?t={TEST_TOKEN}",
                            "body": {"intent_id": "queue:room", "op": op}}]
+
+
+# ---------------------------------------------------- the call-window toggle
+# Issue #180: the toggle reads its state from the surface contract
+# (/api/snapshot's `listen` field) and sends through /api/actions, not
+# through the stage's own `/action` route or buehne.json. /api/actions
+# itself is a different card (#183, not yet real in this worktree), so this
+# only proves the shape the button sends/reads against a mocked fetch --
+# the end-to-end proof (button -> real /api/actions -> segmenter) is a
+# later integration card once both land.
+@pytest.mark.parametrize("state,on", [("listening", True), ("idle", False)])
+def test_the_listen_toggle_reflects_the_snapshot_state(part_page, state, on):
+    v = _run_part(part_page, """
+      await settle();
+      out.on = el('listen-toggle').classList.contains('listen-on');
+      out.off = el('listen-toggle').classList.contains('listen-off');
+      out.pressed = el('listen-toggle').getAttribute('aria-pressed');""",
+                  payloads=[{"listen": {"state": state}}])
+    assert v["on"] is on and v["off"] is (not on), str(v)
+    assert v["pressed"] == ("true" if on else "false"), str(v)
+
+
+def test_a_tap_posts_the_listen_toggle_action_to_the_actions_api(part_page):
+    v = _run_part(part_page, """
+      await tap('listen-toggle');
+      out.posts = posts.map(function(p){ return {url: p.url, body: p.body}; });""")
+    # The page token rides along: behind the public proxy /api/ is gated on
+    # it, and without it the tap was a 404 live (outside acceptance run).
+    assert v["posts"] == [{"url": "/api/actions?t=js-test-fixed-token",
+                           "body": {"kind": "tap", "intent_id": "listen:room",
+                                    "target": "listen-toggle",
+                                    "payload": {"op": "toggle"}}}]
 
 
 def test_a_401_clears_the_marker_and_reopens_the_name_dialog(part_page):

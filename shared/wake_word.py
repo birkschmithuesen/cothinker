@@ -84,6 +84,21 @@ def wake_phrase_pattern(tokens: list[str], group: str) -> str:
 WAKE_PHRASE_RE = re.compile(wake_phrase_pattern(["hey", "robo"], "name"),
                             re.IGNORECASE)
 
+# The end phrase that closes an open call window (issue #180): the name
+# (same prefix match and misheard variants as the wake phrase) followed by
+# "Ende" ("Robo, Ende" / "Robo Ende"), or "Danke" followed by the name
+# ("Danke, Robo"). `WAKE_NOT` subtracts the same false friends here --
+# "Roboter, Ende" must stay ordinary speech exactly like "Roboter" alone
+# does for the wake phrase, since the false-friend words are the same
+# prefix match either way. Matched by `gateway.segmenter.BlockBuilder`
+# against the START of a clause, the same way `_is_wake` does -- reusing
+# its own `_wake_not()` helper, which already scans whichever named group
+# fired, regardless of its name.
+END_PHRASE_RE = re.compile(
+    rf"\b(?P<end1>(?:{_ROBO_VARIANT_ALT})[a-zäöüß]*)[,\-\s]+ende\b"
+    rf"|\bdanke\b[,\-\s]*(?P<end2>(?:{_ROBO_VARIANT_ALT})[a-zäöüß]*)",
+    re.IGNORECASE)
+
 
 def strip_wake(text: str) -> str:
     """The order text after a leading "Hey Robo, ..." -- what the call

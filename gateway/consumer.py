@@ -104,8 +104,9 @@ from graph.vault_notes import DEFAULT_EXCLUDE        # noqa: E402
 from gateway.actions_reader import ActionsReader, dispatcher_for  # noqa: E402
 from blocks.knowledge_link import KnowledgeLinkBlock  # noqa: E402
 from gateway.block_host_wiring import (SessionBlocks, build_session_blocks,  # noqa: E402
-                                       coach_block_config, feed_utterance,
-                                       make_agent_for)
+                                       coach_block_config, dispatch_call_window_state,
+                                       feed_utterance, make_agent_for,
+                                       wire_call_window)
 from gateway.raw_transcript import MinutesFile  # noqa: E402
 from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
 from blocks.minutes_document import minutes as minutes_block  # noqa: E402
@@ -2936,6 +2937,12 @@ def main() -> int:
                     help="seconds of silence that end a block")
     ap.add_argument("--max-block", type=float, default=90.0,
                     help="cut here at the latest, even without a pause")
+    ap.add_argument("--call-silence-s", type=float, default=8.0,
+                    help="seconds of silence that close an open call window "
+                         "(issue #180)")
+    ap.add_argument("--call-max-s", type=float, default=90.0,
+                    help="close an open call window here at the latest, "
+                         "even without silence (issue #180)")
     ap.add_argument("--wake-word", default="hey robo",
                     help="Weckphrase. Mehrere durch Komma trennen; der Name "
                          "wird als WORTANFANG gesucht, damit die "
@@ -3990,7 +3997,12 @@ def main() -> int:
                 log("timing not written:", repr(e))
 
     bb = BlockBuilder(output=block_done, pause_s=a.pause,
-                      max_s=a.max_block, wake_word=a.wake_word)
+                      max_s=a.max_block, wake_word=a.wake_word,
+                      call_silence_s=a.call_silence_s, call_max_s=a.call_max_s)
+    # The call-window block's host handle (issue #180, ADR 0024): a no-op
+    # when the template does not carry the block.
+    wire_call_window(session_blocks, bb)
+    dispatch_call_window_state(session_blocks, bb)
 
     faeden: list[threading.Thread] = []
     if not a.no_agent:
@@ -4011,6 +4023,11 @@ def main() -> int:
         while not stopp.wait(0.5):
             try:
                 bb.tick()
+                # A silence/max timeout closes the call window from here,
+                # not from an action -- the block only reacts to events and
+                # never polls the segmenter, so a voice-triggered
+                # transition is pushed explicitly (issue #180, ADR 0024).
+                dispatch_call_window_state(session_blocks, bb)
                 try:
                     actions_reader.poll()
                 except Exception as e:  # noqa: BLE001 -- must not skip the tick's write
@@ -4106,6 +4123,20 @@ def main() -> int:
                     if ev.get("type") == "thought_end":
                         if gedankenende is not None:
                             gedankenende.smart_turn(ev)
+                        continue
+                    if ev.get("type") == "partial":
+                        # issue #181: the live-transcript block's tentative
+                        # tail. Forwarded as-is on every partial; the block
+                        # itself throttles how often it re-emits the view
+                        # intent (<=4/s per turn), and ignores a partial
+                        # with no turn_id (a status ping, not a transcript
+                        # update) -- see blocks/live_transcript/transcript.py.
+                        session_blocks.dispatch("partial", {
+                            "turn_id": ev.get("turn_id"),
+                            "speaker": final_speaker(ev),
+                            "text": ev.get("text"),
+                            "at": time.time(),
+                        })
                         continue
                     if ev.get("type") != "final":
                         continue
@@ -4259,12 +4290,20 @@ def main() -> int:
                     try:
                         if turns:
                             for turn in turns:
+                                # The split sub-turns share the one STT
+                                # turn_id of the utterance they came from
+                                # (gateway/speaker_split.py's `Turn` has no
+                                # id of its own) -- good enough for the
+                                # live-transcript block to match a final
+                                # back to the partial it closes.
                                 feed_utterance(minutes_file, session_blocks, turn.text, turn.name,
-                                              {"t_start": turn.t_start, "t_end": turn.t_end,
+                                              {"turn_id": ev.get("turn_id"),
+                                               "t_start": turn.t_start, "t_end": turn.t_end,
                                                "at": time.time()})
                         else:
                             feed_utterance(minutes_file, session_blocks, text, spk,
-                                          {"t_start": t_start, "t_end": t_end,
+                                          {"turn_id": ev.get("turn_id"),
+                                           "t_start": t_start, "t_end": t_end,
                                            "at": time.time()})
                     except Exception as e:         # noqa: BLE001
                         log("raw line not written:", repr(e))
@@ -4354,6 +4393,12 @@ def main() -> int:
                                                           "active", False))
                             bb.sentence(agent_text,          # then bundle
                                         allow_wake=not intro_line)
+                        # A wake word or the end phrase can open/close the
+                        # call window SYNCHRONOUSLY inside this very call
+                        # (issue #180, ADR 0024) -- pushed right away so a
+                        # voice-triggered transition reaches `listen:room`
+                        # exactly like a tap-triggered one does.
+                        dispatch_call_window_state(session_blocks, bb)
                     except Exception as e:         # noqa: BLE001
                         log("block building skipped:", repr(e))
                     else:

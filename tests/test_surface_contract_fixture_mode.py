@@ -85,6 +85,24 @@ def test_meeting_scenario_emits_voice_changes():
     speakers = {v.speaking for v in voices if v.speaking is not None}
     assert len(speakers) > 1   # voice.speaking turns over too
 
+
+def test_meeting_scenario_plays_a_growing_partial_and_its_final():
+    """issue #181 L2: `transcript:partial` grows across at least two
+    updates for one turn_id, then clears (empty text) in the same frame
+    `transcript:recent` picks the finished line up."""
+    frames = load_scenario("meeting")
+    partials = [vi for frame in frames for vi in frame.view_intents
+               if vi.kind == "transcript_partial"]
+    assert len(partials) >= 3, "expected at least two growing partials plus the clearing one"
+    turn_ids = {p.turn_id for p in partials}
+    assert len(turn_ids) == 1, "the growing sequence must stay on one turn_id"
+    texts = [p.text for p in partials]
+    growing = [t for t in texts if t]
+    assert len(growing) >= 2
+    assert all(len(growing[i]) < len(growing[i + 1]) for i in range(len(growing) - 1)), \
+        "each partial must extend the previous one"
+    assert texts[-1] == "", "the final must clear the partial (empty text)"
+
     voice_speakers_by_frame = [f.snapshot.voice.speaking for f in frames if f.snapshot.voice is not None]
     queue_speakers_by_frame = [f.snapshot.queue.speaking.name for f in frames
                                if f.snapshot.queue is not None and f.snapshot.queue.speaking is not None]
@@ -99,6 +117,21 @@ def test_meeting_scenario_exercises_the_queue_snapshot_field():
     assert queues, "no frame sets StageStateSnapshot.queue"
     speaking_pids = {q.speaking.pid for q in queues if q.speaking is not None}
     assert len(speaking_pids) > 1         # the speaker queue snapshot turns over too
+
+
+def test_meeting_scenario_shows_one_listening_phase():
+    """issue #180, ADR 0024: the fixture demonstrates the call window
+    opening (voice) and closing at least once, not left idle throughout
+    -- so a surface can design the listen:room intent against real data."""
+    frames = load_scenario("meeting")
+    kinds = {vi.kind for frame in frames for vi in frame.view_intents}
+    assert "listen" in kinds
+    states = [f.snapshot.listen.state for f in frames if f.snapshot.listen is not None]
+    assert "listening" in states
+    assert "idle" in states
+    closes = [f.snapshot.listen.last_close for f in frames
+             if f.snapshot.listen is not None and f.snapshot.listen.last_close is not None]
+    assert closes, "no frame shows the call window's last_close"
 
 
 def test_meeting_scenario_agenda_times_are_relative_to_now():

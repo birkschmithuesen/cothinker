@@ -1100,7 +1100,23 @@ def agenda_part(raw: object) -> dict | None:
         "people": people,
         "speaker": speaker or None,
         "next_speaker": next_speaker or None,
+        "items": _agenda_items(raw.get("items")),
     }
+
+
+def _agenda_items(raw: object) -> list | None:
+    """The whole agenda list (issue #129), defensively: only title +
+    status survive, capped at 30 rows; None when absent or foreign."""
+    if not isinstance(raw, list):
+        return None
+    out = []
+    for item in raw[:30]:
+        if not isinstance(item, dict):
+            continue
+        status = item.get("status")
+        out.append({"title": _agenda_text(item.get("title")),
+                    "status": status if status in ("done", "current", "next", "open") else "open"})
+    return out or None
 
 
 # The speaker queue and the speaking share (ADR 0010, ADR 0018 intent
@@ -1801,6 +1817,25 @@ summary{cursor:pointer;padding:.4rem 0;color:var(--akz);font-size:.94rem}
  border:1px solid #3a4150;border-radius:6px;padding:.45rem .8rem;cursor:pointer}
 #teiln button:disabled{opacity:.5;cursor:default}
 #teiln-status{color:var(--dim);font-size:.8rem}
+/* The call-window toggle (issue #180, ADR 0024): icon plus word, never
+   colour alone -- "Robo hört" green while listening, "Robo" neutral
+   while idle. */
+#listen-toggle.listen-on{background:#1d4430;border-color:#3d8b6a;color:#bfe8d4}
+#listen-toggle.listen-off{background:#1d2128;border-color:#3a4150;color:#e8e8e8}
+/* Live transcript side panel (issue #181): a fixed window bottom left,
+   at most ~10 lines, newest on top, older lines fade; never scrolls and
+   never covers the participant buttons (#teiln, bottom right). */
+.agenda-item{font-size:.85rem;line-height:1.4;color:var(--dim)}
+.agenda-item.agenda-done{opacity:.45;text-decoration:line-through}
+.agenda-item.agenda-current{color:inherit;font-weight:600}
+#transcript{position:fixed;left:.8rem;bottom:3.8rem;z-index:35;
+ width:min(30rem,calc(100vw - 1.6rem));max-height:15.5rem;overflow:hidden;
+ background:rgba(14,17,22,.88);border:1px solid var(--lin);border-radius:6px;
+ padding:.5rem .7rem;font-size:.85rem;line-height:1.35;box-sizing:border-box}
+#transcript:empty{display:none}
+#transcript .transcript-line{margin:.1rem 0}
+#transcript .transcript-line b{color:var(--dim);font-weight:600}
+#transcript .tentative{font-style:italic}
 #join-dlg,#share-dlg{position:fixed;top:0;left:0;width:100vw;height:100vh;
  z-index:60;background:rgba(10,12,14,.94);display:flex;align-items:center;
  justify-content:center;padding:2vmin;box-sizing:border-box}
@@ -1998,6 +2033,54 @@ sgBlockAnchorJump();
       shareShut();
       if(!dlg.hasAttribute('hidden')) dismissDlg();
     }
+  });
+})();
+// The call-window toggle (issue #180, ADR 0024): sends and reads through
+// the surface contract (/api/snapshot, /api/events, /api/actions,
+// ADR 0019), never through buehne.json or this stage's own /action route
+// -- POST /api/actions is a separate card (#183) and may still be a
+// no-op, but the shape sent here is already the final contract shape.
+(function(){
+  var btn=document.getElementById('listen-toggle');
+  if(!btn) return;
+  var icon=btn.querySelector('.listen-icon'), label=btn.querySelector('.listen-label');
+  function render(state){
+    var an=(state==='listening');
+    btn.classList.toggle('listen-on', an);
+    btn.classList.toggle('listen-off', !an);
+    btn.setAttribute('aria-pressed', an ? 'true' : 'false');
+    if(icon) icon.textContent=an ? '🟢' : '⚪';
+    if(label) label.textContent=an ? 'Robo hört' : 'Robo';
+  }
+  render('idle');
+  // The public proxy gates /api/ on the same token as this page; the
+  // page's own token is not published yet at this point (STAGE_TOKEN is
+  // set by the next script), so take it from the template directly.
+  var TOK=%TOKEN%;
+  function tk(u){ return TOK ? u+(u.indexOf('?')<0?'?':'&')+'t='+encodeURIComponent(TOK) : u; }
+  fetch(tk('/api/snapshot')).then(function(r){ return r.ok ? r.json() : null; })
+    .then(function(snap){ if(snap && snap.listen) render(snap.listen.state); })
+    .catch(function(){});
+  try{
+    var es=new EventSource(tk('/api/events'));
+    es.addEventListener('view-intent', function(ev){
+      try{
+        var intent=JSON.parse(ev.data);
+        if(intent && intent.id==='listen:room') render(intent.state);
+        if(intent && intent.kind==='listen' && intent.payload) render(intent.payload.state);
+      }catch(e){}
+    });
+  }catch(e){}
+  var busy=false;
+  btn.addEventListener('click', function(){
+    if(busy) return;
+    busy=true;
+    fetch(tk('/api/actions'),{method:'POST', credentials:'same-origin',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({kind:'tap', intent_id:'listen:room',
+                           target:'listen-toggle', payload:{op:'toggle'}})})
+      .catch(function(){})
+      .then(function(){ busy=false; });
   });
 })();
 (function(){
@@ -2527,8 +2610,19 @@ sgBlockAnchorJump();
     }
     document.getElementById('agenda-current').textContent=
       'Punkt '+data.current+'/'+data.total+': '+(data.current_text||'');
-    document.getElementById('agenda-next').textContent=
-      data.next ? ('Weiter: '+data.next_text) : '';
+    var nextEl=document.getElementById('agenda-next');
+    if(data.items && data.items.length){
+      // The whole list (issue #129): done items dimmed, current bold.
+      nextEl.innerHTML='';
+      data.items.forEach(function(it, i){
+        var row=document.createElement('div');
+        row.className='agenda-item agenda-'+it.status;
+        row.textContent=(i+1)+'. '+it.title;
+        nextEl.appendChild(row);
+      });
+    } else {
+      nextEl.textContent=data.next ? ('Weiter: '+data.next_text) : '';
+    }
     var wer=data.speaker
       ? ('Dran: '+data.speaker
          +(data.next_speaker ? ' · weiter: '+data.next_speaker : ''))
@@ -2743,6 +2837,9 @@ sgBlockAnchorJump();
 # share view. Static; the script above the page script drives it.
 PARTICIPATE_HTML = """
 <div id="teiln"><span id="teiln-status" aria-live="polite"></span>
+<button type="button" id="listen-toggle" class="listen-off" aria-pressed="false">
+<span class="listen-icon" aria-hidden="true">⚪</span>
+<span class="listen-label">Robo</span></button>
 <button type="button" id="teiln-wort">Wortmeldung</button>
 <button type="button" id="teiln-fertig">Fertig</button>
 <button type="button" id="teiln-teilen">Link teilen</button></div>
@@ -2807,6 +2904,8 @@ def page(titel: str, kopf: str, rumpf: str, mark_json: str, inhalt: str,
 <base href="{wurzel}">
 <title>{titel}</title><style>{STYLE}</style>{vendor}</head><body>
 {kopf}{rumpf}{PARTICIPATE_HTML}
+<div id="transcript"></div>
+<script src="{wurzel}static/transcript-panel.js{tok}"></script>
 <script>{script}</script></body></html>""").encode()
 
 
@@ -3119,7 +3218,8 @@ class H(BaseHTTPRequestHandler):
             except OSError:
                 return self._send(404, b"unbekannt", "text/plain")
             return self._send(200, roh, "application/javascript; charset=utf-8")
-        if path in ("/static/graph.js", "/static/session_graph.js"):
+        if path in ("/static/graph.js", "/static/session_graph.js",
+                    "/static/transcript-panel.js"):
             try:
                 roh = (STATIC / path[len("/static/"):]).read_bytes()
             except OSError:

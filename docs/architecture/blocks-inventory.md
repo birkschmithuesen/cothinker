@@ -60,23 +60,28 @@ tables below are built from.
 | timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
 | speaker queue | Show + share | `blocks/speaker_queue/__init__.py` 102, `queue.py` 82 — 184 | Reflect | 1× |
 | voice attribution (who is talking right now, by track/STT speaker label) | Show + share | `blocks/voice_attribution/__init__.py` 104, `voice.py` 73 — 177 | Reflect | 1× |
+| call window (listen:room open/close by voice, tap, or timeout) | Capture | `blocks/call_window/__init__.py` 108 | Reflect | 1× |
+| live transcript (side panel: last 10 finished lines + the in-progress partial) | Show + share | `blocks/live_transcript/__init__.py` 114, `transcript.py` 86 — 200 | Reflect | 1× |
 
 **Reflect check:** all 12 of the blocks Birk confirmed for Reflect now have
 code in this repository — topic change, capture bullets, condense,
 decisions / tasks / open questions, minutes document, mirroring / coach
 question, knowledge link, status line, session graph, speaking share, timer,
-speaker queue. Voice attribution (issue #164) is a 13th block, registered
-in `gateway/block_host_wiring.py`'s `REGISTRY`; it was deliberately left out
-of `templates/reflect/template.toml` at first, since ADR 0010 fixes Reflect
-at exactly 12 blocks and wiring a 13th into the live template was a
-template/ADR decision for the maintainer, not one this inventory entry could
-make on its own. Issue #178 (opened by the maintainer, naming `voice`'s
-missing live fill as part of its own acceptance criterion) made that
-decision: `template.toml` now lists `voice-attribution` too, 13 blocks
-against ADR 0010's fixed 12 -- a conflict named here, not silently papered
-over; the ADR's own text is unchanged (it is only ever superseded or
-amended, never rewritten), and a status-line amendment is the maintainer's
-call, not this pull request's.
+speaker queue. Voice attribution (issue #164) is a 13th block and live
+transcript (issue #181) a 14th, both registered in
+`gateway/block_host_wiring.py`'s `REGISTRY`; voice attribution was
+deliberately left out of `templates/reflect/template.toml` at first, since
+ADR 0010 fixes Reflect at exactly 12 blocks and wiring a 13th into the live
+template was a template/ADR decision for the maintainer, not one this
+inventory entry could make on its own. Issue #178 (opened by the maintainer,
+naming `voice`'s missing live fill as part of its own acceptance criterion)
+made that decision: `template.toml` listed `voice-attribution` too, 13
+blocks against ADR 0010's fixed 12. Issue #181 (the stage's live transcript
+side panel) widens the same, already-named conflict to 14 by adding
+`live-transcript` the same way -- not silently papered over either time;
+the ADR's own text is unchanged (it is only ever superseded or amended,
+never rewritten), and a status-line amendment is the maintainer's call, not
+this pull request's.
 
 ## STT module, surfaces, core (not blocks)
 
@@ -133,6 +138,8 @@ block:speaking-share         block — speaking share (talk share + room talk ti
 block:timer                  block — timer (planned items, drift, projected end)
 block:speaker-queue          block — speaker queue (tap to request/leave the floor)
 block:voice-attribution      block — voice attribution (who is talking right now, by track/STT speaker label)
+block:call-window            block — call window (listen:room open/close by voice, tap, or timeout)
+block:live-transcript        block — live transcript (side panel: last 10 finished lines + the in-progress partial)
 retire                       dropped by the target (decision 25 engines)
 ```
 
@@ -163,6 +170,9 @@ blocks/speaker_queue/__init__.py                                                
 blocks/speaker_queue/queue.py                                                     block:speaker-queue
 blocks/voice_attribution/__init__.py                                              block:voice-attribution
 blocks/voice_attribution/voice.py                                                 block:voice-attribution
+blocks/call_window/__init__.py                                                    block:call-window
+blocks/live_transcript/__init__.py                                                block:live-transcript
+blocks/live_transcript/transcript.py                                              block:live-transcript
 blocks/topics/__init__.py                                                         block:topics
 blocks/topics/detect.py                                                           block:topics
 blocks/topics/hysteresis.py                                                       block:topics

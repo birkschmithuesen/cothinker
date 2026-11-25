@@ -102,9 +102,10 @@ In **fixture mode** the request is accepted but nothing is written:
 `202 {"received": "<kind>", "mode": "fixture"}`.
 
 In **live mode** the action is validated against an allowlist before it
-is spooled -- today only a `queue:room` floor request or hand-off
-(`TapAction` with `intent_id: "queue:room"` and `payload: {"op": "request"
-| "done"}`); anything else answers `422`. `503` answers instead of acting
+is spooled -- a `queue:room` floor request or hand-off (`TapAction` with
+`intent_id: "queue:room"` and `payload: {"op": "request" | "done"}`) or a
+call-window tap (`intent_id: "listen:room"`, `payload: {"op": "open" |
+"close" | "toggle"}`, ADR 0024); anything else answers `422`. `503` answers instead of acting
 if no live session has resolved yet (the same condition `GET /snapshot`
 reports). On success: `202 {"received": "<kind>", "mode": "live"}`.
 
@@ -165,6 +166,32 @@ above: a tiny, dependency-free page using only `fetch('/snapshot')` and
 `EventSource('/events')` that renders every intent kind the "meeting"
 fixture sends, and logs the drop for any kind it does not render. Use it
 as a starting point, or to see what a passing surface looks like.
+
+## Call window
+
+The wake word ("Hey Robo"), a tap, or the end phrase ("Robo, Ende") opens and closes a call window (issue #180,
+ADR 0024): every sentence spoken while it is open belongs to the order, pauses included, until it closes by the
+end phrase, a tap, a silence timeout, or its own maximum duration.
+
+`StageStateSnapshot.listen` (`None` when the `call-window` block is absent from the session,
+key-absent-means-hidden, same as `queue`/`voice`) and the `listen:room` view intent (kind `listen`) both carry the
+same `ListenSnapshot` shape:
+
+- `state`: `"idle"` or `"listening"`.
+- `since`: epoch seconds the window opened; `None` while idle.
+- `opened_by`: `"voice"` or `"tap"`; `None` while idle.
+- `closes_in_s`: seconds of silence left before the window auto-closes; `None` while idle.
+- `last_close`: `{"reason": "end"|"tap"|"silence"|"max"|"cancel", "at": <epoch seconds>}` for the most recent call,
+  or `None` before the first one. `cancel` is a tap that closed an empty window -- nothing was said, nothing was
+  sent.
+
+A toggle button is the expected surface for this: a tap while idle opens the window (`POST /actions` with
+`{"kind": "tap", "intent_id": "listen:room", "target": "listen-toggle", "payload": {"op": "toggle"}}`), a tap
+while listening closes it (and sends, or cancels if nothing was said). Render it the same way the reference
+deployment does: green with the words "Robo hört" while listening, red/neutral with just "Robo" while idle --
+icon plus word, never colour alone. The "meeting" fixture scenario demonstrates one full listening phase (opened
+by voice, closed with `reason: "end"`), so you can design the toggle's three states (idle, listening, just closed)
+against real data without a live session.
 
 ## Missing data
 

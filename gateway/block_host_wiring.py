@@ -12,9 +12,10 @@ Reflect is the first template (ADR 0010) and every building block plugs
 into the block host (ADR 0008, `docs/architecture/target.md` §5). There is
 no template flag and no off switch (migration rule, ADR 0018): the
 session host always builds its block host from `REFLECT_TEMPLATE`. The
-template already names all thirteen Reflect blocks (issue #178 added
-`voice-attribution` as a 13th, against ADR 0010's fixed 12 -- see
-`docs/architecture/blocks-inventory.md`); `REGISTRY` only grows
+template already names all fourteen Reflect blocks (issue #178 added
+`voice-attribution` as a 13th and issue #181 `live-transcript` as a 14th,
+against ADR 0010's fixed 12 -- see `docs/architecture/blocks-inventory.md`);
+`REGISTRY` only grows
 one line per block as each one's own pull request lands, so a block id
 the template lists but nobody has registered yet is skipped, with one log
 line, rather than failing the whole session.
@@ -29,12 +30,14 @@ import time
 from pathlib import Path
 from typing import Callable, Mapping, Optional
 
+from blocks.call_window import CallWindowBlock
 from blocks.capture_bullets import CaptureBulletsBlock
 from blocks.decisions_tasks_questions import DecisionsBlock
 from blocks.knowledge_link import KnowledgeLinkBlock
 import blocks.status_line as status_line_block
 from blocks.condense import CondenseBlock
 from blocks.graph import GraphBlock
+from blocks.live_transcript import LiveTranscriptBlock
 from blocks.mirroring_coach.coach import MirroringCoach, resolve_config
 from blocks.topics import TopicsBlock
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
@@ -69,6 +72,8 @@ REGISTRY: dict[str, Callable[[], Block]] = {
     "timer": TimerBlock,
     "speaker-queue": SpeakerQueueBlock,
     "speaking-share": SpeakingShareBlock,
+    "call-window": CallWindowBlock,
+    "live-transcript": LiveTranscriptBlock,
 }
 
 REGISTRY["condense"] = CondenseBlock
@@ -300,6 +305,28 @@ def feed_utterance(minutes, blocks: SessionBlocks, text: str,
         blocks.dispatch("utterance", payload)
     except Exception as e:  # noqa: BLE001 -- belt and suspenders, dispatch() already never raises
         blocks.log(f"feed_utterance: dispatch failed: {type(e).__name__}: {e}")
+
+
+# -------------------------------------------------------- call window
+def wire_call_window(blocks: SessionBlocks, bb) -> None:
+    """Gives the `call-window` block its host handle onto the session's
+    real `gateway.segmenter.BlockBuilder` (issue #180, ADR 0024) --
+    interim host handle, same pattern as `knowledge-link`'s
+    `use_project` (see that block's own docstring). A no-op when the
+    template does not carry the block (`bb` typed loosely to avoid this
+    module importing `gateway.segmenter` for a type hint alone)."""
+    block = blocks.get("call-window")
+    if block is None:
+        return
+    block.bind_host(open_call=bb.open_call, close_call=bb.close_call, state=bb.state)
+
+
+def dispatch_call_window_state(blocks: SessionBlocks, bb) -> None:
+    """Call after every `bb.sentence()`/`bb.tick()` (and once after
+    `wire_call_window`) so a voice-triggered transition reaches the
+    `listen:room` view intent exactly like a tap-triggered one does --
+    the block only reacts to events, it never polls the segmenter."""
+    blocks.dispatch("block_output", {"call_window": bb.state()})
 
 
 # ------------------------------------------------------------ agent lanes

@@ -126,13 +126,11 @@
                 "type": "null"
               }
             ],
-            "description": "The whole agenda as a list, not just current/next; the core does not wire this up yet (issue #129). A fixture populates it so a surface can design against it.",
+            "description": "The whole agenda as a list, not just current/next, filled live from the session's `agenda.md` (issue #129).",
             "examples": [
               null
             ],
-            "title": "Items",
-            "x-issue": "https://github.com/birkschmithuesen/cothinker/issues/129",
-            "x-status": "planned"
+            "title": "Items"
           },
           "meeting_deadline": {
             "anyOf": [
@@ -524,6 +522,120 @@
           "query"
         ],
         "title": "KnowledgeSnapshot",
+        "type": "object"
+      },
+      "ListenClose": {
+        "description": "`ListenSnapshot.last_close`: how the most recent call window ended\n(`gateway.segmenter.BlockBuilder.state()`'s own shape).",
+        "properties": {
+          "at": {
+            "description": "Epoch seconds the call closed.",
+            "examples": [
+              1732450920.0
+            ],
+            "title": "At",
+            "type": "number"
+          },
+          "reason": {
+            "description": "How the call closed: the end phrase, a tap, a silence timeout, the call's own max duration, or a tap on an empty window (cancel, nothing sent).",
+            "enum": [
+              "end",
+              "tap",
+              "silence",
+              "max",
+              "cancel"
+            ],
+            "examples": [
+              "end"
+            ],
+            "title": "Reason",
+            "type": "string"
+          }
+        },
+        "required": [
+          "reason",
+          "at"
+        ],
+        "title": "ListenClose",
+        "type": "object"
+      },
+      "ListenSnapshot": {
+        "description": "`content()[\"listen\"]`: the call-window block's `listen:room`\nview-intent payload, filled by `gateway.segmenter.BlockBuilder.state()`\n(issue #180, ADR 0024). The window the wake word (\"Hey Robo\"), a tap,\nor the end phrase (\"Robo, Ende\") opens and closes; every sentence\nspoken while it is open belongs to the call.",
+        "properties": {
+          "closes_in_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Seconds of silence left before the window auto-closes; `None` while idle.",
+            "examples": [
+              null
+            ],
+            "title": "Closes In S"
+          },
+          "last_close": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ListenClose"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "How the most recent call ended; `None` before the first one."
+          },
+          "opened_by": {
+            "anyOf": [
+              {
+                "enum": [
+                  "voice",
+                  "tap"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "What opened the window; `None` while idle.",
+            "examples": [
+              null
+            ],
+            "title": "Opened By"
+          },
+          "since": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Epoch seconds the window opened; `None` while idle.",
+            "examples": [
+              null
+            ],
+            "title": "Since"
+          },
+          "state": {
+            "default": "idle",
+            "description": "Whether the call window is open.",
+            "enum": [
+              "idle",
+              "listening"
+            ],
+            "examples": [
+              "idle"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "title": "ListenSnapshot",
         "type": "object"
       },
       "MessageAction": {
@@ -1358,6 +1470,17 @@
             "title": "Links",
             "type": "array"
           },
+          "listen": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ListenSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The call window's state, from the `call-window` block (issue #180, ADR 0024); `None` when that block is absent from the session (key-absent-means-hidden, `StageState._content()`)."
+          },
           "main": {
             "$ref": "#/components/schemas/StageMain"
           },
@@ -1455,8 +1578,19 @@
             "x-issue": "https://github.com/birkschmithuesen/cothinker/issues/129",
             "x-status": "planned"
           },
+          "transcript_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptPartialSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The utterance in progress, from the `live-transcript` block's `transcript:partial` view intent (issue #181); `None` when nobody is mid-sentence. Grows while someone speaks and clears when the final lands in `transcript_recent`."
+          },
           "transcript_recent": {
-            "description": "The last three contributions, oldest first; carries the same content as the latest `transcript:recent` view intent, so a surface loaded mid-session sees it without waiting for the next event. The core does not wire this up yet (issue #129); a fixture populates it.",
+            "description": "The last 10 finished lines, oldest first; carries the same content as the latest `transcript:recent` view intent, so a surface loaded mid-session sees it without waiting for the next event. Filled live by the `live-transcript` block (issue #181).",
             "examples": [
               []
             ],
@@ -1464,9 +1598,7 @@
               "$ref": "#/components/schemas/TranscriptLine"
             },
             "title": "Transcript Recent",
-            "type": "array",
-            "x-issue": "https://github.com/birkschmithuesen/cothinker/issues/129",
-            "x-status": "planned"
+            "type": "array"
           },
           "updated": {
             "description": "Wall-clock label of the last update.",
@@ -1632,6 +1764,45 @@
           "text"
         ],
         "title": "TranscriptLine",
+        "type": "object"
+      },
+      "TranscriptPartialSnapshot": {
+        "description": "`content()[\"transcript_partial\"]`: the utterance in progress (issue\n#181), the payload of the latest non-empty `transcript:partial`.",
+        "properties": {
+          "speaker": {
+            "default": "",
+            "examples": [
+              "Tamar"
+            ],
+            "title": "Speaker",
+            "type": "string"
+          },
+          "started_at": {
+            "default": "",
+            "examples": [
+              "2026-11-23T09:14:02+01:00"
+            ],
+            "title": "Started At",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "examples": [
+              "Let's park the vendor q"
+            ],
+            "title": "Text",
+            "type": "string"
+          },
+          "turn_id": {
+            "default": "",
+            "examples": [
+              "01HX7Z"
+            ],
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "title": "TranscriptPartialSnapshot",
         "type": "object"
       },
       "ValidationError": {

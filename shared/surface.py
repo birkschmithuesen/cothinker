@@ -29,6 +29,9 @@ INTENT_KINDS = frozenset(
         "share",
         "graph",
         "knowledge",
+        "listen",
+        "transcript",
+        "transcript_partial",
     }
 )
 

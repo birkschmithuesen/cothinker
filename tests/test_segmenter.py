@@ -83,16 +83,22 @@ def test_everything_open() -> None:
     assert _short_pauses()[1].open_chars > 80
 
 
-# 3 — wake word cuts IMMEDIATELY and marks
+# 3 — wake word OPENS A CALL WINDOW (issue #180) instead of cutting
+# immediately -- a live trial (2026-11-24) showed "Hey Robo. Ich gebe
+# dir." go out alone, the content of the sentences that followed never
+# reaching the agent. The window stays open (one call, not an instant
+# cut) until it closes -- here, by the call-silence timeout.
 def _wake_cut():
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence("Wir sollten das nochmal genauer durchrechnen.")
     clock.advance(0.5)
     bb.sentence("Hey Robo, nimm dir die Use Cases nochmal alle vor.")
+    clock.advance(8.0)          # call-silence timeout closes the window
+    bb.tick()
     return emitted
 
 
-def test_wake_word_cuts_immediately() -> None:
+def test_wake_word_opens_a_call_not_an_immediate_cut() -> None:
     assert len(_wake_cut()) == 1
 
 
@@ -101,12 +107,12 @@ def test_wake_word_marks() -> None:
     assert emitted and emitted[0].wake_word
 
 
-def test_reason_is_wake() -> None:
+def test_reason_is_silence_once_the_call_window_times_out() -> None:
     emitted = _wake_cut()
-    assert emitted and emitted[0].reason == "wake"
+    assert emitted and emitted[0].reason == "silence"
 
 
-def test_prior_sentence_carried_into_the_block() -> None:
+def test_prior_sentence_carried_into_the_call() -> None:
     emitted = _wake_cut()
     assert emitted and "durchrechnen" in emitted[0].text
 
@@ -167,6 +173,8 @@ def test_interjection_attaches_to_the_next_block() -> None:
 def test_short_order_still_goes_out() -> None:
     clock, emitted, bb = build(pause_s=2.5, min_chars=25)
     bb.sentence("Hey Robo, stopp.")
+    clock.advance(8.0)
+    bb.tick()
     assert len(emitted) == 1 and emitted[0].wake_word
 
 
@@ -264,18 +272,24 @@ def test_whitespace_wake_word_doesnt_trigger() -> None:
 def test_wake_word_behind_a_typographic_quote() -> None:
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence("„Hey Robo, mach das bitte.")
+    clock.advance(8.0)
+    bb.tick()
     assert len(emitted) == 1
 
 
 def test_several_wake_words_give_exactly_one_block() -> None:
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence("Hey Robo, und dann Hey Robo nochmal, hoerst du, Hey Robo?")
+    clock.advance(8.0)
+    bb.tick()
     assert len(emitted) == 1
 
 
 def test_several_wake_words_text_complete() -> None:
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence("Hey Robo, und dann Hey Robo nochmal, hoerst du, Hey Robo?")
+    clock.advance(8.0)
+    bb.tick()
     assert emitted and emitted[0].text.count("Robo") == 3
 
 
@@ -303,7 +317,9 @@ def test_wake_word_at_end_of_sentence_no_longer_fires() -> None:
 def test_wake_variant_fires_with_greeting(text: str) -> None:
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence(text)
-    assert emitted and emitted[0].wake_word and emitted[0].reason == "wake"
+    clock.advance(8.0)
+    bb.tick()
+    assert emitted and emitted[0].wake_word and emitted[0].reason == "silence"
 
 
 @pytest.mark.parametrize("text", [
@@ -434,6 +450,8 @@ def test_concurrent_no_sentence_lost_or_duplicated() -> None:
 def test_misheard_wake_at_start_fires(heard: str) -> None:
     clock, emitted, bb = build(pause_s=2.5)
     bb.sentence(heard)
+    clock.advance(8.0)
+    bb.tick()
     assert len(emitted) == 1 and emitted[0].wake_word
 
 
@@ -479,6 +497,8 @@ def test_allow_wake_default_next_real_order_still_cuts() -> None:
     bb.sentence("Ich bin Max und will herausfinden, ob der Robo mich erkennt.",
                 allow_wake=False)
     bb.sentence("Hey Robo, was steht in den offenen Punkten?")
+    clock.advance(8.0)
+    bb.tick()
     assert any(b.wake_word for b in emitted)
 
 
@@ -494,7 +514,7 @@ def _bare_wake():
     bb.sentence("Hey Robo")                                   # bare wake phrase
     clock.advance(1.0)
     bb.sentence("Fass das bitte nochmal zusammen.")            # the real order
-    clock.advance(3.0)
+    clock.advance(8.0)                                         # call-silence timeout
     bb.tick()
     return emitted
 
@@ -539,7 +559,7 @@ def _welded():
     clock.advance(11.0)
     bb.sentence("Hey Robo. Gib uns mal bitte aus der Ablage eine Uebersicht aller "
                 "Kontaktadressen, die wir notiert haben.")
-    clock.advance(3.0)
+    clock.advance(8.0)                                         # call-silence timeout
     bb.tick()
     return emitted
 
@@ -590,7 +610,7 @@ def _lone_aktiv():
     bb.sentence("Hey Robo Aktiv.")
     clock.advance(1.0)
     bb.sentence("Fass das bitte nochmal zusammen.")
-    clock.advance(3.0)
+    clock.advance(8.0)                                         # call-silence timeout
     bb.tick()
     return emitted
 
@@ -650,6 +670,13 @@ def _replay():
     t0 = clock.t
     for offset, text in _INCIDENT:
         clock.t = t0 + offset
+        # The real session has a ticker thread calling tick() every
+        # ~0.5 s regardless of when the next utterance arrives (issue
+        # #180: once the wake word opens a call window, only the ticker
+        # -- not sentence() -- can notice the call's own silence
+        # timeout). One tick() per line is a coarse but sufficient stand-
+        # in for that thread here.
+        bb.tick()
         bb.sentence(text)
     clock.t = t0 + _INCIDENT[-1][0] + 3.0
     bb.tick()
@@ -674,3 +701,130 @@ def test_replay_name_drop_produces_no_call() -> None:
 def test_replay_filler_after_first_bare_wake_tail_is_not_its_own_call() -> None:
     assert not any(b.text.strip() == "Ja, gut. Dann probier es mal!" and b.wake_word
                    for b in _replay())
+
+
+# 24 — the call window itself (issue #180): wake opens it, content
+# accumulates across pauses, and it closes by the end phrase, a tap,
+# silence or the call's own max -- exactly one block, wake_word=True,
+# goes out on close.
+def test_state_is_idle_before_any_wake() -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    assert bb.state()["state"] == "idle"
+
+
+def test_wake_opens_the_call_state() -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.sentence("Hey Robo")
+    st = bb.state()
+    assert st["state"] == "listening" and st["opened_by"] == "voice"
+
+
+def test_a_sentence_with_the_wake_phrase_and_a_pause_before_the_end_phrase_stays_one_call() -> None:
+    """The one-breath example from the issue: "Hey Robo. Ich gebe dir."
+    then, after a pause, further content, closed by "Robo, Ende" --
+    exactly one call, no end phrase text in it."""
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.sentence("Hey Robo. Ich gebe dir.")
+    clock.advance(4.0)                    # pause -- must NOT cut the call
+    bb.sentence("Infrastruktur. Server. Oberflächen. Robo, Ende.")
+    assert len(emitted) == 1
+    block = emitted[0]
+    assert block.wake_word and block.reason == "end"
+    for needle in ("Ich gebe dir", "Infrastruktur", "Server", "Oberflächen"):
+        assert needle in block.text, f"{needle!r} missing from the call"
+    assert "Ende" not in block.text
+
+
+def test_end_phrase_strips_itself_from_the_order() -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.sentence("Hey Robo, fass zusammen. Robo, Ende.")
+    assert len(emitted) == 1 and emitted[0].text == "Hey Robo, fass zusammen."
+
+
+def test_roboter_ende_never_closes_the_call() -> None:
+    """Same false-friend rule as the wake phrase itself: "Roboter" is not
+    "Robo", so "Roboter, Ende" stays ordinary content inside the call."""
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.sentence("Hey Robo, fass zusammen.")
+    bb.sentence("Roboter, Ende der Debatte.")
+    assert len(emitted) == 0
+    assert bb.state()["state"] == "listening"
+
+
+def test_end_phrase_while_idle_is_ordinary_speech() -> None:
+    clock, emitted, bb = build(pause_s=2.5, min_chars=1)
+    bb.sentence("Danke, Robo, das war hilfreich letztes Mal.")
+    clock.advance(3.0)
+    bb.tick()
+    assert emitted and not any(b.wake_word for b in emitted)
+
+
+def test_call_silence_timeout_closes_with_reason_silence() -> None:
+    clock, emitted, bb = build(pause_s=2.5, call_silence_s=8.0)
+    bb.sentence("Hey Robo, fass zusammen.")
+    clock.advance(8.0)
+    bb.tick()
+    assert len(emitted) == 1 and emitted[0].reason == "silence"
+
+
+def test_call_max_s_closes_even_while_still_talking() -> None:
+    clock, emitted, bb = build(pause_s=2.5, call_silence_s=8.0, call_max_s=20.0)
+    bb.sentence("Hey Robo, hoer zu.")
+    for i in range(5):
+        clock.advance(5.0)                # never a silence gap, always < 8s
+        bb.sentence(f"Punkt Nummer {i}.")
+    assert len(emitted) == 1 and emitted[0].reason == "max"
+
+
+def test_open_call_via_tap_while_idle() -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.open_call("tap")
+    st = bb.state()
+    assert st["state"] == "listening" and st["opened_by"] == "tap"
+
+
+def test_tap_open_while_already_listening_is_a_no_op() -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.sentence("Hey Robo")
+    opened_at = bb.state()["since"]
+    bb.open_call("tap")
+    assert bb.state()["since"] == opened_at
+
+
+def test_tap_close_sends_the_call_with_reason_tap() -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.open_call("tap")
+    bb.sentence("Trag das bitte als Entscheidung ein.")
+    bb.close_call("tap")
+    assert len(emitted) == 1 and emitted[0].reason == "tap" and emitted[0].wake_word
+    assert bb.state()["state"] == "idle"
+
+
+def test_tap_closing_an_empty_call_sends_nothing_and_is_a_cancel() -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.open_call("tap")
+    bb.close_call("tap")
+    assert emitted == []
+    assert bb.state()["last_close"] == {"reason": "cancel", "at": clock.t}
+
+
+def test_close_call_while_idle_is_a_no_op() -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.close_call("tap")
+    assert emitted == []
+    assert bb.state()["state"] == "idle"
+
+
+def test_state_reports_closes_in_s_counting_down() -> None:
+    clock, emitted, bb = build(pause_s=2.5, call_silence_s=8.0)
+    bb.sentence("Hey Robo, hoer zu.")
+    clock.advance(3.0)
+    closes_in_s = bb.state()["closes_in_s"]
+    assert closes_in_s is not None and abs(closes_in_s - 5.0) < 1e-9
+
+
+def test_state_last_close_reports_end_reason() -> None:
+    clock, emitted, bb = build(pause_s=2.5)
+    bb.sentence("Hey Robo, fass zusammen. Robo, Ende.")
+    last_close = bb.state()["last_close"]
+    assert last_close is not None and last_close["reason"] == "end"

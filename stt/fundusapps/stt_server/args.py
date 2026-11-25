@@ -291,6 +291,11 @@ sp_sm.add_argument('--eou-silence', dest='eou_silence', type=float, default=0.5,
 sp_sm.add_argument('--max-utt', dest='max_utt', type=float, default=20.0,
                    help='Publish a final after this many seconds of one speaker '
                         'even without an end of utterance.')
+sp_sm.add_argument('--vocab', dest='vocab', action='append', default=None,
+                   metavar='WORD[:SOUNDS_LIKE,...]',
+                   help='Custom-dictionary entry (Speechmatics additional_vocab), '
+                        'repeatable. "Robo:Robbo,Roboh" adds the word Robo with two '
+                        'sounds_like hints. Default: the wake name Robo.')
 sp_sm.add_argument('--url', default='',
                    help='Override the realtime URL (tests only); default is the EU endpoint.')
 sp_sm.add_argument('--api-key-env', dest='api_key_env',

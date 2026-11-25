@@ -1,4 +1,4 @@
-# ADR 0024: Level-4 acceptance tests what a real participant hits
+# ADR 0025: Level-4 acceptance tests what a real participant hits
 
 - **Status:** proposed
 - **Date:** 2026-11-25

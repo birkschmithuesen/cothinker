@@ -35,6 +35,8 @@ COOKIE_NAME = "cothinker_pid"
 DEFAULT_SPOOL_DIR = "~/.local/state/cothinker/spool"
 MIN_ACTION_GAP_S = 0.5
 QUEUE_OPS = ("request", "done")
+LISTEN_OPS = ("open", "close", "toggle")
+LIVE_ACTION_OPS = {"queue:room": QUEUE_OPS, "listen:room": LISTEN_OPS}
 _PID_RE = re.compile(r"[0-9a-f]{16}")
 
 
@@ -43,13 +45,14 @@ def _default_spool_dir() -> Path:
 
 
 def _is_allowed_live_action(action: UserAction) -> bool:
-    """The live-mode action allowlist (issue #183): today only a
-    `queue:room` floor request or hand-off; `listen:room` open/close/
-    toggle joins once issue #180 lands. Everything else is rejected with
-    422 rather than silently spooled."""
-    if not isinstance(action, TapAction) or action.intent_id != "queue:room":
+    """The live-mode action allowlist (issue #183): a `queue:room` floor
+    request or hand-off, and a `listen:room` open/close/toggle of the call
+    window (issue #180, ADR 0024). Everything else is rejected with 422
+    rather than silently spooled."""
+    if not isinstance(action, TapAction):
         return False
-    return (action.payload or {}).get("op") in QUEUE_OPS
+    ops = LIVE_ACTION_OPS.get(action.intent_id)
+    return ops is not None and (action.payload or {}).get("op") in ops
 
 
 def create_app(player: ScenarioPlayer | None = None, cors_origins: list[str] | None = None,

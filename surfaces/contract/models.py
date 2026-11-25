@@ -172,11 +172,9 @@ class AgendaSnapshot(BaseModel):
     next_speaker: str | None = Field(default=None, description="Who speaks next, if the queue has more than one person.", examples=["Jonas"])
     items: list[AgendaItemSummary] | None = Field(
         default=None,
-        description="The whole agenda as a list, not just current/next; the"
-        " core does not wire this up yet (issue #129). A fixture populates"
-        " it so a surface can design against it.",
+        description="The whole agenda as a list, not just current/next,"
+        " filled live from the session's `agenda.md` (issue #129).",
         examples=[None],
-        json_schema_extra=_planned(),
     )
 
 
@@ -197,6 +195,55 @@ class QueueSnapshot(BaseModel):
     speaking: QueueSeat | None = Field(default=None, description="Who currently holds the floor; `None` when nobody does.")
     waiting: list[QueueSeat] = Field(default_factory=list, description="Seats waiting their turn, in order.")
     round: None = Field(default=None, description="Reserved for a future round-based queue mode; always `None` today.")
+
+
+class ListenClose(BaseModel):
+    """`ListenSnapshot.last_close`: how the most recent call window ended
+    (`gateway.segmenter.BlockBuilder.state()`'s own shape)."""
+
+    reason: Literal["end", "tap", "silence", "max", "cancel"] = Field(
+        description="How the call closed: the end phrase, a tap, a silence"
+        " timeout, the call's own max duration, or a tap on an empty"
+        " window (cancel, nothing sent).",
+        examples=["end"],
+    )
+    at: float = Field(description="Epoch seconds the call closed.", examples=[1732450920.0])
+
+
+class TranscriptPartialSnapshot(BaseModel):
+    """`content()["transcript_partial"]`: the utterance in progress (issue
+    #181), the payload of the latest non-empty `transcript:partial`."""
+
+    turn_id: str = Field(default="", examples=["01HX7Z"])
+    speaker: str = Field(default="", examples=["Tamar"])
+    text: str = Field(default="", examples=["Let's park the vendor q"])
+    started_at: str = Field(default="", examples=["2026-11-23T09:14:02+01:00"])
+
+
+class ListenSnapshot(BaseModel):
+    """`content()["listen"]`: the call-window block's `listen:room`
+    view-intent payload, filled by `gateway.segmenter.BlockBuilder.state()`
+    (issue #180, ADR 0024). The window the wake word ("Hey Robo"), a tap,
+    or the end phrase ("Robo, Ende") opens and closes; every sentence
+    spoken while it is open belongs to the call."""
+
+    state: Literal["idle", "listening"] = Field(
+        default="idle", description="Whether the call window is open.", examples=["idle"],
+    )
+    since: float | None = Field(
+        default=None, description="Epoch seconds the window opened; `None` while idle.", examples=[None],
+    )
+    opened_by: Literal["voice", "tap"] | None = Field(
+        default=None, description="What opened the window; `None` while idle.", examples=[None],
+    )
+    closes_in_s: float | None = Field(
+        default=None,
+        description="Seconds of silence left before the window auto-closes; `None` while idle.",
+        examples=[None],
+    )
+    last_close: ListenClose | None = Field(
+        default=None, description="How the most recent call ended; `None` before the first one.",
+    )
 
 
 class VoiceRecentEntry(BaseModel):
@@ -345,19 +392,31 @@ class StageStateSnapshot(BaseModel):
     )
     transcript_recent: list[TranscriptLine] = Field(
         default_factory=list,
-        description="The last three contributions, oldest first; carries"
+        description="The last 10 finished lines, oldest first; carries"
         " the same content as the latest `transcript:recent` view intent,"
         " so a surface loaded mid-session sees it without waiting for the"
-        " next event. The core does not wire this up yet (issue #129); a"
-        " fixture populates it.",
+        " next event. Filled live by the `live-transcript` block"
+        " (issue #181).",
         examples=[[]],
-        json_schema_extra=_planned(),
     )
     knowledge: KnowledgeSnapshot | None = Field(
         default=None,
         description="The latest knowledge hits for the current topic, from"
         " the `knowledge-link` block; `None` until the block has emitted"
         " one (key-absent-means-hidden, `StageState._content()`).",
+    )
+    transcript_partial: TranscriptPartialSnapshot | None = Field(
+        default=None,
+        description="The utterance in progress, from the `live-transcript`"
+        " block's `transcript:partial` view intent (issue #181); `None` when"
+        " nobody is mid-sentence. Grows while someone speaks and clears when"
+        " the final lands in `transcript_recent`.",
+    )
+    listen: ListenSnapshot | None = Field(
+        default=None,
+        description="The call window's state, from the `call-window` block"
+        " (issue #180, ADR 0024); `None` when that block is absent from"
+        " the session (key-absent-means-hidden, `StageState._content()`).",
     )
 
 
@@ -496,14 +555,42 @@ class KnowledgeIntent(KnowledgeSnapshot):
     id: str = Field(description="Identity a user action refers back to.", examples=["knowledge:t1"])
 
 
-class TranscriptRecentIntent(BaseModel):
-    """The last three contributions. Not wired yet, see issue #129."""
+class ListenIntent(BaseModel):
+    """`listen:room`: the call-window block's view intent (kind `listen`,
+    issue #180, ADR 0024); the same shape as `StageStateSnapshot.listen`."""
 
-    model_config = ConfigDict(json_schema_extra=_planned())
+    kind: Literal["listen"] = "listen"
+    id: str = Field(description="Identity a user action refers back to.", examples=["listen:room"])
+    state: Literal["idle", "listening"] = Field(default="idle", examples=["idle"])
+    since: float | None = Field(default=None, examples=[None])
+    opened_by: Literal["voice", "tap"] | None = Field(default=None, examples=[None])
+    closes_in_s: float | None = Field(default=None, examples=[None])
+    last_close: ListenClose | None = Field(default=None)
+
+
+class TranscriptRecentIntent(BaseModel):
+    """`transcript:recent`: the live-transcript block's last 10 finished
+    lines (issue #181), the same shape as `StageStateSnapshot.transcript_recent`."""
 
     kind: Literal["transcript:recent"] = "transcript:recent"
     id: str = Field(description="Identity a user action refers back to.", examples=["VI6"])
-    lines: list[TranscriptLine] = Field(description="The last three contributions, oldest first.", examples=[[]])
+    lines: list[TranscriptLine] = Field(description="The last 10 finished lines, oldest first.", examples=[[]])
+
+
+class TranscriptPartialIntent(BaseModel):
+    """`transcript:partial`: the live-transcript block's utterance in
+    progress (issue #181) -- the tentative tail the stage panel shows
+    grey until the matching final arrives. No snapshot field of its own:
+    it is transient by design, cleared (empty `text`) the moment its
+    final lands, so a surface loading mid-session simply waits for the
+    next partial rather than seeing a stale one."""
+
+    kind: Literal["transcript_partial"] = "transcript_partial"
+    id: str = Field(description="Identity a user action refers back to.", examples=["transcript:partial"])
+    turn_id: str = Field(description="Groups every partial of one utterance with the final that closes it.", examples=["01HX7Z"])
+    speaker: str = Field(default="", description="Who is talking; empty when attribution is unsure.", examples=["Tamar"])
+    text: str = Field(description="The tentative text so far; empty once the final for this turn_id has landed.", examples=["Let's park the vendor q"])
+    started_at: str = Field(description="Wall-clock label of when this turn started.", examples=["2026-11-23T09:14:02+01:00"])
 
 
 class TasksIntent(BaseModel):
@@ -529,7 +616,9 @@ ViewIntent = Annotated[
         GraphIntent,
         KnowledgeIntent,
         TranscriptRecentIntent,
+        TranscriptPartialIntent,
         TasksIntent,
+        ListenIntent,
     ],
     Field(discriminator="kind"),
 ]

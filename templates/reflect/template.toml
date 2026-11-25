@@ -50,6 +50,10 @@ id = "status-line"
 id = "graph"
 [[blocks]]
 id = "voice-attribution"
+[[blocks]]
+id = "call-window"
+[[blocks]]
+id = "live-transcript"
 
 [[phases]]
 id = "session"
@@ -57,5 +61,5 @@ titles = { de = "Sitzung", en = "Session" }
 blocks = ["capture-bullets", "topics", "decisions-tasks-questions", "condense",
           "minutes-document", "mirroring-coach", "knowledge-link", "timer",
           "speaker-queue", "speaking-share", "status-line", "graph",
-          "voice-attribution"]
+          "voice-attribution", "call-window", "live-transcript"]
 surfaces = ["stage"]

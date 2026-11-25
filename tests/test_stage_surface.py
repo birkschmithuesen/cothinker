@@ -113,7 +113,8 @@ def test_status_rule_sets_operating_line():
     surface, _, writer, _ = make()
     assert surface.name == "stage" and list(surface.actions()) == []
     assert surface.kinds == {"prompt", "status", "artefact", "graph", "timer",
-                             "queue", "voice", "share", "knowledge"}
+                             "queue", "voice", "share", "knowledge", "listen", "transcript",
+                             "transcript_partial"}
     surface.render([intent("status:line", "status",
                            {"state": "working", "detail": {"count": 3, "failed": False}})])
     assert len(writer.statuses) == 1
@@ -240,6 +241,21 @@ def test_graph_rule_sets_session_graph_key():
     assert state.content()["session_graph"] == graph
 
 
+def test_listen_rule_sets_listen_key_and_clears_it():
+    """issue #180, ADR 0024: the call-window block's `listen:room` intent
+    renders the same way as `queue`/`voice` -- set on an intent, cleared
+    when the intent leaves the board -- so `/api/snapshot` (live mode,
+    ADR 0019) can serve `listen` straight from `buehne.json` without a
+    stage-specific special case."""
+    surface, state, _, _ = make()
+    listen = {"state": "listening", "since": 12.0, "opened_by": "voice",
+              "closes_in_s": 8.0, "last_close": None}
+    surface.render([intent("listen:room", "listen", listen)])
+    assert state.content()["listen"] == listen
+    surface.render([])
+    assert "listen" not in state.content()
+
+
 def test_knowledge_rule_sets_knowledge_key_and_clears_it():
     surface, state, _, _ = make()
     knowledge = {"topic_id": "t1", "query": "Klimaplan",
@@ -249,6 +265,18 @@ def test_knowledge_rule_sets_knowledge_key_and_clears_it():
     assert state.content()["knowledge"] == knowledge
     surface.render([])
     assert "knowledge" not in state.content()
+
+
+def test_transcript_rule_sets_transcript_recent_key():
+    """issue #181: `transcript:recent` sets `content()["transcript_recent"]`,
+    always present rather than key-absent-means-hidden (an empty list is
+    "nothing said yet", not "no live-transcript block")."""
+    surface, state, _, _ = make()
+    assert state.content()["transcript_recent"] == []
+    lines = [{"speaker": "Mira", "started_at": "2026-11-23T09:14:02+01:00",
+              "text": "Lass uns die Vendor-Frage zuruckstellen."}]
+    surface.render([intent("transcript:recent", "transcript", lines)])
+    assert state.content()["transcript_recent"] == lines
 
 
 def test_timer_rule_sets_agenda_keeping_people():
@@ -303,3 +331,16 @@ def test_unknown_kind_dropped_and_logged_once():
     surface.render(odd)
     assert fingerprint(state) == before and writer.writes == 0
     assert len([line for line in logs if "choice_list" in line]) == 1
+
+
+def test_transcript_partial_reaches_the_stage_state_and_clears_on_final():
+    """Issue #181, found live: partials were dropped as an unknown kind, so
+    the panel never grew. A non-empty partial lands in `transcript_partial`;
+    an empty one (its final landed) clears it."""
+    surface, state, _, _ = make()
+    grow = {"turn_id": "t1", "speaker": "A", "text": "Hallo zu", "started_at": ""}
+    surface.render([intent("transcript:partial", "transcript_partial", grow)])
+    assert state.content()["transcript_partial"] == grow
+    done = dict(grow, text="")
+    surface.render([intent("transcript:partial", "transcript_partial", done)])
+    assert "transcript_partial" not in state.content()

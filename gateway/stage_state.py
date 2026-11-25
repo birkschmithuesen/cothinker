@@ -412,6 +412,23 @@ class StageState:
         # (issue #148). None means the key is left out of `content()`
         # (key-absent-means-hidden), same as `queue`/`share`/`session_graph`.
         self.knowledge: dict | None = None
+        # The call window's state, from the `call-window` block's
+        # `listen:room` view intent (issue #180, ADR 0024). None means the
+        # key is left out of `content()` (key-absent-means-hidden), same
+        # as `queue`/`share`/`session_graph`/`knowledge`.
+        self.listen: dict | None = None
+        # The last 10 finished transcript lines, from the `live-transcript`
+        # block's `transcript:recent` view intent (issue #181). Always a
+        # list, never None: `StageStateSnapshot.transcript_recent` has no
+        # Optional variant (unlike `queue`/`voice`/`share`/`session_graph`/
+        # `knowledge`, it is not a region that is absent until a block
+        # shows up -- an empty list already is "nothing said yet").
+        self.transcript_recent: list[dict] = []
+        # The utterance in progress, from the `live-transcript` block's
+        # `transcript:partial` view intent (issue #181). None = nothing in
+        # progress (key-absent-means-hidden); an intent with empty `text`
+        # (its final landed) clears it.
+        self.transcript_partial: dict | None = None
 
     # ------------------------------------------------------------ helpers
     @property
@@ -1129,7 +1146,9 @@ class StageState:
         for key, value in (("queue", self.queue), ("voice", self.voice),
                            ("share", self.share),
                            ("session_graph", self.session_graph),
-                           ("knowledge", self.knowledge)):
+                           ("knowledge", self.knowledge),
+                           ("listen", self.listen),
+                           ("transcript_partial", self.transcript_partial)):
             if value is not None:
                 content[key] = value
         return content
@@ -1210,6 +1229,10 @@ class StageState:
             # from before this field existed, so an old stage page and a
             # session without the file see exactly the same payload shape.
             "agenda": self.agenda,
+            # Always present (never key-absent-means-hidden, unlike the
+            # region fields in `_content()` below): an empty list already
+            # means "nothing finished yet", not "no live-transcript block".
+            "transcript_recent": list(self.transcript_recent),
         }
 
     # ------------------------------------------------------------ restore
@@ -1609,4 +1632,10 @@ def agenda_payload(doc: AgendaDoc, runtime: AgendaRuntime, *,
         "speaker": people[runtime.speaker_index] if people else None,
         "next_speaker": (people[(runtime.speaker_index + 1) % len(people)]
                         if len(people) > 1 else None),
+        # The whole list (issue #129): a surface shows every item, not just
+        # current/next. `None` without an agenda, same as before.
+        "items": ([{"title": item.text, "budget_s": item.budget_s,
+                    "status": ("done" if i < idx else "current" if i == idx
+                               else "next" if i == idx + 1 else "open")}
+                   for i, item in enumerate(items)] if items else None),
     }

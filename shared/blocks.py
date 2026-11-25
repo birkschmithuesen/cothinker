@@ -26,7 +26,8 @@ BLOCK_API_VERSION = 1
 MAX_FANOUT_DEPTH = 8
 # "block" and "cue" stay valid for module API v1 listeners (workshop/hooks.py).
 EVENT_KINDS = frozenset({"utterance", "segment", "phase", "action", "tick",
-                         "block_output", "agent_reply", "block", "cue"})
+                         "block_output", "agent_reply", "block", "cue",
+                         "partial"})
 TOOL_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,47}$")
 
 
