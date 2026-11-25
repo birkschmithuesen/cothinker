@@ -102,9 +102,10 @@ In **fixture mode** the request is accepted but nothing is written:
 `202 {"received": "<kind>", "mode": "fixture"}`.
 
 In **live mode** the action is validated against an allowlist before it
-is spooled -- today only a `queue:room` floor request or hand-off
-(`TapAction` with `intent_id: "queue:room"` and `payload: {"op": "request"
-| "done"}`); anything else answers `422`. `503` answers instead of acting
+is spooled -- a `queue:room` floor request or hand-off (`TapAction` with
+`intent_id: "queue:room"` and `payload: {"op": "request" | "done"}`) or a
+call-window tap (`intent_id: "listen:room"`, `payload: {"op": "open" |
+"close" | "toggle"}`, ADR 0024); anything else answers `422`. `503` answers instead of acting
 if no live session has resolved yet (the same condition `GET /snapshot`
 reports). On success: `202 {"received": "<kind>", "mode": "live"}`.
 

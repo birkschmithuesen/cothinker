@@ -115,13 +115,14 @@ def test_live_mode_reuses_the_existing_cookie_as_the_same_person(session_dir, sp
     assert persons == [pid, pid]
 
 
-# ---- Allowlist: only queue:room request/done, everything else is 422 -----
+# ---- Allowlist: queue:room request/done, listen:room open/close/toggle ----
 
 
 @pytest.mark.parametrize("action", [
     {"kind": "tap", "target": "status-badge"},                                        # no intent_id: a navigation tap
     {"kind": "tap", "intent_id": "queue:room", "target": "x", "payload": {"op": "bogus"}},
     {"kind": "tap", "intent_id": "queue:room", "target": "x"},                          # no payload at all
+    {"kind": "tap", "intent_id": "listen:room", "target": "x", "payload": {"op": "request"}},  # a queue op on the call window
     {"kind": "accept", "intent_id": "VI1"},
     {"kind": "message", "intent_id": "VI1", "person": "P3", "text": "hi"},
 ])
@@ -141,6 +142,18 @@ def test_live_mode_allows_the_done_op_too(session_dir, spool_dir):
             "kind": "tap", "intent_id": "queue:room", "target": "x", "payload": {"op": "done"}})
 
     assert response.status_code == 202
+
+
+@pytest.mark.parametrize("op", ["open", "close", "toggle"])
+def test_live_mode_allows_the_call_window_ops(session_dir, spool_dir, op):
+    app = build_live_app(session_dir, spool_dir=spool_dir)
+    with TestClient(app) as client:
+        response = client.post("/actions", json={
+            "kind": "tap", "intent_id": "listen:room", "target": "listen-toggle", "payload": {"op": op}})
+
+    assert response.status_code == 202
+    line = json.loads((spool_dir / session_dir.name / ACTIONS_FILE).read_text().splitlines()[-1])
+    assert line["intent_id"] == "listen:room" and line["payload"] == {"op": op}
 
 
 # ---- Rate limit ------------------------------------------------------------
