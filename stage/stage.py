@@ -2034,15 +2034,21 @@ sgBlockAnchorJump();
     if(label) label.textContent=an ? 'Robo hört' : 'Robo';
   }
   render('idle');
-  fetch('/api/snapshot').then(function(r){ return r.ok ? r.json() : null; })
+  // The public proxy gates /api/ on the same token as this page; the
+  // page's own token is not published yet at this point (STAGE_TOKEN is
+  // set by the next script), so take it from the template directly.
+  var TOK=%TOKEN%;
+  function tk(u){ return TOK ? u+(u.indexOf('?')<0?'?':'&')+'t='+encodeURIComponent(TOK) : u; }
+  fetch(tk('/api/snapshot')).then(function(r){ return r.ok ? r.json() : null; })
     .then(function(snap){ if(snap && snap.listen) render(snap.listen.state); })
     .catch(function(){});
   try{
-    var es=new EventSource('/api/events');
+    var es=new EventSource(tk('/api/events'));
     es.addEventListener('view-intent', function(ev){
       try{
         var intent=JSON.parse(ev.data);
         if(intent && intent.id==='listen:room') render(intent.state);
+        if(intent && intent.kind==='listen' && intent.payload) render(intent.payload.state);
       }catch(e){}
     });
   }catch(e){}
@@ -2050,7 +2056,7 @@ sgBlockAnchorJump();
   btn.addEventListener('click', function(){
     if(busy) return;
     busy=true;
-    fetch('/api/actions',{method:'POST',
+    fetch(tk('/api/actions'),{method:'POST', credentials:'same-origin',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({kind:'tap', intent_id:'listen:room',
                            target:'listen-toggle', payload:{op:'toggle'}})})

@@ -212,6 +212,16 @@ class ListenClose(BaseModel):
     at: float = Field(description="Epoch seconds the call closed.", examples=[1732450920.0])
 
 
+class TranscriptPartialSnapshot(BaseModel):
+    """`content()["transcript_partial"]`: the utterance in progress (issue
+    #181), the payload of the latest non-empty `transcript:partial`."""
+
+    turn_id: str = Field(default="", examples=["01HX7Z"])
+    speaker: str = Field(default="", examples=["Tamar"])
+    text: str = Field(default="", examples=["Let's park the vendor q"])
+    started_at: str = Field(default="", examples=["2026-11-23T09:14:02+01:00"])
+
+
 class ListenSnapshot(BaseModel):
     """`content()["listen"]`: the call-window block's `listen:room`
     view-intent payload, filled by `gateway.segmenter.BlockBuilder.state()`
@@ -396,6 +406,13 @@ class StageStateSnapshot(BaseModel):
         description="The latest knowledge hits for the current topic, from"
         " the `knowledge-link` block; `None` until the block has emitted"
         " one (key-absent-means-hidden, `StageState._content()`).",
+    )
+    transcript_partial: TranscriptPartialSnapshot | None = Field(
+        default=None,
+        description="The utterance in progress, from the `live-transcript`"
+        " block's `transcript:partial` view intent (issue #181); `None` when"
+        " nobody is mid-sentence. Grows while someone speaks and clears when"
+        " the final lands in `transcript_recent`.",
     )
     listen: ListenSnapshot | None = Field(
         default=None,

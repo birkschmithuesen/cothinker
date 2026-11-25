@@ -35,11 +35,13 @@ from pathlib import Path
 from surfaces.contract.models import (
     GraphIntent,
     KnowledgeIntent,
+    ListenIntent,
     QueueIntent,
     ShareIntent,
     StageStateSnapshot,
     StatusIntent,
     TasksIntent,
+    TranscriptPartialIntent,
     TranscriptRecentIntent,
     VoiceIntent,
 )
@@ -56,6 +58,8 @@ _OWNED_INTENT = {
     "share": (ShareIntent, "share:room"),
     "session_graph": (GraphIntent, "graph:session"),
     "knowledge": (KnowledgeIntent, "knowledge:{topic_id}"),
+    "listen": (ListenIntent, "listen:room"),
+    "transcript_partial": (TranscriptPartialIntent, "transcript:partial"),
 }
 
 # Fields holding a bare list rather than a single model (issue #147 point 3:
@@ -150,6 +154,13 @@ class LivePlayer:
         for name in type(after).model_fields:
             new = getattr(after, name)
             if new == getattr(before, name):
+                continue
+            if name == "transcript_partial" and new is None:
+                # The final landed: tell surfaces to drop the grey line.
+                old_partial = getattr(before, name)
+                intents.append(TranscriptPartialIntent(
+                    id="transcript:partial", turn_id=old_partial.turn_id,
+                    speaker=old_partial.speaker, text="", started_at=old_partial.started_at))
                 continue
             owned = _OWNED_INTENT.get(name)
             if owned is not None and new is not None:

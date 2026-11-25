@@ -144,8 +144,13 @@ function tpBoot() {
     .then(function (snapshot) {
       if (snapshot && snapshot.transcript_recent) {
         tpMerge(state, { kind: "transcript:recent", lines: snapshot.transcript_recent });
-        tpRender(container, state, Date.now());
       }
+      if (snapshot && snapshot.transcript_partial) {
+        var p = snapshot.transcript_partial;
+        tpMerge(state, { kind: "transcript_partial", turn_id: p.turn_id, speaker: p.speaker,
+                         text: p.text, started_at: p.started_at });
+      }
+      tpRender(container, state, Date.now());
     });
 
   var events = new EventSource(withToken(api + "events"));

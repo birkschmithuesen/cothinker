@@ -67,7 +67,8 @@ from blocks.mirroring_coach.coach import NACHTRAG_PREFIX  # the block owns the c
 from shared.surface import UserAction, ViewIntent
 
 KINDS = frozenset({"prompt", "status", "artefact", "graph", "timer", "queue",
-                   "voice", "share", "knowledge", "listen", "transcript"})
+                   "voice", "share", "knowledge", "listen", "transcript",
+                   "transcript_partial"})
 
 # Keys of the agenda the legacy AgendaController owns and the timer intent
 # does not carry; they survive a timer render.
@@ -115,6 +116,9 @@ class StageSurface:
             "knowledge": ("knowledge", self._region("knowledge")),
             "listen": ("listen", self._region("listen")),
             "transcript": ("transcript", self._region("transcript_recent")),
+            # Keyed by the full id: it shares the `transcript` prefix with
+            # `transcript:recent` but has its own kind (issue #181).
+            "transcript:partial": ("transcript_partial", self._partial),
         }
 
     # ------------------------------------------------------------ Surface
@@ -128,7 +132,7 @@ class StageSurface:
                                    f"stage surface: dropped intent of unknown kind {intent.kind!r}")
                     continue
                 prefix = _prefix(intent.id)
-                rule = self._rules.get(prefix)
+                rule = self._rules.get(intent.id) or self._rules.get(prefix)
                 if rule is None or rule[0] != intent.kind:
                     self._log_once(f"prefix:{prefix}:{intent.kind}",
                                    f"stage surface: no mapping rule for intent prefix "
@@ -301,6 +305,16 @@ class StageSurface:
         # writes it into the protocol. Noted once per intent, no change.
         self._log(f"stage surface: {intent.id} noted, nothing to show")
         return False
+
+    def _partial(self, intent: ViewIntent) -> bool:
+        """`transcript:partial` (issue #181): the utterance in progress; an
+        empty `text` means its final landed, so the field is cleared."""
+        payload = dict(intent.payload or {})
+        new = payload if payload.get("text") else None
+        if new == self._state.transcript_partial:
+            return False
+        self._state.transcript_partial = new
+        return True
 
     def _region(self, attribute: str) -> Callable[[ViewIntent], bool]:
         def rule(intent: ViewIntent) -> bool:

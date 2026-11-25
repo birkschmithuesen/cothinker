@@ -113,7 +113,8 @@ def test_status_rule_sets_operating_line():
     surface, _, writer, _ = make()
     assert surface.name == "stage" and list(surface.actions()) == []
     assert surface.kinds == {"prompt", "status", "artefact", "graph", "timer",
-                             "queue", "voice", "share", "knowledge", "listen", "transcript"}
+                             "queue", "voice", "share", "knowledge", "listen", "transcript",
+                             "transcript_partial"}
     surface.render([intent("status:line", "status",
                            {"state": "working", "detail": {"count": 3, "failed": False}})])
     assert len(writer.statuses) == 1
@@ -330,3 +331,16 @@ def test_unknown_kind_dropped_and_logged_once():
     surface.render(odd)
     assert fingerprint(state) == before and writer.writes == 0
     assert len([line for line in logs if "choice_list" in line]) == 1
+
+
+def test_transcript_partial_reaches_the_stage_state_and_clears_on_final():
+    """Issue #181, found live: partials were dropped as an unknown kind, so
+    the panel never grew. A non-empty partial lands in `transcript_partial`;
+    an empty one (its final landed) clears it."""
+    surface, state, _, _ = make()
+    grow = {"turn_id": "t1", "speaker": "A", "text": "Hallo zu", "started_at": ""}
+    surface.render([intent("transcript:partial", "transcript_partial", grow)])
+    assert state.content()["transcript_partial"] == grow
+    done = dict(grow, text="")
+    surface.render([intent("transcript:partial", "transcript_partial", done)])
+    assert "transcript_partial" not in state.content()

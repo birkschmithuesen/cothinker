@@ -424,6 +424,11 @@ class StageState:
         # `knowledge`, it is not a region that is absent until a block
         # shows up -- an empty list already is "nothing said yet").
         self.transcript_recent: list[dict] = []
+        # The utterance in progress, from the `live-transcript` block's
+        # `transcript:partial` view intent (issue #181). None = nothing in
+        # progress (key-absent-means-hidden); an intent with empty `text`
+        # (its final landed) clears it.
+        self.transcript_partial: dict | None = None
 
     # ------------------------------------------------------------ helpers
     @property
@@ -1142,7 +1147,8 @@ class StageState:
                            ("share", self.share),
                            ("session_graph", self.session_graph),
                            ("knowledge", self.knowledge),
-                           ("listen", self.listen)):
+                           ("listen", self.listen),
+                           ("transcript_partial", self.transcript_partial)):
             if value is not None:
                 content[key] = value
         return content

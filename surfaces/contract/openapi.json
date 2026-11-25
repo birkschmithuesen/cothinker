@@ -1580,6 +1580,17 @@
             "x-issue": "https://github.com/birkschmithuesen/cothinker/issues/129",
             "x-status": "planned"
           },
+          "transcript_partial": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptPartialSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The utterance in progress, from the `live-transcript` block's `transcript:partial` view intent (issue #181); `None` when nobody is mid-sentence. Grows while someone speaks and clears when the final lands in `transcript_recent`."
+          },
           "transcript_recent": {
             "description": "The last 10 finished lines, oldest first; carries the same content as the latest `transcript:recent` view intent, so a surface loaded mid-session sees it without waiting for the next event. Filled live by the `live-transcript` block (issue #181).",
             "examples": [
@@ -1755,6 +1766,45 @@
           "text"
         ],
         "title": "TranscriptLine",
+        "type": "object"
+      },
+      "TranscriptPartialSnapshot": {
+        "description": "`content()[\"transcript_partial\"]`: the utterance in progress (issue\n#181), the payload of the latest non-empty `transcript:partial`.",
+        "properties": {
+          "speaker": {
+            "default": "",
+            "examples": [
+              "Tamar"
+            ],
+            "title": "Speaker",
+            "type": "string"
+          },
+          "started_at": {
+            "default": "",
+            "examples": [
+              "2026-11-23T09:14:02+01:00"
+            ],
+            "title": "Started At",
+            "type": "string"
+          },
+          "text": {
+            "default": "",
+            "examples": [
+              "Let's park the vendor q"
+            ],
+            "title": "Text",
+            "type": "string"
+          },
+          "turn_id": {
+            "default": "",
+            "examples": [
+              "01HX7Z"
+            ],
+            "title": "Turn Id",
+            "type": "string"
+          }
+        },
+        "title": "TranscriptPartialSnapshot",
         "type": "object"
       },
       "ValidationError": {
