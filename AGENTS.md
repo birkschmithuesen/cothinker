@@ -38,3 +38,22 @@
    repository names a specific deployment, team, or event — only example
    data under invented names. A concrete installation's real names, data,
    and configuration live in a separate, private repository, never here.
+8. **Everything here is in English.** Issues, pull requests, labels, commit
+   messages, code comments, docs and ADRs — this is an international
+   open-source project.
+9. **Every issue has a human assignee; agents never assign work.** The
+   assignee is the person who decides or accepts. An agent never assigns an
+   issue to another agent or gives another agent a task; agents coordinate in
+   issue comments. Labels carry the rest: `from:<agent>` for an issue an agent
+   opened, `needs-human` when a human decision or sign-off is pending.
+10. **The project board is the shared view.**
+    <https://github.com/users/birkschmithuesen/projects/4> — columns *New*,
+    *Needs human decision*, *Agent working*, *In review*, *Done*. Move your
+    issue when its state changes (an agent starting work → *Agent working*; a
+    PR opened → *In review*).
+11. **Surfaces take their look from the design tokens only.**
+    `surfaces/design/tokens.yaml` (ADR 0023) is the single source for colour,
+    type and spacing; the CoThinker style guide is at
+    <https://cothinker.eu/design/>. A surface never writes its own colour,
+    font or size literal; an instance changes its look by overriding tokens
+    in its private repository.
