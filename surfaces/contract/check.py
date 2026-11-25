@@ -260,6 +260,9 @@ def _replay_and_collect(
         browser = playwright.chromium.launch(headless=True)
         context = browser.new_context(viewport=VIEWPORT)
         page = context.new_page()
+        # Font binaries are not shipped in this public repo (surfaces/design/
+        # build.py documents the gap) and are out of scope for this check.
+        page.route("**/fonts/*.woff2", lambda route: route.fulfill(status=200, content_type="font/woff2", body=b""))
         page.on("request", lambda req: requests.append(req.url))
         page.on("console", lambda msg: console_messages.append({"type": msg.type, "text": msg.text}))
         page.expose_function(

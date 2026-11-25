@@ -53,6 +53,10 @@ def browser():
 def page(browser):
     context = browser.new_context(viewport={"width": 1280, "height": 800})
     page = context.new_page()
+    # Font binaries are not shipped in this public repo (surfaces/design/build.py
+    # documents the gap); a real deployment supplies them. Stub the @font-face
+    # request so that known, documented gap never shows up as a console error.
+    page.route("**/fonts/*.woff2", lambda route: route.fulfill(status=200, content_type="font/woff2", body=b""))
     page.console_errors = []
     page.on("console", lambda msg: page.console_errors.append(msg.text) if msg.type == "error" else None)
     yield page
