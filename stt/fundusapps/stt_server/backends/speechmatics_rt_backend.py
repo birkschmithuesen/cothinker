@@ -63,6 +63,30 @@ if str(_REPO) not in sys.path:
 from shared.utterance import DEFAULT_MAX_UTT_S, UtteranceCollector  # noqa: E402
 
 
+# The wake name, always in the custom dictionary unless the operator
+# passes their own --vocab list: "Hey Robo" is the one phrase the system
+# must hear, and Speechmatics heard "Hugo"/"Bobo" without it (issue #150).
+DEFAULT_VOCAB = ("Robo:Robbo,Roboh",)
+
+
+def parse_vocab(entries) -> list[dict]:
+    """`["Robo:Robbo,Roboh", "CoThinker"]` -> Speechmatics `additional_vocab`
+    (`[{"content": "Robo", "sounds_like": ["Robbo", "Roboh"]}, {"content":
+    "CoThinker"}]`). Empty entries are dropped."""
+    out: list[dict] = []
+    for raw in entries or ():
+        word, _, alts = str(raw).partition(":")
+        word = word.strip()
+        if not word:
+            continue
+        item: dict = {"content": word}
+        sounds = [a.strip() for a in alts.split(",") if a.strip()]
+        if sounds:
+            item["sounds_like"] = sounds
+        out.append(item)
+    return out
+
+
 def _import_stream():
     from shared.speechmatics import SPEECHMATICS_URL, SpeechmaticsStream
     return SPEECHMATICS_URL, SpeechmaticsStream
@@ -167,7 +191,8 @@ class SpeechmaticsRtBackend(RecognizerBackend):
                  prefer_current_speaker: bool = False,
                  url: Optional[str] = None,
                  stream_factory: Optional[Callable] = None,
-                 speaker_resolver: Optional[Callable[[float, float], Optional[str]]] = None):
+                 speaker_resolver: Optional[Callable[[float, float], Optional[str]]] = None,
+                 additional_vocab: Optional[list] = None):
         super().__init__(event_bus)
         default_url, stream_cls = _import_stream()
         self._api_key = api_key
@@ -181,13 +206,16 @@ class SpeechmaticsRtBackend(RecognizerBackend):
         # _UtteranceCollector; see its own docstring/comment for the
         # contract. None (the default) is a no-op.
         self._speaker_resolver = speaker_resolver
+        self._additional_vocab = (parse_vocab(DEFAULT_VOCAB) if additional_vocab is None
+                                  else list(additional_vocab))
         self._url = url or default_url
         self._stream_factory = stream_factory or (
             lambda: stream_cls(self._api_key, self._language, None,
                                max_delay_s=self._max_delay_s,
                                eou_silence_s=self._eou_silence_s, url=self._url,
                                max_speakers=self._max_speakers,
-                               prefer_current_speaker=self._prefer_current_speaker))
+                               prefer_current_speaker=self._prefer_current_speaker,
+                               additional_vocab=self._additional_vocab or None))
         self._collectors: Dict[str, _UtteranceCollector] = {}
         self._queues: Dict[str, "asyncio.Queue"] = {}
         self._tasks: Dict[str, "asyncio.Task"] = {}
@@ -206,7 +234,8 @@ class SpeechmaticsRtBackend(RecognizerBackend):
         ready.wait(timeout=5.0)
         logging.info(f"[sm-rt] language={language} max_delay={self._max_delay_s} "
                      f"eou_silence={self._eou_silence_s} max_speakers={self._max_speakers} "
-                     f"prefer_current_speaker={self._prefer_current_speaker} url={self._url}")
+                     f"prefer_current_speaker={self._prefer_current_speaker} "
+                     f"vocab={[v['content'] for v in self._additional_vocab]} url={self._url}")
 
     @classmethod
     def from_args(cls, event_bus: EventBus, args) -> "SpeechmaticsRtBackend":
@@ -222,7 +251,9 @@ class SpeechmaticsRtBackend(RecognizerBackend):
                    # Issue #128: None (the default build_speaker_resolver
                    # returns) for every input path except the Jitsi/BBB
                    # --per-track tap, which sets args.per_track_sidecar.
-                   speaker_resolver=build_speaker_resolver(args))
+                   speaker_resolver=build_speaker_resolver(args),
+                   additional_vocab=(parse_vocab(args.vocab)
+                                     if getattr(args, "vocab", None) else None))
 
     def wants_streaming(self) -> bool:
         return True

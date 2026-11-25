@@ -301,3 +301,48 @@ def test_cli_parser_defaults_for_speechmatics_rt():
     assert (ns.max_delay, ns.max_speakers, ns.prefer_current_speaker) == (2.0, 10, False)
     ns = a.parser.parse_args(["speechmatics-rt", "--max-speakers", "4", "--prefer-current-speaker"])
     assert (ns.max_speakers, ns.prefer_current_speaker) == (4, True)
+
+
+def test_parse_vocab_builds_the_custom_dictionary():
+    from fundusapps.stt_server.backends.speechmatics_rt_backend import parse_vocab
+    assert parse_vocab(["Robo:Robbo, Roboh", "Wiki", "", ":x"]) == [
+        {"content": "Robo", "sounds_like": ["Robbo", "Roboh"]},
+        {"content": "Wiki"},
+    ]
+
+
+def test_the_wake_name_is_in_the_dictionary_by_default():
+    """Without --vocab the stream still sends Robo as additional_vocab: the
+    wake phrase was misheard ("Hugo") without it."""
+    import sys as _sys
+    from pathlib import Path as _Path
+    _sys.path.insert(0, str(_Path(__file__).resolve().parents[4]))
+    from shared.speechmatics import sm_config
+    be = SpeechmaticsRtBackend(EventBus(), api_key="fake")
+    try:
+        st = be._stream_factory()
+        tcfg = sm_config(st._speakers, False, st._language, st._max_delay_s, st._eou_silence_s,
+                         additional_vocab=st._additional_vocab)["transcription_config"]
+        assert {"content": "Robo", "sounds_like": ["Robbo", "Roboh"]} in tcfg["additional_vocab"]
+    finally:
+        be.close()
+
+
+def test_vocab_flag_replaces_the_default_list(monkeypatch):
+    _stub_import_stream(monkeypatch)
+    monkeypatch.setenv("SM_TEST_KEY", "k")
+    import sys as _sys
+    orig = _sys.argv.copy()
+    _sys.argv = ["pytest", "vosk"]
+    try:
+        from fundusapps.stt_server import args as a
+    finally:
+        _sys.argv = orig
+    ns = a.parser.parse_args(["speechmatics-rt", "--vocab", "Robo:Robbo", "--vocab", "Wiki"])
+    ns.api_key_env = "SM_TEST_KEY"
+    be = SpeechmaticsRtBackend.from_args(EventBus(), ns)
+    try:
+        assert be._additional_vocab == [{"content": "Robo", "sounds_like": ["Robbo"]},
+                                        {"content": "Wiki"}]
+    finally:
+        be.close()
