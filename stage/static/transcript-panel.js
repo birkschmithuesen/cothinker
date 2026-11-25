@@ -28,6 +28,7 @@
 // `text` arrives empty).
 
 var TP_MAX_LINES = 10;
+var TP_DEFAULT_API = "/api/";
 var TP_MAX_AGE_S = 120;
 var TP_MIN_OPACITY = 0.25;
 var TP_TENTATIVE_OPACITY = 0.65;
@@ -122,7 +123,10 @@ function tpBoot() {
   if (!container) return;
   container.style.overflow = "hidden";       // no scrolling (the issue's spec)
 
-  var api = new URLSearchParams(window.location.search).get("api") || "/";
+  // The contract lives under /api/ behind the event server's proxy (same
+  // path the stage's own listen toggle posts to); `?api=` overrides it for
+  // a contract on another origin (tests, a local fixture server).
+  var api = new URLSearchParams(window.location.search).get("api") || TP_DEFAULT_API;
   var token = window.STAGE_TOKEN;
   function withToken(u) {
     if (!token || /[?&]t=/.test(u)) return u;

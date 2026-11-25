@@ -187,3 +187,13 @@ def test_opacity_falls_with_position_newest_highest(out):
 
 def test_a_line_older_than_120s_fades_out_completely(out):
     assert out["oldLineOpacity"] == 0
+
+
+def test_the_panel_defaults_to_the_proxied_contract_path():
+    """Without ?api= the panel must read /api/snapshot + /api/events (the
+    event server proxies the contract under /api/), not the site root --
+    live, the root answered nothing and the panel stayed empty."""
+    from pathlib import Path
+    js = (Path(__file__).resolve().parents[1] / "stage" / "static" / "transcript-panel.js").read_text()
+    assert 'var TP_DEFAULT_API = "/api/";' in js
+    assert '.get("api") || TP_DEFAULT_API' in js

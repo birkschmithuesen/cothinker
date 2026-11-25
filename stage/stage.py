@@ -1806,6 +1806,17 @@ summary{cursor:pointer;padding:.4rem 0;color:var(--akz);font-size:.94rem}
    while idle. */
 #listen-toggle.listen-on{background:#1d4430;border-color:#3d8b6a;color:#bfe8d4}
 #listen-toggle.listen-off{background:#1d2128;border-color:#3a4150;color:#e8e8e8}
+/* Live transcript side panel (issue #181): a fixed window bottom left,
+   at most ~10 lines, newest on top, older lines fade; never scrolls and
+   never covers the participant buttons (#teiln, bottom right). */
+#transcript{position:fixed;left:.8rem;bottom:3.8rem;z-index:35;
+ width:min(30rem,calc(100vw - 1.6rem));max-height:15.5rem;overflow:hidden;
+ background:rgba(14,17,22,.88);border:1px solid var(--lin);border-radius:6px;
+ padding:.5rem .7rem;font-size:.85rem;line-height:1.35;box-sizing:border-box}
+#transcript:empty{display:none}
+#transcript .transcript-line{margin:.1rem 0}
+#transcript .transcript-line b{color:var(--dim);font-weight:600}
+#transcript .tentative{font-style:italic}
 #join-dlg,#share-dlg{position:fixed;top:0;left:0;width:100vw;height:100vh;
  z-index:60;background:rgba(10,12,14,.94);display:flex;align-items:center;
  justify-content:center;padding:2vmin;box-sizing:border-box}
