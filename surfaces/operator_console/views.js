@@ -23,16 +23,16 @@ function pairs(entries) {
   return entries.flatMap(([term, value, cls]) => [el("dt", term), el("dd", String(value), cls ? { class: cls } : {})]);
 }
 
-function clock(iso) { return iso ? new Date(iso).toLocaleTimeString("de-DE") : "–"; }
+function clock(iso) { return iso ? new Date(iso).toLocaleTimeString("en-US") : "–"; }
 
 export function mmss(seconds) {
   const total = Math.max(0, Math.round(seconds));
   return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, "0")}`;
 }
 
-// German number formatting (decimal comma), at most `digits` decimals.
+// Decimal-point number formatting, at most `digits` decimals.
 function num(value, digits) {
-  return value.toLocaleString("de-DE", { maximumFractionDigits: digits, minimumFractionDigits: digits });
+  return value.toLocaleString("en-US", { maximumFractionDigits: digits, minimumFractionDigits: digits });
 }
 
 // Error level: always the word, the colour only in addition (#176 `ErrorEntry.level`).
@@ -132,7 +132,7 @@ export function renderControl(status, projects) {
 
 export function logUpdate(status) {
   const updates = document.getElementById("updates");
-  const line = el("div", `${new Date().toLocaleTimeString("de-DE")} · ${status.running ? TEXT.running : TEXT.stopped} · ${status.meeting.count}`);
+  const line = el("div", `${new Date().toLocaleTimeString("en-US")} · ${status.running ? TEXT.running : TEXT.stopped} · ${status.meeting.count}`);
   updates.prepend(line);
   while (updates.children.length > UPDATE_CAP) updates.lastElementChild.remove();
   document.querySelector('[data-empty="updates"]').hidden = true;

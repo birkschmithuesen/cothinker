@@ -20,12 +20,12 @@ EXPECTED_TEXT = {
 
 
 def populated_snapshot():
-    """The meeting fixture mid-session (frame 4: queue, voice, decision, open
-    question, knowledge hits) plus its closing tasks, plus test-local talk
-    share (the fixture has none, spec F-4)."""
+    """The meeting fixture mid-session (frame 5: queue, voice, decision, open
+    question, knowledge hits) plus the closing frame's tasks, plus test-local
+    talk share (the fixture has none, spec F-4)."""
     frames = load_scenario("meeting")
-    return frames[3].snapshot.model_copy(update={
-        "tasks": frames[5].snapshot.tasks,
+    return frames[5].snapshot.model_copy(update={
+        "tasks": frames[7].snapshot.tasks,
         "share": ShareSnapshot(total_words=200, shares=[
             ShareRow(person="P1", given="Person A", words=120, share=0.6),
             ShareRow(person="P2", given="Person B", words=80, share=0.4),
@@ -39,7 +39,7 @@ def test_every_view_shows_its_data(contract, surface_url, page, shot_dir):
     page.wait_for_selector('html[data-state="listening"]')
     assert "Decisions & risks" in page.locator("#left-agenda").inner_text()
     assert "Tamar" in page.locator("#left-queue").inner_text()
-    assert page.locator("#left-speaker .speaker").inner_text() == "Tamar"  # voice.speaking, frame 4
+    assert page.locator("#left-speaker .speaker").inner_text() == "Tamar"  # voice.speaking, frame 5
     for key in VIEW_KEYS:
         open_view(page, key)
         view = page.locator(f'[data-view="{key}"]')
@@ -66,13 +66,13 @@ def test_voice_present_but_nobody_speaking(contract, surface_url, page):
     api = contract([Frame(delay_s=0.0, snapshot=snapshot, view_intents=[])])
     page.goto(f"{surface_url}?api={api}/")
     page.wait_for_selector('html[data-state="listening"]')
-    assert page.locator('[data-empty="left-speaker"]').inner_text() == "Gerade spricht niemand."
+    assert page.locator('[data-empty="left-speaker"]').inner_text() == "Nobody is speaking right now."
 
 
 def test_voice_intent_alone_updates_who_speaks_and_marks_it_fresh(contract, surface_url, page):
     """A `voice` intent renders by itself (spec 3.6): once the page is up,
     every further `/snapshot` re-fetch is aborted, so only the intent can put
-    the name on screen. It also marks "Spricht gerade" as just confirmed."""
+    the name on screen. It also marks "Speaking now" as just confirmed."""
     voiced = empty_snapshot().model_copy(update={"voice": VoiceSnapshot(speaking="Person B")})
     api = contract([
         Frame(delay_s=0.0, snapshot=empty_snapshot(), view_intents=[]),
@@ -90,7 +90,7 @@ def test_voice_intent_alone_updates_who_speaks_and_marks_it_fresh(contract, surf
     page.goto(f"{surface_url}?api={api}/")
     page.wait_for_selector('html[data-state="listening"]')
     block["refetch"] = True  # from here on, only the intent can change the speaker
-    assert page.locator('[data-empty="left-speaker"]').inner_text() == "Sprechererkennung nicht aktiv."
+    assert page.locator('[data-empty="left-speaker"]').inner_text() == "Speaker detection not active."
     page.wait_for_selector("#left-speaker[data-fresh]", state="attached", timeout=10000)
     assert page.locator("#left-speaker .speaker").inner_text(timeout=5000) == "Person B"
 
@@ -102,7 +102,7 @@ def test_pending_announcement_means_working(contract, surface_url, page):
     api = contract([Frame(delay_s=0.0, snapshot=busy, view_intents=[])])
     page.goto(f"{surface_url}?api={api}/")
     page.wait_for_selector('html[data-state="working"]')
-    assert page.locator("#state").inner_text() == "arbeitet"
+    assert page.locator("#state").inner_text() == "working"
 
 
 def test_unreachable_contract_means_offline(surface_url, page):

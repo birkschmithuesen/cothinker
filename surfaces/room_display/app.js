@@ -92,7 +92,7 @@ function onIntent(intent) {
     if (isNew && intent.hits.length) switcher.auto("memory");
   } else if (intent.kind === "voice") {
     snapshot.voice = { speaking: intent.speaking, since: intent.since, recent: intent.recent };
-    // Mark "Spricht gerade" as just confirmed, even when the name is unchanged
+    // Mark "Speaking now" as just confirmed, even when the name is unchanged
     // (spec 3.6): the room sees that attribution is live.
     views.markFresh("#left-speaker");
   }

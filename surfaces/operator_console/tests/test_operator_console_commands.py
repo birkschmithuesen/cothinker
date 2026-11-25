@@ -39,7 +39,7 @@ def test_stop_without_participants_asks_once(operator, surface_url, page):
     page.keyboard.press("Escape")
     assert stops == [] and backend.current.running
     page.click("#stop")
-    assert page.locator("#stop-confirm").inner_text() == "Beenden"
+    assert page.locator("#stop-confirm").inner_text() == "End"
     page.click("#stop-confirm")
     page.wait_for_selector('html[data-running="false"]')
 
@@ -51,8 +51,8 @@ def test_stop_with_participants_warns_and_forces(operator, surface_url, page):
     })
     page.wait_for_selector('[data-panel="meeting"] [data-row]')
     page.click("#stop")
-    assert page.locator("#stop-warning").inner_text() == "Noch 1 Teilnehmende im Meeting."
-    assert page.locator("#stop-confirm").inner_text() == "Trotzdem beenden"
+    assert page.locator("#stop-warning").inner_text() == "1 participant still in the meeting."
+    assert page.locator("#stop-confirm").inner_text() == "End anyway"
     page.click("#stop-confirm")
     page.wait_for_selector('html[data-running="false"]', timeout=5000)
     assert not backend.current.running

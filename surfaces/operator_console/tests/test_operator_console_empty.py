@@ -6,10 +6,10 @@ from surfaces.operator.fixtures import OperatorFrame
 from surfaces.operator_console.tests.helpers import TOKEN, empty_status
 
 EXPECTED = {
-    "control": "Keine Projekte freigegeben.", "services": "Keine Dienste gemeldet.",
-    "meeting": "Niemand im Meeting.", "stt": "Spracherkennung nicht verbunden.",
-    "session": "Keine laufende Sitzung.", "session-agenda": "Keine Tagesordnung.",
-    "call": "Noch kein Aufruf.", "errors": "Keine Fehler.",
+    "control": "No projects available.", "services": "No services reported.",
+    "meeting": "Nobody in the meeting.", "stt": "Speech recognition not connected.",
+    "session": "No session running.", "session-agenda": "No agenda.",
+    "call": "No call yet.", "errors": "No errors.",
 }
 
 

@@ -18,20 +18,20 @@ def test_running_session_fills_every_panel(operator, surface_url, page, shot_dir
         assert page.locator(f'[data-panel="{key}"] [data-row]').count() > 0, key
     for key in ("services", "meeting", "stt", "session", "session-agenda", "call", "errors"):
         assert not page.locator(f'[data-empty="{key}"]').is_visible(), key
-    assert "spricht" in page.locator('[data-panel="meeting"]').inner_text()
+    assert "speaking" in page.locator('[data-panel="meeting"]').inner_text()
     errors = page.locator('[data-panel="errors"]').inner_text()
-    assert "Warnung · stt: reconnect after timeout" in errors  # level as a word, never colour alone
+    assert "Warning · stt: reconnect after timeout" in errors  # level as a word, never colour alone
     session = page.locator('[data-panel="session"]').inner_text()
     assert "Decisions & risks" in session
-    assert "Titel" in session and "Quarterly planning" in session
+    assert "Title" in session and "Quarterly planning" in session
     assert page.locator('[data-panel="disk"] .content').inner_text() == (
-        "71,0 % frei · 71,0 GB · Aufnahme reicht noch ca. 6,1 h"
+        "71.0 % free · 71.0 GB · Recording lasts about 6.1 h"
     )
     assert page.locator("#switch").is_disabled()
-    assert page.locator("#switch-hint").inner_text() == "Projektwechsel nur im gestoppten Zustand."
+    assert page.locator("#switch-hint").inner_text() == "Project switch only while stopped."
     page.screenshot(path=str(shot_dir / "running.png"), full_page=True)
     page.click("#stop")
-    assert page.locator("#stop-warning").inner_text() == "Noch 2 Teilnehmende im Meeting."
+    assert page.locator("#stop-warning").inner_text() == "2 participants still in the meeting."
     page.screenshot(path=str(shot_dir / "stop-dialog.png"), full_page=True)
     assert page.console_errors == []
 
@@ -57,11 +57,11 @@ def test_disk_panel_warns_below_fifteen_percent_free(operator, surface_url, page
     api, _ = operator([_with_disk(build_frames()[0], free_percent=10.0)])
     page.goto(f"{surface_url}?api={api}&token={TOKEN}")
     page.wait_for_selector('[data-panel="disk"] .content.warn')
-    assert "knapp" in page.locator('[data-panel="disk"] .content').inner_text()
+    assert "low" in page.locator('[data-panel="disk"] .content').inner_text()
 
 
 def test_disk_panel_flags_danger_below_five_percent_free(operator, surface_url, page, shot_dir):
     api, _ = operator([_with_disk(build_frames()[0], free_percent=4.5)])
     page.goto(f"{surface_url}?api={api}&token={TOKEN}")
     page.wait_for_selector('[data-panel="disk"] .content.danger')
-    assert "kritisch" in page.locator('[data-panel="disk"] .content').inner_text()
+    assert "critical" in page.locator('[data-panel="disk"] .content').inner_text()

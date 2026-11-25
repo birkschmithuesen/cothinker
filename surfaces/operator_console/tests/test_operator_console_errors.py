@@ -29,7 +29,7 @@ def test_status_auth_failure_is_shown(operator, surface_url, page):
     page.route("**/operator/status", lambda route: route.fulfill(status=401, json={"detail": "no"}))
     page.goto(f"{surface_url}?api={api}&token={TOKEN}")
     page.wait_for_selector("#connection-state:not(:empty)")
-    assert "Zugang" in page.locator("#connection-state").inner_text()
+    assert "Access" in page.locator("#connection-state").inner_text()
     assert page.pageerrors == []
 
 
@@ -39,7 +39,7 @@ def test_status_network_failure_is_shown(operator, surface_url, page):
     page.route("**/operator/status", lambda route: route.abort())
     page.goto(f"{surface_url}?api={api}&token={TOKEN}")
     page.wait_for_selector("#connection-state:not(:empty)")
-    assert "Verbindung" in page.locator("#connection-state").inner_text()
+    assert "Connection" in page.locator("#connection-state").inner_text()
     assert page.pageerrors == []
 
 

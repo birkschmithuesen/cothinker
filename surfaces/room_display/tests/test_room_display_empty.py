@@ -6,14 +6,14 @@ from surfaces.contract.fixtures import Frame
 from surfaces.room_display.tests.helpers import VIEW_KEYS, empty_snapshot, open_view
 
 EXPECTED = {
-    "live": "Noch nichts gesagt.", "topics": "Noch keine Themen.", "results": "Noch keine Ergebnisse.",
-    "queue": "Niemand auf der Redeliste.", "share": "Noch keine Redeanteile.",
-    "memory": "Keine Wissenstreffer zum aktuellen Thema.",
+    "live": "Nothing said yet.", "topics": "No topics yet.", "results": "No results yet.",
+    "queue": "Nobody in the queue.", "share": "No talk share yet.",
+    "memory": "No knowledge hits for the current topic.",
 }
 LEFT = {
-    "left-agenda": "Keine Tagesordnung.",
-    "left-speaker": "Sprechererkennung nicht aktiv.",
-    "left-queue": "Niemand auf der Redeliste.",
+    "left-agenda": "No agenda.",
+    "left-speaker": "Speaker detection not active.",
+    "left-queue": "Nobody in the queue.",
 }
 
 
