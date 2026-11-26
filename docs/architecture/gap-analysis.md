@@ -101,7 +101,7 @@ start of an online meeting. Tests that pin the dropped engines:
 | thought end (audio, smart-turn) | `stt/fundusapps/stt_server/thought_end.py` | 514 | yes (server flag `--thought-end`) | no |
 | thought end (text, Laya) | `gateway/thought_end.py`, `thought_end_live.py`, `thought_end_laya_worker.py`, `smart_turn_worker.py` | 1080 | yes (`consumer.py:93` `ThoughtEndLane`) | no |
 | correction | `gateway/correction.py`, `correction_prefilter.py` | 858 | yes (`consumer.py:58-60`) | no |
-| speaker labels | `gateway/speaker_enroll.py`, `speaker_split.py`, `speaker_label.py`, `speaker_label_llm.py` | 1566 | yes (lazy imports `consumer.py:3567`, `:3590`, `:3620`, `:3628`) | own copy |
+| speaker labels | `stt/pipeline/speaker_labels/enroll.py`, `split.py`, `label.py`, `label_llm.py` | 1566 | yes (lazy imports `consumer.py:3569`, `:3592`, `:3622`, `:3631`) | own copy |
 | speaker labels (workshop copy) | `workshop/role_enroll.py`, `text_anchor.py`, `question_readout.py`, `enrollment.py`, `label_filter.py` | 1167 | no | yes (138 matching lines in `workshop/hub.py`) |
 
 `grep -c "correction\|thought_end\|smart_turn" workshop/hub.py` → **0**.

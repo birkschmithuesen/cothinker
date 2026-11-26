@@ -5,7 +5,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""Run gateway/speaker_split.py against a real session recording.
+"""Run stt/pipeline/speaker_labels/split.py against a real session recording.
 
     env -u PYTHONPATH python3 scripts/speaker-split-probe.py \\
         --wav <session.wav> --timing <session>/timing.jsonl \\
@@ -34,11 +34,12 @@ import sys
 import time
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gateway"))
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-from speaker_enroll import EmbeddingClient, SpeakerEnrollment, cut_clip  # noqa: E402
-from speaker_split import (MIN_UTTERANCE_S, SpeakerSplitter,  # noqa: E402
-                           window_starts, WINDOW_S)
+from stt.pipeline.speaker_labels.enroll import (  # noqa: E402
+    EmbeddingClient, SpeakerEnrollment, cut_clip)
+from stt.pipeline.speaker_labels.split import (  # noqa: E402
+    MIN_UTTERANCE_S, SpeakerSplitter, window_starts, WINDOW_S)
 
 
 def _load_env(path: str) -> None:

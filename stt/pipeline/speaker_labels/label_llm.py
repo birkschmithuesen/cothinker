@@ -6,7 +6,7 @@
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
 """Design decision point 2: the LLM stage for the
-diarization labels (S1, S2, ...) the rule stage (gateway/speaker_label.py)
+diarization labels (S1, S2, ...) the rule stage (stt/pipeline/speaker_labels/label.py)
 could not decide -- hand-overs, third-person introductions, "danke, X"
 right after a long turn.
 

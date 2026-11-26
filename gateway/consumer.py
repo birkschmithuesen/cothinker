@@ -78,7 +78,8 @@ from stage_state import (AgendaRuntime, agenda_payload,  # noqa: E402
 from stage_texts import status as render_status  # noqa: E402
 from stage_texts import trouble as trouble_text  # noqa: E402
 from stage_texts import warning as warning_text  # noqa: E402
-from speaker_enroll import DEFAULT_THRESHOLD as SPEAKER_THRESHOLD_DEFAULT  # noqa: E402
+from stt.pipeline.speaker_labels.enroll import (  # noqa: E402
+    DEFAULT_THRESHOLD as SPEAKER_THRESHOLD_DEFAULT)
 
 # Wall-clock cap per agent turn (seconds). Live 2026-10-20: one ORDER ran
 # 614 s and nine blocks waited behind it. Unset = 900, the old default.
@@ -731,7 +732,7 @@ SESSION_FILES = {
     # trace, one row per utterance (gateway/thought_end_live.py).
     "thought_end": "thought-end.jsonl",
     # Only with --speakers: enrolled name -> embedding store
-    # (gateway/speaker_enroll.py), survives a consumer restart. Never
+    # (stt/pipeline/speaker_labels/enroll.py), survives a consumer restart. Never
     # read by the stage, never logged -- biometric-ish data stays inside
     # the session folder like the raw transcript does.
     "speakers": "speakers.json",
@@ -1464,7 +1465,7 @@ def enrollment_mirror(control: str | None, enrolled: str | None,
                       names: list[str]) -> str | None:
     """The stage mirror line for an intro-round event, or None.
 
-    `control` is speaker_enroll.classify_control()'s verdict for this
+    `control` is enroll.classify_control()'s verdict for this
     utterance, `enrolled` the name maybe_enroll() just registered,
     `names` everyone enrolled so far, in enrollment order.
     """
@@ -3008,7 +3009,7 @@ def main() -> int:
                          "Needs SPEAKER_EMBED_URL (env; SPEAKER_EMBED_SECRET "
                          "for the shared-secret header) and --session-wav. "
                          "Off by default -- with it unset the meeting runs "
-                         "byte for byte as before. gateway/speaker_enroll.py.")
+                         "byte for byte as before. stt/pipeline/speaker_labels/enroll.py.")
     ap.add_argument("--session-wav", default="",
                     help="16 kHz mono WAV of the full session recording "
                          "(--speakers only): each utterance's clip is cut "
@@ -3033,7 +3034,7 @@ def main() -> int:
                          "it, rule stage only. A resolved name replaces the "
                          "recognizer id the same way --speakers' resolution "
                          "does, unless --speakers already resolved one. Off "
-                         "by default. gateway/speaker_label.py.")
+                         "by default. stt/pipeline/speaker_labels/label.py.")
     ap.add_argument("--mode", choices=MODES, default=DEFAULT_MODE,
                     help="meeting mode of a NEW protocol (format v2): picks "
                          "the sections of the derived overview. An existing "
@@ -3083,7 +3084,7 @@ def main() -> int:
                          "protokoll.md and the agent/lane input alike. "
                          "3 s budget per utterance, on timeout or error "
                          "the single name stays. Off by default. "
-                         "gateway/speaker_split.py.")
+                         "stt/pipeline/speaker_labels/split.py.")
     ap.add_argument("--spool-dir", default="~/.local/state/cothinker/spool",
                     help="where the stage spools participant actions "
                          "(<spool>/<session-folder>/actions.jsonl); must "
@@ -3219,8 +3220,8 @@ def main() -> int:
         if not embed_url:
             log("speakers off: SPEAKER_EMBED_URL is not set")
         else:
-            from speaker_enroll import EmbeddingClient, EnrollmentSession, \
-                SpeakerEnrollment
+            from stt.pipeline.speaker_labels.enroll import (
+                EmbeddingClient, EnrollmentSession, SpeakerEnrollment)
             speaker_store = SpeakerEnrollment(threshold=a.speaker_threshold,
                                               store_path=orte["speakers"],
                                               log=log)
@@ -3242,7 +3243,7 @@ def main() -> int:
         if enrollment is None:
             log("speaker split off: needs --speakers with SPEAKER_EMBED_URL")
         else:
-            from speaker_split import SpeakerSplitter
+            from stt.pipeline.speaker_labels.split import SpeakerSplitter
             splitter = SpeakerSplitter(
                 enrollment.store, client=enrollment.embed_client,
                 wav_path=enrollment.wav_path, log=log)
@@ -3272,15 +3273,17 @@ def main() -> int:
     # voice-embedding path above (no audio, no SPEAKER_EMBED_URL needed).
     speaker_labels = None
     if a.speaker_labels:
-        from speaker_label import AttributionWindow, LabelAttribution, \
-            notice_text, rule_attribute, should_fire_llm
+        from stt.pipeline.speaker_labels.label import (
+            AttributionWindow, LabelAttribution, notice_text,
+            rule_attribute, should_fire_llm)
         label_participants = [p.strip() for p in a.participants.split(",")
                               if p.strip()]
         label_attrib = LabelAttribution()
         label_window = AttributionWindow()
         label_worker = None
         if infomaniak_key():
-            from speaker_label_llm import CandidateJudge, CandidateWorker
+            from stt.pipeline.speaker_labels.label_llm import (
+                CandidateJudge, CandidateWorker)
 
             def _on_speaker_label_verdict(verdict) -> None:
                 # Runs on the worker's own thread -- StageState.apply()
@@ -4171,7 +4174,7 @@ def main() -> int:
                     # raises: a broken resolution must read exactly like
                     # no resolution, not like a dropped utterance.
                     # A control utterance (intro round start/end, decided
-                    # ONLY by speaker_enroll.classify_control) is consumed
+                    # ONLY by enroll.classify_control) is consumed
                     # here: it gets a stage mirror as feedback and is NOT
                     # handed to the block builder, so it never reaches the
                     # agent as an ORDER.

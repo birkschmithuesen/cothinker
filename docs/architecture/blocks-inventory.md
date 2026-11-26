@@ -92,7 +92,7 @@ this pull request's.
 | STT — engine Speechmatics EU | 775 | `shared/speechmatics.py` 323, `shared/utterance.py` 175, `stt_server/backends/speechmatics_rt_backend.py` 277 | core |
 | STT — engine local Whisper | 178 | `stt_server/backends/whisper_backend.py` 178 | core |
 | STT — thought end | 1594 | `stt/fundusapps/stt_server/thought_end.py` 514; `gateway/thought_end.py` 260, `thought_end_live.py` 402, `thought_end_laya_worker.py` 148, `smart_turn_worker.py` 270 | core |
-| STT — speaker labels | 1566 | `gateway/speaker_enroll.py` 606, `speaker_split.py` 423, `speaker_label.py` 278, `speaker_label_llm.py` 259 | core |
+| STT — speaker labels | 1566 | `stt/pipeline/speaker_labels/enroll.py` 606, `split.py` 423, `label.py` 278, `label_llm.py` 259 | core |
 | STT — correction | 858 | `gateway/correction.py` 733, `correction_prefilter.py` 125 | core |
 | core — session runtime | 5888 | `gateway/consumer.py` 4653, `shared/events.py` 179, `gateway/raw_transcript.py` 172, `sync_safe.py` 204, `timing.py` 207, `conflict_triage.py` 186, `block_host_wiring.py` 197; `shared/phases.py` 82, `shared/__init__.py` 1, `blocks/__init__.py` 9 | core |
 | core — Agent API | 1660 | `shared/agent.py` 387, `gateway/worker.py` 576, `lanes.py` 447, `agent_lane.py` 250 | core |
@@ -204,10 +204,6 @@ shared/minutes_format.py                                                        
 blocks/decisions_tasks_questions/questions.py                                     block:decisions-tasks-questions
 gateway/segmenter.py                                                              block:segment
 gateway/smart_turn_worker.py                                                      stt:thought-end
-gateway/speaker_enroll.py                                                         stt:speaker-labels
-gateway/speaker_label.py                                                          stt:speaker-labels
-gateway/speaker_label_llm.py                                                      stt:speaker-labels
-gateway/speaker_split.py                                                          stt:speaker-labels
 gateway/stage_image.py                                                            surface:stage
 gateway/stage_state.py                                                            surface:stage
 gateway/stage_surface.py                                                          surface:stage
@@ -308,4 +304,10 @@ stt/fundusapps/stt_server/test_vosk.py                                          
 stt/fundusapps/stt_server/thought_end.py                                         stt:thought-end
 stt/fundusapps/stt_server/vad.py                                                 stt:audio
 stt/fundusapps/stt_server/vad_detectors.py                                       stt:audio
+stt/pipeline/__init__.py                                                          stt:server
+stt/pipeline/speaker_labels/__init__.py                                           stt:speaker-labels
+stt/pipeline/speaker_labels/enroll.py                                             stt:speaker-labels
+stt/pipeline/speaker_labels/label.py                                              stt:speaker-labels
+stt/pipeline/speaker_labels/label_llm.py                                          stt:speaker-labels
+stt/pipeline/speaker_labels/split.py                                              stt:speaker-labels
 ```

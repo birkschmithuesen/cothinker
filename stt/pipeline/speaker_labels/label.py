@@ -20,7 +20,7 @@ Two stages, deliberately separate (operator, 2026-10-27, measured on the
   precision on first-person patterns alone: 100% (2/2), recall low (2/8)
   -- by design the rule stage is precise and leaves most labels unnamed.
 
-  LLM stage (gateway/speaker_label_llm.py): async, off the hot path,
+  LLM stage (stt/pipeline/speaker_labels/label_llm.py): async, off the hot path,
   for the labels the rule stage could not decide. `mentions_participant`
   and `should_fire_llm` below are the deterministic CANDIDATE detector
   that decides whether the (expensive, careful) LLM call is worth
@@ -48,7 +48,7 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass, field
 
-from speaker_enroll import extract_name
+from .enroll import extract_name
 
 _WORD_CHARS = r"[A-Za-zÄÖÜäöüß\-]+"
 
