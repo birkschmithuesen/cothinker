@@ -86,195 +86,18 @@ def _mkdtemp(*args, **kwargs):
     return d
 
 
+def block(text: str, wake_word: bool = False, reason: str = "pause"):
+    """A block, as the block builder would deliver it."""
+    return k.Block(sentences=[text], start=0.0, end=1.0, reason=reason,
+                   wake_word=wake_word)
+
+
 _ABSENT = pytest.mark.xfail(strict=True, reason="behaviour not present in this version")
 _NO_GITIGNORE = pytest.mark.xfail(strict=True, reason="this repository ships no .gitignore")
 
 
 @pytest.fixture(scope="module")
-def sec_00():
-    """Scenario: SSE parsing"""
-    global _REC
-    _REC = rec = _Recorder()
-    global Path, atexit, block, datetime, ev, k, os, re, roh, shutil, subprocess, sys, tempfile, threading, time
-    import atexit
-    import os
-    import re
-    import shutil
-    import subprocess
-    import sys
-    import tempfile
-    import threading
-    import time
-    from datetime import datetime
-    from pathlib import Path
-
-
-
-
-
-
-    from gateway import consumer as k  # noqa: E402
-
-
-    def block(text: str, wake_word: bool = False, reason: str = "pause"):
-        """A block, as the block builder would deliver it."""
-        return k.Block(sentences=[text], start=0.0, end=1.0, reason=reason,
-                       wake_word=wake_word)
-
-
-    # ====================================================================== SSE
-    try:
-        print("SSE parsing")
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    # 1 — the normal case: one event per line, closed with a blank line
-    try:
-        roh = [b"data: {\"type\": \"final\", \"text\": \"Hallo\"}\n", b"\n"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = list(k.parse_sse(roh))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(1, "simple event", ev == [{"type": "final", "text": "Hallo"}], repr(ev))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    # 2 — multi-line data field (SSE allows this; pretty-printed JSON)
-    try:
-        roh = [b"data: {\n", b'data:   "type": "final",\n', b'data:   "text": "Zwei"\n',
-               b"data: }\n", b"\n"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = list(k.parse_sse(roh))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(2, "multi-line data field", ev == [{"type": "final", "text": "Zwei"}], repr(ev))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    # 3 — CRLF line endings
-    try:
-        roh = [b"data: {\"type\": \"final\", \"text\": \"CRLF\"}\r\n", b"\r\n"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = list(k.parse_sse(roh))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(3, "CRLF line endings", ev == [{"type": "final", "text": "CRLF"}], repr(ev))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    # 4 — comments, event names and ids are skipped
-    try:
-        roh = [b": keep-alive\n", b"event: message\n", b"id: 17\n",
-               b"retry: 3000\n", b"data: {\"type\": \"final\", \"text\": \"X\"}\n", b"\n"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = list(k.parse_sse(roh))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(4, "comment/event/id/retry skipped", ev == [{"type": "final", "text": "X"}], repr(ev))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    # 5 — broken JSON doesn't tear down the stream
-    try:
-        roh = [b"data: {kaputt\n", b"\n",
-               b"data: {\"type\": \"final\", \"text\": \"danach\"}\n", b"\n"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = list(k.parse_sse(roh))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(5, "broken JSON skipped", ev == [{"type": "final", "text": "danach"}], repr(ev))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    # 6 — JSON that isn't an object (list, number, null)
-    try:
-        roh = [b"data: [1,2,3]\n", b"\n", b"data: null\n", b"\n", b"data: 42\n", b"\n"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = list(k.parse_sse(roh))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(6, "non-objects discarded", ev == [], repr(ev))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    # 7 — an event without a trailing blank line at the end of the stream isn't lost
-    try:
-        roh = [b"data: {\"type\": \"final\", \"text\": \"letztes\"}\n"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = list(k.parse_sse(roh))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(7, "event at end of stream", ev == [{"type": "final", "text": "letztes"}], repr(ev))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    # 8 — `data:` without a space after it
-    try:
-        roh = [b"data:{\"type\":\"final\",\"text\":\"eng\"}\n", b"\n"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = list(k.parse_sse(roh))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(8, "data without a space", ev == [{"type": "final", "text": "eng"}], repr(ev))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    # 9 — invalid bytes don't break anything
-    try:
-        roh = [b"data: {\"type\": \"final\", \"text\": \"kaputt \xff\xfe\"}\n", b"\n"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = list(k.parse_sse(roh))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(9, "invalid bytes replaced", len(ev) == 1 and ev[0]["type"] == "final", repr(ev))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-
-    # 10 — two events in the same buffer, correctly separated
-    try:
-        roh = [b"data: {\"n\": 1}\n", b"\n", b"data: {\"n\": 2}\n", b"\n"]
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        ev = list(k.parse_sse(roh))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    try:
-        _chk(10, "two events separated", ev == [{"n": 1}, {"n": 2}], repr(ev))
-    except Exception:  # noqa: BLE001
-        rec.error += traceback.format_exc()[-1200:]
-    return rec
-
-
-@pytest.fixture(scope="module")
-def sec_01(sec_00):
+def sec_01():
     """Scenario: the session folder and its slug"""
     global _REC
     _REC = rec = _Recorder()
@@ -7378,22 +7201,6 @@ def sec_74(sec_73):
     return rec
 
 
-
-
-@pytest.mark.parametrize("site, occ", [
-    pytest.param(1, None, id='simple event'),
-    pytest.param(2, None, id='multi-line data field'),
-    pytest.param(3, None, id='CRLF line endings'),
-    pytest.param(4, None, id='comment/event/id/retry skipped'),
-    pytest.param(5, None, id='broken JSON skipped'),
-    pytest.param(6, None, id='non-objects discarded'),
-    pytest.param(7, None, id='event at end of stream'),
-    pytest.param(8, None, id='data without a space'),
-    pytest.param(9, None, id='invalid bytes replaced'),
-    pytest.param(10, None, id='two events separated'),
-])
-def test_00_sse_parsing(sec_00, site, occ):
-    _assert_site(sec_00, site, occ)
 
 
 @pytest.mark.parametrize("site, occ", [

@@ -110,6 +110,7 @@ core runtime behind the five APIs, and `retire` code the target drops.
 
 ```targets
 stt:server                  STT module — server process, wire API (SSE /events), CLI, settings, engine registry
+stt:api-client               STT API (ADR 0002/0003/0004): client side of the /events wire — event type, SSE transport
 stt:audio                   STT module — audio stage: sources, audio clock, VAD, mic gate, PCM recording
 stt:engine-speechmatics     STT module — engine adapter Speechmatics EU (realtime, diarization)
 stt:engine-whisper-local    STT module — engine adapter local Whisper (optional, offline)
@@ -243,6 +244,7 @@ shared/profiles/skel/main/skills/prolog/scripts/pick_questions.py               
 shared/speechmatics.py                                                            stt:engine-speechmatics
 shared/surface.py                                                                  core:surface-api
 shared/text.py                                                                    surface:stage
+shared/stt.py                                                                     stt:api-client
 shared/utterance.py                                                              stt:engine-speechmatics
 shared/wake_word.py                                                               block:segment
 shared/wiki_names.py                                                              block:knowledge-link
