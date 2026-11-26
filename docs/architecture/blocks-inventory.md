@@ -57,8 +57,8 @@ tables below are built from.
 | status line | Show + share | `blocks/status_line/__init__.py` 143, `group.py` 57, `line.py` 24 — 224 | Reflect | 1× |
 | graph (session / results / terms) | Show + share | `blocks/graph/__init__.py` 143, `session_graph.py` 386 — 529 | Reflect | 1× |
 | speaking share (talk share + room talk time) | Show + share | `blocks/speaking_share/__init__.py` 86, `talk_share.py` 148, `room_talk_time.py` 108 — 342 | Reflect | 1× |
-| timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 109 — 168 | Reflect | 1× |
-| speaker queue | Show + share | `blocks/speaker_queue/__init__.py` 102, `queue.py` 82 — 184 | Reflect | 1× |
+| timer (planned items, drift, projected end) | Time | `blocks/timer/clock.py` 59, `blocks/timer/__init__.py` 164 — 223 | Reflect | 1× |
+| speaker queue | Show + share | `blocks/speaker_queue/__init__.py` 149, `queue.py` 82, `round.py` 56 — 287 | Reflect | 1× |
 | voice attribution (who is talking right now, by track/STT speaker label) | Show + share | `blocks/voice_attribution/__init__.py` 104, `voice.py` 73 — 177 | Reflect | 1× |
 | call window (listen:room open/close by voice, tap, or timeout) | Capture | `blocks/call_window/__init__.py` 108 | Reflect | 1× |
 | live transcript (side panel: last 10 finished lines + the in-progress partial) | Show + share | `blocks/live_transcript/__init__.py` 114, `transcript.py` 86 — 200 | Reflect | 1× |
@@ -169,6 +169,7 @@ blocks/timer/clock.py                                                           
 blocks/decisions_tasks_questions/__init__.py                                      block:decisions-tasks-questions
 blocks/speaker_queue/__init__.py                                                  block:speaker-queue
 blocks/speaker_queue/queue.py                                                     block:speaker-queue
+blocks/speaker_queue/round.py                                                     block:speaker-queue
 blocks/voice_attribution/__init__.py                                              block:voice-attribution
 blocks/voice_attribution/voice.py                                                 block:voice-attribution
 blocks/call_window/__init__.py                                                    block:call-window

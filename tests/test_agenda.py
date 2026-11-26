@@ -110,104 +110,6 @@ def test_not_a_command(text):
     assert ss.detect_agenda_command(text) is None
 
 
-# ================================================== current_item_from_ticks
-def test_no_ticks_item_0():
-    items = ss.parse_agenda("- [ ] A\n- [ ] B\n- [ ] C\n").items
-    assert ss.current_item_from_ticks(items) == 0
-
-
-def test_one_tick_item_1():
-    items = ss.parse_agenda("- [x] A\n- [ ] B\n- [ ] C\n").items
-    assert ss.current_item_from_ticks(items) == 1
-
-
-def test_all_ticked_clamped_at_the_last_item():
-    items = ss.parse_agenda("- [x] A\n- [x] B\n- [x] C\n").items
-    assert ss.current_item_from_ticks(items) == 2
-
-
-def test_no_items_0_never_raises():
-    assert ss.current_item_from_ticks([]) == 0
-
-
-# ================================================================= AgendaRuntime
-@pytest.fixture
-def agenda_runtime_wraparound_scenario():
-    rt = ss.AgendaRuntime(3, people=["Pia", "Finn", "Anke"], now=lambda: 100.0)
-    starts_at_item_0 = rt.current_item == 0
-    starts_at_speaker_0 = rt.speaker_index == 0
-    rt.advance_person()
-    person_1 = rt.speaker_index == 1
-    item_unchanged_by_person_move = rt.current_item == 0
-    rt.advance_person()
-    person_2 = rt.speaker_index == 2
-    rt.advance_person()
-    wraparound_resets_speaker_index = rt.speaker_index == 0
-    wraparound_advances_item = rt.current_item == 1
-    return SimpleNamespace(**locals())
-
-
-def test_agenda_runtime_starts_at_item_0(agenda_runtime_wraparound_scenario):
-    assert agenda_runtime_wraparound_scenario.starts_at_item_0
-
-
-def test_agenda_runtime_starts_at_speaker_0(agenda_runtime_wraparound_scenario):
-    assert agenda_runtime_wraparound_scenario.starts_at_speaker_0
-
-
-def test_person_1(agenda_runtime_wraparound_scenario):
-    assert agenda_runtime_wraparound_scenario.person_1
-
-
-def test_item_unchanged_by_a_person_move_within_the_queue(agenda_runtime_wraparound_scenario):
-    assert agenda_runtime_wraparound_scenario.item_unchanged_by_person_move
-
-
-def test_person_2(agenda_runtime_wraparound_scenario):
-    assert agenda_runtime_wraparound_scenario.person_2
-
-
-def test_wraparound_speaker_index_resets_to_0(agenda_runtime_wraparound_scenario):
-    assert agenda_runtime_wraparound_scenario.wraparound_resets_speaker_index
-
-
-def test_wraparound_the_item_advances_too(agenda_runtime_wraparound_scenario):
-    assert agenda_runtime_wraparound_scenario.wraparound_advances_item
-
-
-@pytest.fixture
-def agenda_runtime_clamp_scenario():
-    rt2 = ss.AgendaRuntime(2, people=["A", "B"], now=lambda: 0.0)
-    rt2.advance_person()
-    rt2.advance_person()
-    clamps_at_last_item = rt2.current_item == 1
-    rt2.advance_person()
-    no_further_wraparound = rt2.current_item == 1
-    return SimpleNamespace(**locals())
-
-
-def test_wraparound_clamps_at_the_last_item_like_moderations_min(agenda_runtime_clamp_scenario):
-    assert agenda_runtime_clamp_scenario.clamps_at_last_item
-
-
-def test_no_further_wraparound_past_the_last_item(agenda_runtime_clamp_scenario):
-    assert agenda_runtime_clamp_scenario.no_further_wraparound
-
-
-def test_advance_item_moves_to_the_next_item():
-    rt3 = ss.AgendaRuntime(3, now=lambda: 5.0)
-    rt3.advance_item()
-    assert rt3.current_item == 1
-
-
-def test_advance_item_resets_the_item_start_time():
-    clock = [5.0]
-    rt4 = ss.AgendaRuntime(3, now=lambda: clock[0])
-    clock[0] = 10.0
-    rt4.advance_item()
-    assert rt4.item_started_at == 10.0
-
-
 # =================================================================== meeting_deadline
 def test_deadline_from_dauer():
     doc_dauer = ss.parse_agenda("- [ ] A\nDauer: 30 min\n")
@@ -219,106 +121,22 @@ def test_no_header_no_deadline():
     assert ss.meeting_deadline(doc_none, 1000.0) is None
 
 
-# =================================================================== agenda_payload
-@pytest.fixture
-def agenda_payload_scenario():
-    doc5 = ss.parse_agenda("- [ ] Eins\n- [ ] Zwei (5 min)\n- [ ] Drei\n")
-    rt5 = ss.AgendaRuntime(len(doc5.items),
-                          current_item=ss.current_item_from_ticks(doc5.items),
-                          now=lambda: 42.0)
-    payload = ss.agenda_payload(doc5, rt5, meeting_deadline=None)
-
-    doc5.items[0].done = True
-    rt5b = ss.AgendaRuntime(len(doc5.items),
-                           current_item=ss.current_item_from_ticks(doc5.items),
-                           now=lambda: 50.0)
-    payload2 = ss.agenda_payload(doc5, rt5b, meeting_deadline=None)
-
-    doc6 = ss.parse_agenda("- [ ] Nur eins\n")
-    rt6 = ss.AgendaRuntime(1, now=lambda: 0.0)
-    payload3 = ss.agenda_payload(doc6, rt6, meeting_deadline=None)
-
-    doc_people = ss.parse_agenda("- [ ] A\n- [ ] B\n")
-    rt_people = ss.AgendaRuntime(2, people=["Anna", "Ben", "Carla"], now=lambda: 0.0)
-    payload4 = ss.agenda_payload(doc_people, rt_people, meeting_deadline=None)
-
-    doc_nopeople = ss.parse_agenda("- [ ] A\n")
-    rt_nopeople = ss.AgendaRuntime(1, now=lambda: 0.0)
-    payload5 = ss.agenda_payload(doc_nopeople, rt_nopeople, meeting_deadline=None)
-    return SimpleNamespace(**locals())
-
-
-def test_current_is_1_indexed(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload["current"] == 1
-
-
-def test_current_text(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload["current_text"] == "Eins"
-
-
-def test_next_is_1_indexed(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload["next"] == 2
-
-
-def test_next_text(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload["next_text"] == "Zwei"
-
-
-def test_total(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload["total"] == 3
-
-
-def test_item_has_no_budget(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload["item_budget_s"] is None
-
-
-def test_item_started_at_carries_the_injected_clock(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload["item_started_at"] == 42.0
-
-
-def test_after_a_tick_current_advances(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload2["current"] == 2
-
-
-def test_the_new_current_item_carries_its_own_budget(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload2["item_budget_s"] == 300
-
-
-def test_the_last_item_has_no_next_item(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload3["next"] is None
-
-
-def test_next_text_is_none_too(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload3["next_text"] is None
-
-
-def test_current_speaker(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload4["speaker"] == "Anna"
-
-
-def test_next_speaker(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload4["next_speaker"] == "Ben"
-
-
-def test_the_whole_queue_rides_along(agenda_payload_scenario):
-    assert agenda_payload_scenario.payload4["people"] == ["Anna", "Ben", "Carla"]
-
-
-def test_no_speaker_queue_no_speaker_never_raises(agenda_payload_scenario):
-    payload5 = agenda_payload_scenario.payload5
-    assert payload5["speaker"] is None and payload5["people"] == []
-
-
 # ====================================================== StageState.agenda
+AGENDA_FIELD = {"current": 1, "current_text": "A", "next": 2, "next_text": "B",
+                "total": 2, "item_started_at": 0.0, "item_budget_s": None,
+                "meeting_deadline": None, "people": ["Anna", "Ben", "Carla"],
+                "speaker": "Anna", "next_speaker": "Ben"}
+
+
 @pytest.fixture
-def stage_state_agenda_field_scenario(agenda_payload_scenario):
+def stage_state_agenda_field_scenario():
     s = ss.StageState()
     content_without = s.content()
     agenda_none_without_one = content_without.get("agenda") is None
     every_other_field_exists = set(content_without) >= {
         "version", "mirror", "headline", "main", "history", "decisions",
         "notices", "question", "links", "pending"}
-    s.agenda = agenda_payload_scenario.payload4
+    s.agenda = dict(AGENDA_FIELD)
     agenda_rides_along_once_set = s.content()["agenda"]
     return SimpleNamespace(**locals())
 
@@ -333,7 +151,7 @@ def test_every_other_field_of_a_plain_stage_state_still_exists(stage_state_agend
 
 def test_agenda_rides_along_once_set(stage_state_agenda_field_scenario):
     assert (stage_state_agenda_field_scenario.agenda_rides_along_once_set
-            == stage_state_agenda_field_scenario.agenda_payload_scenario.payload4)
+            == AGENDA_FIELD)
 
 
 # ================================================= stage.py: the agenda zone
@@ -428,22 +246,34 @@ def test_the_agenda_zone_is_excluded_from_the_fingerprint(stage_agenda_fingerpri
     assert stage_agenda_fingerprint_scenario.fp1 == stage_agenda_fingerprint_scenario.fp2
 
 
-# ================================================= AgendaController: the
-# I/O layer around agenda.md + the small state file
+# ================================================= AgendaController: feeds
+# the timer and speaker-queue blocks from agenda.md
+def _wired(session: Path, agenda_text: str, clockval, people=()):
+    """A controller on `session/agenda.md` with a real session block host."""
+    from gateway.block_host_wiring import build_session_blocks
+    session.mkdir(exist_ok=True)
+    agenda_path = session / "agenda.md"
+    agenda_path.write_text(agenda_text, encoding="utf-8")
+    ctrl = k.AgendaController(agenda_path, session, people=list(people),
+                              now=lambda: clockval[0])
+    blocks = build_session_blocks(
+        session_dir=session, sink=ctrl.observe, log=lambda *m: None,
+        clock=lambda: clockval[0], block_configs=ctrl.block_configs())
+    ctrl.attach(blocks)
+    return ctrl, agenda_path
+
+
 @pytest.fixture
 def agenda_controller_scenario(tmp_path):
     session = tmp_path / "session"
-    session.mkdir()
-    agenda_path = session / "agenda.md"
-    agenda_path.write_text(
-        "- [ ] Eins\n- [ ] Zwei (10 min)\n- [ ] Drei\n", encoding="utf-8")
-    state_path = session / "agenda-state.json"
-
     clockval = [1000.0]
-    ctrl = k.AgendaController(agenda_path, state_path, now=lambda: clockval[0])
+    ctrl, agenda_path = _wired(
+        session, "- [ ] Eins\n- [ ] Zwei (10 min)\n- [ ] Drei\n", clockval)
     pl = ctrl.payload()
     fresh_controller_current_1 = pl["current"] == 1
     fresh_controller_next_2 = pl["next"] == 2
+    initial_payload_without_a_move = pl["item_started_at"] == 1000.0
+    first_item_has_no_budget = pl["item_budget_s"] is None
 
     handled = ctrl.handle_utterance("nicht relevanter Satz ueber das Budget")
     ordinary_speech_not_a_command = handled is False
@@ -455,13 +285,16 @@ def agenda_controller_scenario(tmp_path):
     pl2 = ctrl.payload()
     current_advances_to_2 = pl2["current"] == 2
     item_timer_resets_to_command_moment = pl2["item_started_at"] == 1050.0
+    new_item_carries_its_budget = pl2["item_budget_s"] == 600
 
     handled3 = ctrl.handle_utterance("nächste Person")
     person_command_also_swallowed = handled3 is True
 
-    ctrl_restarted = k.AgendaController(agenda_path, state_path, now=lambda: 2000.0)
+    ctrl_restarted, _ = _wired(
+        session, agenda_path.read_text(encoding="utf-8"), [2000.0])
     pl3 = ctrl_restarted.payload()
-    restart_derives_current_from_ticks = pl3["current"] == 2
+    restart_keeps_current_from_block_state = pl3["current"] == 2
+    restart_keeps_item_start = pl3["item_started_at"] == 1050.0
 
     no_agenda_dir = tmp_path / "no-agenda-session"
     no_agenda_dir.mkdir()
@@ -476,6 +309,14 @@ def test_fresh_controller_current_1(agenda_controller_scenario):
 
 def test_fresh_controller_next_2(agenda_controller_scenario):
     assert agenda_controller_scenario.fresh_controller_next_2
+
+
+def test_the_initial_payload_exists_before_any_move(agenda_controller_scenario):
+    assert agenda_controller_scenario.initial_payload_without_a_move
+
+
+def test_an_item_without_minutes_has_no_budget(agenda_controller_scenario):
+    assert agenda_controller_scenario.first_item_has_no_budget
 
 
 def test_ordinary_speech_is_not_a_command(agenda_controller_scenario):
@@ -498,16 +339,76 @@ def test_the_item_timer_resets_to_the_moment_of_the_command(agenda_controller_sc
     assert agenda_controller_scenario.item_timer_resets_to_command_moment
 
 
+def test_the_new_current_item_carries_its_own_budget(agenda_controller_scenario):
+    assert agenda_controller_scenario.new_item_carries_its_budget
+
+
 def test_a_person_command_is_also_swallowed(agenda_controller_scenario):
     assert agenda_controller_scenario.person_command_also_swallowed
 
 
-def test_a_restart_derives_current_from_the_ticks_in_agenda_md(agenda_controller_scenario):
-    assert agenda_controller_scenario.restart_derives_current_from_ticks
+def test_a_restart_keeps_the_current_item_from_the_block_state(agenda_controller_scenario):
+    assert agenda_controller_scenario.restart_keeps_current_from_block_state
+
+
+def test_a_restart_keeps_the_item_start_time(agenda_controller_scenario):
+    assert agenda_controller_scenario.restart_keeps_item_start
 
 
 def test_no_agenda_md_no_controller_no_exception(agenda_controller_scenario):
     assert agenda_controller_scenario.no_agenda_md_no_controller_no_exception
+
+
+def test_last_item_has_no_next_item(tmp_path):
+    ctrl, _ = _wired(tmp_path / "s", "- [ ] Nur eins\n", [0.0])
+    pl = ctrl.payload()
+    assert pl["next"] is None and pl["next_text"] is None and pl["total"] == 1
+
+
+def test_the_round_rides_along_with_the_agenda(tmp_path):
+    ctrl, _ = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n", [0.0],
+                     people=["Anna", "Ben", "Carla"])
+    pl = ctrl.payload()
+    assert pl["people"] == ["Anna", "Ben", "Carla"]
+    assert (pl["speaker"], pl["next_speaker"]) == ("Anna", "Ben")
+
+
+def test_no_speaker_queue_no_speaker_never_raises(tmp_path):
+    ctrl, _ = _wired(tmp_path / "s", "- [ ] A\n", [0.0])
+    pl = ctrl.payload()
+    assert pl["speaker"] is None and pl["people"] == []
+    assert ctrl.handle_utterance("nächste Person") is True
+    assert ctrl.payload()["current"] == 1
+
+
+def test_person_command_moves_the_speaker_not_the_item(tmp_path):
+    ctrl, _ = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n", [0.0],
+                     people=["Pia", "Finn", "Anke"])
+    ctrl.handle_utterance("nächste Person")
+    pl = ctrl.payload()
+    assert pl["speaker"] == "Finn" and pl["current"] == 1
+
+
+def test_round_wraparound_advances_the_item_and_clamps_at_the_last(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n", [0.0],
+                               people=["A1", "B1"])
+    ctrl.handle_utterance("nächste Person")
+    assert ctrl.payload()["current"] == 1
+    ctrl.handle_utterance("nächste Person")          # wraps
+    pl = ctrl.payload()
+    assert pl["current"] == 2 and pl["speaker"] == "A1"
+    assert "- [x] A" in agenda_path.read_text(encoding="utf-8")
+    ctrl.handle_utterance("nächste Person")
+    ctrl.handle_utterance("nächste Person")          # wraps again, clamped
+    assert ctrl.payload()["current"] == 2
+
+
+def test_dauer_deadline_survives_a_restart(tmp_path):
+    text = "- [ ] A\nDauer: 30 min\n"
+    ctrl, _ = _wired(tmp_path / "s", text, [1000.0])
+    ctrl2, _ = _wired(tmp_path / "s", text, [5000.0])
+    assert ctrl.payload()["meeting_deadline"] == 1000.0 + 1800
+    assert ctrl2.payload()["meeting_deadline"] == 1000.0 + 1800
 
 
 # ================================================== full consumer, end to end
@@ -657,10 +558,10 @@ def test_consumer_exits_on_ctrl_c(voice_command_end_to_end_scenario):
         f"return value {scenario.p.returncode}: {scenario.ausgabe[-800:]}")
 
 
-def test_agenda_payload_carries_the_whole_list(agenda_payload_scenario):
+def test_agenda_payload_carries_the_whole_list(agenda_controller_scenario):
     """Found live: the stage/monitor showed only current + next because the
     core never filled `items` (issue #129). Every item, with its status."""
-    s = agenda_payload_scenario
-    assert [(i["title"], i["status"]) for i in s.payload2["items"]] == [
+    s = agenda_controller_scenario
+    assert [(i["title"], i["status"]) for i in s.pl2["items"]] == [
         ("Eins", "done"), ("Zwei", "current"), ("Drei", "next")]
-    assert s.payload2["items"][1]["budget_s"] == 300
+    assert s.pl2["items"][1]["budget_s"] == 600

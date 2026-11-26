@@ -115,7 +115,8 @@ def stage_json() -> dict:
         "pending": [{"kind": "research", "label": "Recherche: Regentonne 300 l",
                      "since": stamp(0.1), "id": "P7"}],
         "age_visible_after_s": 20, "follow_up_after_s": 120,
-        # The built-in agenda zone (gateway/stage_state.py::agenda_payload):
+        # The built-in agenda zone (gateway/consumer.py::AgendaController,
+        # fed by the timer and speaker-queue view intents):
         # on item 3 of 4, 1.5 min into a 5-min budget, with a speaker queue
         # cycling. `item_started_at`/`meeting_deadline` are epoch seconds --
         # the page counts down from them itself, so they have to be real
