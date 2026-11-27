@@ -5,7 +5,9 @@ export const TEXT = {
   panels: {
     control: "Control", services: "Services", meeting: "Participants", stt: "Speech recognition",
     session: "Session", call: "Last Robo call", errors: "Errors", disk: "Disk", updates: "Updates",
+    chat: "Chat",
   },
+  chatFrame: "Meeting chat",
   empty: {
     control: "No projects available.", services: "No services reported.", meeting: "Nobody in the meeting.",
     stt: "Speech recognition not connected.", session: "No session running.",

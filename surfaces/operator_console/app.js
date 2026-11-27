@@ -68,7 +68,27 @@ function connect() {
   }, streamUp);
 }
 
+// The meeting chat (issue #208, ADR 0027): the participant contract's own
+// chat page, embedded only for a same-origin `?chat=` URL. This page's code
+// never calls the participant contract itself (one page, one audience).
+function showChat() {
+  const chat = new URLSearchParams(location.search).get("chat");
+  if (!chat) return;
+  let url;
+  try {
+    url = new URL(chat, location.href);
+  } catch (err) {
+    return;
+  }
+  if (url.origin !== location.origin) return;
+  const frame = document.getElementById("chat-frame");
+  frame.title = TEXT.chatFrame;
+  frame.src = url.href;
+  frame.closest("section").hidden = false;
+}
+
 views.applyLabels();
+showChat();
 
 document.getElementById("start").addEventListener("submit", (event) => {
   event.preventDefault();
