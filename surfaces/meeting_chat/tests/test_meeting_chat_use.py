@@ -62,3 +62,13 @@ def test_a_name_is_sent_as_the_participant_name_edit(page, contract, surface_url
         page.click("#name-button")
     assert json.loads(req.value.post_data) == {
         "kind": "edit", "intent_id": "participant:name", "text": "Person A"}
+
+
+def test_a_stored_name_is_restored_silently(page, contract, surface_url):
+    api = contract(_frames([]))
+    page.add_init_script('localStorage.setItem("cothinker.chat.name", "Person A")')
+    with page.expect_request(lambda r: r.url.endswith("/actions") and r.method == "POST"):
+        page.goto(f"{surface_url}?api={api}/")
+    assert page.input_value("#name") == "Person A"
+    time.sleep(0.5)
+    assert page.inner_text("#notice") == ""

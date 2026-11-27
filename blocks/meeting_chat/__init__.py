@@ -120,8 +120,11 @@ class MeetingChatBlock:
     def _on_name(self, p: Mapping) -> None:
         person = str(p.get("person") or "")
         inner = p.get("payload") if isinstance(p.get("payload"), Mapping) else {}
-        name = " ".join(str(inner.get("name") or "").split())[:NAME_MAX_CHARS]
-        if person and name:
+        # `*` would break the emphasis of `*<speaker>:*` in the record.
+        raw = str(inner.get("name") or "").replace("*", "")
+        name = " ".join(raw.split())[:NAME_MAX_CHARS]
+        agent_name = AGENT_SPEAKER.partition(" (")[0]
+        if person and name and name.casefold() != agent_name.casefold():
             with self._lock:
                 self._names[person] = name
 

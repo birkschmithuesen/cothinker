@@ -1,5 +1,5 @@
 * { box-sizing: border-box; }
-body { margin: 0 auto; max-width: 48rem; padding: var(--ct-space-16); background: var(--ct-surface);
+body { margin: 0 auto; max-width: calc(var(--ct-space-64) * 12); padding: var(--ct-space-16); background: var(--ct-surface);
        color: var(--ct-ink); font-family: var(--ct-font-sans); font-size: var(--ct-size-md); }
 h1, p, ol { margin: 0; }
 .top { display: flex; align-items: baseline; gap: var(--ct-space-16); margin-bottom: var(--ct-space-16); }
@@ -21,4 +21,4 @@ button { font: inherit; color: var(--ct-sheet); background: var(--ct-accent); bo
 #thread .status { font-size: var(--ct-size-sm); font-style: italic; color: var(--ct-muted); }
 #thread .status[data-status="failed"], #thread .status[data-status="unavailable"] { color: var(--ct-danger); }
 .empty { color: var(--ct-muted); font-style: italic; margin-bottom: var(--ct-space-16); }
-#notice { color: var(--ct-warn); font-size: var(--ct-size-sm); min-height: 1.2em; }
+#notice { color: var(--ct-warn); font-size: var(--ct-size-sm); min-height: calc(var(--ct-size-sm) * 1.2); }

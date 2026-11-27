@@ -64,8 +64,9 @@ async function post(action) {
   }
 }
 
-async function sendName(name) {
+async function sendName(name, silent) {
   const status = await post({ kind: "edit", intent_id: "participant:name", text: name });
+  if (silent) return;
   notice.textContent = status === 202 ? TEXT.nameSaved : status === 429 ? TEXT.tooFast : TEXT.sendFailed;
 }
 
@@ -106,7 +107,7 @@ render([]);
 const stored = localStorage.getItem(NAME_KEY);
 if (stored) {
   nameInput.value = stored;
-  sendName(stored);
+  sendName(stored, true);
 }
 
 fetch(api + "snapshot")

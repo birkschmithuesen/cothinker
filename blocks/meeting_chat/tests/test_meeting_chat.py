@@ -201,3 +201,27 @@ def test_two_people_get_their_own_names(tmp_path):
     block.on_event(_message("a", PID_A, at=1.0))
     block.on_event(_message("b", PID_B, at=2.0))
     assert [m["name"] for m in emitted[-1].payload["messages"]] == ["Person A", "Person B"]
+
+
+def _send(block, text="Hello", at=1732352400.0, person=PID_A):
+    return block.on_event(CoreEvent("action", {
+        "intent_id": "chat:room", "kind": "message", "person": person,
+        "payload": {"text": text}, "at": at, "op": None}))
+
+
+def test_a_name_equal_to_the_agents_is_ignored(tmp_path):
+    block, emitted = _block(tmp_path)
+    block.on_event(_name("  rOBo "))
+    out = _send(block)
+    assert emitted[-1].payload["messages"][0]["name"] == ""
+    assert out[0].payload["chat_record"]["speaker"] != AGENT_SPEAKER
+
+
+def test_asterisks_are_stripped_from_a_name_and_an_empty_result_is_ignored(tmp_path):
+    block, emitted = _block(tmp_path)
+    block.on_event(_name("*Per*son* A"))
+    _send(block)
+    assert emitted[-1].payload["messages"][0]["name"] == "Person A"
+    block.on_event(_name("***", PID_B))
+    _send(block, at=1732352401.0, person=PID_B)
+    assert emitted[-1].payload["messages"][1]["name"] == ""
