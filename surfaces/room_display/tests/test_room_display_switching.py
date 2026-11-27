@@ -37,7 +37,7 @@ def test_auto_switch_holds_30_seconds_then_returns_to_live(contract, surface_url
     api = contract(knowledge_frames())
     page.clock.install()
     page.goto(f"{surface_url}?api={api}/")
-    page.wait_for_selector('html[data-state="listening"]')
+    page.wait_for_selector('html[data-state="idle"]')
     freeze_clock(page)
     page.wait_for_selector('[data-view="memory"]:visible', timeout=10000)
     assert page.locator("html").get_attribute("data-mode") == "auto"
@@ -51,7 +51,7 @@ def test_manual_choice_pins_two_minutes_and_ignores_auto_switches(contract, surf
     api = contract(knowledge_frames())
     page.clock.install()
     page.goto(f"{surface_url}?api={api}/")
-    page.wait_for_selector('html[data-state="listening"]')
+    page.wait_for_selector('html[data-state="idle"]')
     freeze_clock(page)
     open_view(page, "share")
     assert page.locator("html").get_attribute("data-mode") == "pinned"
@@ -94,7 +94,7 @@ def test_agenda_item_change_switches_to_topics(contract, surface_url, page):
 def test_menu_opens_by_button_and_key_and_closes_with_escape(contract, surface_url, page):
     api = contract([Frame(delay_s=0.0, snapshot=empty_snapshot(), view_intents=[])])
     page.goto(f"{surface_url}?api={api}/")
-    page.wait_for_selector('html[data-state="listening"]')
+    page.wait_for_selector('html[data-state="idle"]')
     page.click("#menu-button")
     assert page.locator("#menu").is_visible()
     page.keyboard.press("Escape")

@@ -3,11 +3,15 @@ derived CoThinker state (spec 3.4). Also produces the per-view PR screenshots:
 COTHINKER_SHOT_DIR=pr-shots python -m pytest -q surfaces/room_display/tests/test_room_display_views.py"""
 from __future__ import annotations
 
+from datetime import datetime, timezone
+
 from surfaces.contract.fixtures import Frame, load_scenario
 from surfaces.contract.models import (
-    PendingAnnouncement, ShareRow, ShareSnapshot, VoiceIntent, VoiceSnapshot,
+    ListenSnapshot, PendingAnnouncement, ShareRow, ShareSnapshot, VoiceIntent, VoiceSnapshot,
 )
-from surfaces.room_display.tests.helpers import VIEW_KEYS, empty_snapshot, open_view
+from surfaces.room_display.tests.helpers import (
+    CallAnswerIntent, VIEW_KEYS, empty_snapshot, open_view,
+)
 
 EXPECTED_TEXT = {
     "live": "migration runbook",
@@ -36,7 +40,7 @@ def populated_snapshot():
 def test_every_view_shows_its_data(contract, surface_url, page, shot_dir):
     api = contract([Frame(delay_s=0.0, snapshot=populated_snapshot(), view_intents=[])])
     page.goto(f"{surface_url}?api={api}/")
-    page.wait_for_selector('html[data-state="listening"]')
+    page.wait_for_selector('html[data-state="idle"]')
     assert "Decisions & risks" in page.locator("#left-agenda").inner_text()
     assert "Tamar" in page.locator("#left-queue").inner_text()
     assert page.locator("#left-speaker .speaker").inner_text() == "Tamar"  # voice.speaking, frame 5
@@ -56,7 +60,7 @@ def test_voice_speaking_shows_when_the_snapshot_carries_it(contract, surface_url
     snapshot = empty_snapshot().model_copy(update={"voice": VoiceSnapshot(speaking="Person A")})
     api = contract([Frame(delay_s=0.0, snapshot=snapshot, view_intents=[])])
     page.goto(f"{surface_url}?api={api}/")
-    page.wait_for_selector('html[data-state="listening"]')
+    page.wait_for_selector('html[data-state="idle"]')
     assert page.locator("#left-speaker .speaker").inner_text() == "Person A"
     assert not page.locator('[data-empty="left-speaker"]').is_visible()
 
@@ -65,7 +69,7 @@ def test_voice_present_but_nobody_speaking(contract, surface_url, page):
     snapshot = empty_snapshot().model_copy(update={"voice": VoiceSnapshot()})
     api = contract([Frame(delay_s=0.0, snapshot=snapshot, view_intents=[])])
     page.goto(f"{surface_url}?api={api}/")
-    page.wait_for_selector('html[data-state="listening"]')
+    page.wait_for_selector('html[data-state="idle"]')
     assert page.locator('[data-empty="left-speaker"]').inner_text() == "Nobody is speaking right now."
 
 
@@ -88,7 +92,7 @@ def test_voice_intent_alone_updates_who_speaks_and_marks_it_fresh(contract, surf
 
     page.route("**/snapshot", load_only)
     page.goto(f"{surface_url}?api={api}/")
-    page.wait_for_selector('html[data-state="listening"]')
+    page.wait_for_selector('html[data-state="idle"]')
     block["refetch"] = True  # from here on, only the intent can change the speaker
     assert page.locator('[data-empty="left-speaker"]').inner_text() == "Speaker detection not active."
     page.wait_for_selector("#left-speaker[data-fresh]", state="attached", timeout=10000)
@@ -102,10 +106,56 @@ def test_pending_announcement_means_working(contract, surface_url, page):
     api = contract([Frame(delay_s=0.0, snapshot=busy, view_intents=[])])
     page.goto(f"{surface_url}?api={api}/")
     page.wait_for_selector('html[data-state="working"]')
-    assert page.locator("#state").inner_text() == "working"
+    assert page.locator("#state").inner_text() == "Robo is working … notiere"
 
 
 def test_unreachable_contract_means_offline(surface_url, page):
     page.goto(f"{surface_url}?api=http://127.0.0.1:9/")
     page.wait_for_selector('html[data-state="offline"]')
     assert page.locator("#state").inner_text() == "offline"
+
+
+def test_idle_state_shows_robo_alone(contract, surface_url, page):
+    api = contract([Frame(delay_s=0.0, snapshot=empty_snapshot(), view_intents=[])])
+    page.goto(f"{surface_url}?api={api}/")
+    page.wait_for_selector('html[data-state="idle"]')
+    assert page.locator("#state").inner_text() == "Robo"
+
+
+def test_open_call_window_means_listening_with_remaining_seconds(contract, surface_url, page):
+    snapshot = empty_snapshot().model_copy(update={
+        "listen": ListenSnapshot(state="listening", opened_by="voice", closes_in_s=95.0),
+    })
+    api = contract([Frame(delay_s=0.0, snapshot=snapshot, view_intents=[])])
+    page.goto(f"{surface_url}?api={api}/")
+    page.wait_for_selector('html[data-state="listening"]')
+    assert page.locator("#state").inner_text() == "Robo listens 1:35"
+
+
+def test_call_window_without_closes_in_s_omits_the_timer(contract, surface_url, page):
+    snapshot = empty_snapshot().model_copy(update={
+        "listen": ListenSnapshot(state="listening", opened_by="tap"),
+    })
+    api = contract([Frame(delay_s=0.0, snapshot=snapshot, view_intents=[])])
+    page.goto(f"{surface_url}?api={api}/")
+    page.wait_for_selector('html[data-state="listening"]')
+    assert page.locator("#state").inner_text() == "Robo listens"
+
+
+def test_call_answer_intent_shows_answer_ready_and_beats_working(contract, surface_url, page):
+    """Priority rule (issue #206): an answer that just landed must not be
+    hidden by a new pending announcement starting at the same moment."""
+    busy = empty_snapshot().model_copy(update={"pending": [
+        PendingAnnouncement(id="P1", kind="decision", label="notiere", since="2026-01-01T00:00:00+00:00"),
+    ]})
+    api = contract([
+        Frame(delay_s=0.0, snapshot=empty_snapshot(), view_intents=[]),
+        Frame(delay_s=2.0, snapshot=busy, view_intents=[
+            CallAnswerIntent(id="call_answer:1", text="The budget is approved.",
+                              at=datetime.now(timezone.utc).isoformat()),
+        ]),
+    ])
+    page.goto(f"{surface_url}?api={api}/")
+    page.wait_for_selector('html[data-state="idle"]')
+    page.wait_for_selector('html[data-state="answer"]', timeout=10000)
+    assert page.locator("#state").inner_text() == "Answer ready"

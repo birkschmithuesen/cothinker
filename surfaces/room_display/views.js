@@ -51,12 +51,27 @@ export function showView(key, mode, remainingMs) {
     mode === "rest" ? TEXT.mode.rest : `${TEXT.mode[mode]} ${mmss(remainingMs / 1000)}`;
 }
 
-export function renderTop(headline, state, status) {
+function stateText(agentState) {
+  if (agentState.key === "listening") {
+    return agentState.remainingS != null
+      ? `${TEXT.state.listening} ${mmss(agentState.remainingS)}` : TEXT.state.listening;
+  }
+  if (agentState.key === "working") return `${TEXT.state.working} ${agentState.label}`;
+  return TEXT.state[agentState.key];
+}
+
+export function renderTop(headline, agentState, status) {
   document.getElementById("headline").textContent = headline || "";
-  document.documentElement.dataset.state = state;
-  document.getElementById("state").textContent = TEXT.state[state];
+  document.documentElement.dataset.state = agentState.key;
+  document.getElementById("state").textContent = stateText(agentState);
   document.getElementById("status-line").textContent =
     status ? `${status.severity === "error" ? TEXT.fault + ": " : ""}${status.text}` : "";
+}
+
+export function renderAnswer(answer) {
+  const node = document.getElementById("answer");
+  node.textContent = answer ? answer.text : "";
+  node.hidden = !answer;
 }
 
 export function renderAgenda(agenda, remainingS) {
@@ -119,13 +134,18 @@ export function renderQueue(snapshot) {
   }
 }
 
-export function renderLive(lines, mirror) {
+export function renderLive(lines, mirror, partial) {
   const rows = (lines || []).map((line) => {
     const item = el("li");
     item.append(el("strong", line.speaker || TEXT.unknownSpeaker), el("span", line.text));
     return item;
   });
   if (!rows.length && mirror) rows.push(el("li", mirror));
+  if (partial && partial.text) {
+    const item = el("li", undefined, { "data-partial": "" });
+    item.append(el("strong", partial.speaker || TEXT.unknownSpeaker), el("span", partial.text));
+    rows.push(item);
+  }
   fill('[data-view="live"]', "live", rows);
 }
 

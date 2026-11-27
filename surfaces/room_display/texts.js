@@ -16,7 +16,10 @@ export const TEXT = {
   speakerNobody: "Nobody is speaking right now.",
   noPerson: "no person", noDue: "no due date",
   topicStatus: { done: "done", current: "current", next: "next", open: "open" },
-  state: { listening: "listening", working: "working", offline: "offline" },
+  state: {
+    idle: "Robo", listening: "Robo listens", working: "Robo is working …",
+    answer: "Answer ready", offline: "offline",
+  },
   fault: "Fault", overrun: "overrun", since: "since", unknownSpeaker: "Unknown",
   memoryQuery: "On topic:",
   mode: { rest: "Live", auto: "Auto ·", pinned: "Pinned ·" },

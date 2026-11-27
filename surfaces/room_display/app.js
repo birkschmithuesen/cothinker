@@ -7,12 +7,21 @@ import * as views from "./views.js";
 
 const api = new URLSearchParams(location.search).get("api") || "/";
 const VIEW_KEYS = ["live", "topics", "results", "queue", "share", "memory"];
-const HANDLED = new Set(["timer", "status", "transcript:recent", "tasks", "queue", "share", "knowledge", "voice"]);
+const HANDLED = new Set([
+  "timer", "status", "transcript:recent", "tasks", "queue", "share", "knowledge", "voice",
+  "call_answer", "transcript_partial",
+]);
+
+// Mirrors CALL_ANSWER_VISIBLE_S in gateway/call_lane.py:161; hardcoded (not
+// imported) because the browser surface never pulls in gateway code.
+const CALL_ANSWER_VISIBLE_S = 300;
 
 let snapshot = {};
 let fetched = false;
 let snapshotOk = false;
 let lastStatus = null;
+let callAnswer = null;
+let showPartials = false;
 let timer = null;
 const events = new EventSource(api + "events");
 
@@ -21,9 +30,22 @@ const switcher = createSwitcher({
   onChange: () => views.showView(switcher.current(), switcher.mode(), switcher.remainingMs()),
 });
 
-function state() {
-  if (!snapshotOk || events.readyState !== EventSource.OPEN) return "offline";
-  return snapshot.pending && snapshot.pending.length ? "working" : "listening";
+function callAnswerVisible() {
+  return !!callAnswer && (Date.now() - Date.parse(callAnswer.at)) / 1000 < CALL_ANSWER_VISIBLE_S;
+}
+
+// Priority (issue #206): offline beats everything; then an answer still
+// within its visibility window beats working beats listening beats idle --
+// an answer that just landed must not be hidden by a new pending
+// announcement starting at the same moment.
+function agentStatus() {
+  if (!snapshotOk || events.readyState !== EventSource.OPEN) return { key: "offline" };
+  if (callAnswerVisible()) return { key: "answer" };
+  if (snapshot.pending && snapshot.pending.length) return { key: "working", label: snapshot.pending[0].label };
+  if (snapshot.listen && snapshot.listen.state === "listening") {
+    return { key: "listening", remainingS: snapshot.listen.closes_in_s };
+  }
+  return { key: "idle" };
 }
 
 function remainingS() {
@@ -35,11 +57,12 @@ function remainingS() {
 }
 
 function renderAll() {
-  views.renderTop(snapshot.headline, state(), lastStatus);
+  views.renderTop(snapshot.headline, agentStatus(), lastStatus);
+  views.renderAnswer(callAnswerVisible() ? callAnswer : null);
   views.renderAgenda(snapshot.agenda, remainingS());
   views.renderSpeaker(snapshot.voice);
   views.renderQueue(snapshot);
-  views.renderLive(snapshot.transcript_recent, snapshot.mirror);
+  views.renderLive(snapshot.transcript_recent, snapshot.mirror, showPartials ? snapshot.transcript_partial : null);
   views.renderTopics(snapshot.agenda, snapshot.history);
   views.renderResults(snapshot);
   views.renderShare(snapshot.share);
@@ -79,7 +102,14 @@ function onIntent(intent) {
   }
   if (intent.kind === "timer") timer = { label: intent.label, remaining_s: intent.remaining_s, at: Date.now() };
   else if (intent.kind === "status") lastStatus = intent;
-  else if (intent.kind === "transcript:recent") snapshot.transcript_recent = intent.lines;
+  else if (intent.kind === "transcript:recent") {
+    snapshot.transcript_recent = intent.lines;
+    snapshot.transcript_partial = null;
+  } else if (intent.kind === "transcript_partial") {
+    snapshot.transcript_partial = {
+      turn_id: intent.turn_id, speaker: intent.speaker, text: intent.text, started_at: intent.started_at,
+    };
+  } else if (intent.kind === "call_answer") callAnswer = { text: intent.text, at: intent.at };
   else if (intent.kind === "tasks") {
     const grew = intent.tasks.length > (snapshot.tasks || []).length;
     snapshot.tasks = intent.tasks;
@@ -128,6 +158,10 @@ document.addEventListener("keydown", (event) => {
   if (event.key === "m" || event.key === "M") {
     event.preventDefault();
     if (menu.open) menu.close(); else openMenu();
+  } else if (event.key === "p" || event.key === "P") {
+    event.preventDefault();
+    showPartials = !showPartials;
+    renderAll();
   } else if (menu.open && /^[1-6]$/.test(event.key)) {
     choose(VIEW_KEYS[Number(event.key) - 1]);
   } else if (menu.open && (event.key === "ArrowDown" || event.key === "ArrowUp")) {
@@ -140,6 +174,8 @@ events.addEventListener("open", refresh);
 events.addEventListener("error", renderAll);
 events.addEventListener("view-intent", (event) => onIntent(JSON.parse(event.data)));
 setInterval(() => {
+  views.renderTop(snapshot.headline, agentStatus(), lastStatus);
+  views.renderAnswer(callAnswerVisible() ? callAnswer : null);
   views.renderAgenda(snapshot.agenda, remainingS());
   views.renderSpeaker(snapshot.voice);
   views.showView(switcher.current(), switcher.mode(), switcher.remainingMs());

@@ -1,9 +1,23 @@
 """Shared helpers of the room display tests."""
 from __future__ import annotations
 
+from pydantic import BaseModel
+
 from surfaces.contract.models import StageMain, StageStateSnapshot
 
 VIEW_KEYS = ["live", "topics", "results", "queue", "share", "memory"]
+
+
+class CallAnswerIntent(BaseModel):
+    """Test-only stand-in for the `call_answer` view intent (issue #206):
+    the surface contract (`surfaces/contract/models.py`) does not define this
+    intent yet -- adding it is out of this card's file scope -- so this local
+    model exists only to drive the fixture-mode SSE stream in these tests."""
+
+    kind: str = "call_answer"
+    id: str
+    text: str
+    at: str
 
 
 def empty_snapshot() -> StageStateSnapshot:
