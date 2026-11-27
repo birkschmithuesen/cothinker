@@ -240,6 +240,109 @@
         "title": "AgendaSnapshot",
         "type": "object"
       },
+      "ChatMessage": {
+        "description": "One message of the meeting chat (issue #208): typed by a participant,\nor the agent's answer to one.",
+        "properties": {
+          "at": {
+            "description": "Wall-clock label of when the message was sent.",
+            "examples": [
+              "2026-11-23T09:20:00+01:00"
+            ],
+            "title": "At",
+            "type": "string"
+          },
+          "id": {
+            "description": "Identity of this message.",
+            "examples": [
+              "a1b2c3d4e5f60718-1732352400123"
+            ],
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "default": "",
+            "description": "Display name from the participant's `participant:name` action; empty for an unnamed participant and for the agent (the surface renders its own label).",
+            "examples": [
+              "Person A"
+            ],
+            "title": "Name",
+            "type": "string"
+          },
+          "reply_to": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "For an agent message: the id of the participant message it answers.",
+            "examples": [
+              null
+            ],
+            "title": "Reply To"
+          },
+          "role": {
+            "description": "Who wrote it.",
+            "enum": [
+              "participant",
+              "agent"
+            ],
+            "examples": [
+              "participant"
+            ],
+            "title": "Role",
+            "type": "string"
+          },
+          "status": {
+            "default": "pending",
+            "description": "Participant message: `pending` while the agent works on it, then `answered`, `failed` (no answer came) or `unavailable` (this session has no agent that answers chat). Agent message: always `answered`.",
+            "enum": [
+              "pending",
+              "answered",
+              "failed",
+              "unavailable"
+            ],
+            "examples": [
+              "pending"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "text": {
+            "description": "The message text.",
+            "examples": [
+              "Compare X and Y as an interactive page on the stage."
+            ],
+            "title": "Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "role",
+          "text",
+          "at"
+        ],
+        "title": "ChatMessage",
+        "type": "object"
+      },
+      "ChatSnapshot": {
+        "description": "`content()[\"chat\"]`: the meeting-chat block's `chat:room` view-intent\npayload (`blocks/meeting_chat/`, issue #208).",
+        "properties": {
+          "messages": {
+            "description": "The last 50 messages, oldest first.",
+            "items": {
+              "$ref": "#/components/schemas/ChatMessage"
+            },
+            "title": "Messages",
+            "type": "array"
+          }
+        },
+        "title": "ChatSnapshot",
+        "type": "object"
+      },
       "ChooseAction": {
         "properties": {
           "intent_id": {
@@ -641,9 +744,9 @@
       "MessageAction": {
         "properties": {
           "intent_id": {
-            "description": "The intent this message responds to.",
+            "description": "The intent this message responds to; `chat:room` for a meeting-chat message (issue #208), the only one live mode accepts.",
             "examples": [
-              "VI1"
+              "chat:room"
             ],
             "title": "Intent Id",
             "type": "string"
@@ -655,25 +758,26 @@
             "type": "string"
           },
           "person": {
-            "description": "Who typed the message.",
+            "default": "",
+            "description": "Ignored in live mode: the person is the server-assigned `cothinker_pid` cookie, never a value the surface sends.",
             "examples": [
-              "P3"
+              ""
             ],
             "title": "Person",
             "type": "string"
           },
           "text": {
-            "description": "What was typed.",
+            "description": "What was typed; at most 1000 characters.",
             "examples": [
-              "hello"
+              "Compare X and Y as an interactive page on the stage."
             ],
+            "maxLength": 1000,
             "title": "Text",
             "type": "string"
           }
         },
         "required": [
           "intent_id",
-          "person",
           "text"
         ],
         "title": "MessageAction",
@@ -1403,6 +1507,17 @@
             ],
             "title": "Call Answer",
             "type": "string"
+          },
+          "chat": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatSnapshot"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "The meeting chat thread, from the `meeting-chat` block (issue #208); `None` until the block has emitted one (key-absent-means-hidden, `StageState._content()`)."
           },
           "decisions": {
             "items": {

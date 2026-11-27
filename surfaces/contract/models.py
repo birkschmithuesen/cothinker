@@ -21,6 +21,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 ISSUE_SURFACE_API_GAPS = "https://github.com/birkschmithuesen/cothinker/issues/129"
 
+# Meeting chat (issue #208): the longest message a participant may type, and
+# the most messages one `chat:room` intent / `StageStateSnapshot.chat` carries.
+MESSAGE_MAX_CHARS = 1000
+CHAT_THREAD_MAX = 50
+
 
 def _planned(issue: str = ISSUE_SURFACE_API_GAPS) -> dict:
     """The `json_schema_extra` for a field or model the core cannot fill yet."""
@@ -330,6 +335,46 @@ class Task(BaseModel):
     due: str = Field(default="", description="Due date, as named by the meeting; empty when not named.", examples=["2026-12-01"])
 
 
+class ChatMessage(BaseModel):
+    """One message of the meeting chat (issue #208): typed by a participant,
+    or the agent's answer to one."""
+
+    id: str = Field(description="Identity of this message.", examples=["a1b2c3d4e5f60718-1732352400123"])
+    role: Literal["participant", "agent"] = Field(description="Who wrote it.", examples=["participant"])
+    name: str = Field(
+        default="",
+        description="Display name from the participant's `participant:name`"
+        " action; empty for an unnamed participant and for the agent (the"
+        " surface renders its own label).",
+        examples=["Person A"],
+    )
+    text: str = Field(description="The message text.", examples=["Compare X and Y as an interactive page on the stage."])
+    at: str = Field(description="Wall-clock label of when the message was sent.", examples=["2026-11-23T09:20:00+01:00"])
+    reply_to: str | None = Field(
+        default=None,
+        description="For an agent message: the id of the participant message it answers.",
+        examples=[None],
+    )
+    status: Literal["pending", "answered", "failed", "unavailable"] = Field(
+        default="pending",
+        description="Participant message: `pending` while the agent works on"
+        " it, then `answered`, `failed` (no answer came) or `unavailable`"
+        " (this session has no agent that answers chat). Agent message:"
+        " always `answered`.",
+        examples=["pending"],
+    )
+
+
+class ChatSnapshot(BaseModel):
+    """`content()["chat"]`: the meeting-chat block's `chat:room` view-intent
+    payload (`blocks/meeting_chat/`, issue #208)."""
+
+    messages: list[ChatMessage] = Field(
+        default_factory=list,
+        description=f"The last {CHAT_THREAD_MAX} messages, oldest first.",
+    )
+
+
 class StageStateSnapshot(BaseModel):
     """The content fields of `buehne.json`; the consumer adds `status`."""
 
@@ -416,6 +461,12 @@ class StageStateSnapshot(BaseModel):
         description="The call window's state, from the `call-window` block"
         " (issue #180, ADR 0024); `None` when that block is absent from"
         " the session (key-absent-means-hidden, `StageState._content()`).",
+    )
+    chat: ChatSnapshot | None = Field(
+        default=None,
+        description="The meeting chat thread, from the `meeting-chat` block"
+        " (issue #208); `None` until the block has emitted one"
+        " (key-absent-means-hidden, `StageState._content()`).",
     )
 
 
@@ -602,6 +653,15 @@ class TasksIntent(BaseModel):
     tasks: list[Task] = Field(description="Tasks named by the meeting so far.", examples=[[]])
 
 
+class ChatIntent(ChatSnapshot):
+    """`chat:room`: the meeting-chat block's view intent (kind `chat`, issue
+    #208); the same shape as `StageStateSnapshot.chat`, plus the envelope's
+    `kind`/`id`."""
+
+    kind: Literal["chat"] = "chat"
+    id: str = Field(description="Identity a user action refers back to.", examples=["chat:room"])
+
+
 ViewIntent = Annotated[
     Union[
         PromptIntent,
@@ -618,6 +678,7 @@ ViewIntent = Annotated[
         TranscriptPartialIntent,
         TasksIntent,
         ListenIntent,
+        ChatIntent,
     ],
     Field(discriminator="kind"),
 ]
@@ -672,9 +733,22 @@ class VoiceAction(BaseModel):
 
 class MessageAction(BaseModel):
     kind: Literal["message"] = "message"
-    intent_id: str = Field(description="The intent this message responds to.", examples=["VI1"])
-    person: str = Field(description="Who typed the message.", examples=["P3"])
-    text: str = Field(description="What was typed.", examples=["hello"])
+    intent_id: str = Field(
+        description="The intent this message responds to; `chat:room` for a"
+        " meeting-chat message (issue #208), the only one live mode accepts.",
+        examples=["chat:room"],
+    )
+    person: str = Field(
+        default="",
+        description="Ignored in live mode: the person is the server-assigned"
+        " `cothinker_pid` cookie, never a value the surface sends.",
+        examples=[""],
+    )
+    text: str = Field(
+        max_length=MESSAGE_MAX_CHARS,
+        description=f"What was typed; at most {MESSAGE_MAX_CHARS} characters.",
+        examples=["Compare X and Y as an interactive page on the stage."],
+    )
 
 
 UserAction = Annotated[

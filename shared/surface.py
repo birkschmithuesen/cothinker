@@ -34,6 +34,7 @@ INTENT_KINDS = frozenset(
         "transcript",
         "transcript_partial",
         "tasks",
+        "chat",
     }
 )
 

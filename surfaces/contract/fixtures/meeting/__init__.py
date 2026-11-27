@@ -40,6 +40,9 @@ from datetime import datetime, timezone
 from surfaces.contract.fixtures import Frame
 from surfaces.contract.models import (
     AgendaItemSummary,
+    ChatIntent,
+    ChatMessage,
+    ChatSnapshot,
     AgendaSnapshot,
     Decision,
     HistoryEntry,
@@ -192,6 +195,19 @@ def build_frames(now: float | None = None) -> list[Frame]:
         TranscriptLine(speaker="Jonas", started_at=t2, text="Let's lock the vendor timeline now and park the rest."),
         TranscriptLine(speaker="Tamar", started_at=t3, text="I can take the migration runbook, but need a week."),
     ]
+    # The meeting chat (issue #208): during the pause Tamar types a task for
+    # the agent (pending); by the closing round its answer is there.
+    chat_question = ChatMessage(
+        id="p-tamar-1", role="participant", name="Tamar",
+        text="Compare the two vendor offers as a table on the stage.",
+        at=_iso(now + 600.0), status="pending")
+    chat_pending = ChatSnapshot(messages=[chat_question])
+    chat_answered = ChatSnapshot(messages=[
+        chat_question.model_copy(update={"status": "answered"}),
+        ChatMessage(id="agent-p-tamar-1", role="agent",
+                    text="Offer A is cheaper, offer B ships two weeks earlier; the table is on the stage.",
+                    at=_iso(now + 630.0), reply_to="p-tamar-1", status="answered"),
+    ])
     tasks_named = [
         Task(text="Send the updated timeline to the vendor.", person="Jonas", due="2026-12-01"),
         Task(text="Draft the migration runbook.", person="Tamar", due="2026-11-30"),
@@ -334,8 +350,10 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 voice=_voice("Tamar", t3, [("Mira", t2), ("Jonas", t0)]),
                 transcript_recent=transcript_after_tamar,
                 knowledge=KnowledgeSnapshot(topic_id="M2", query="Decisions & risks", hits=_KNOWLEDGE_HITS),
+                chat=chat_pending,
             ),
-            view_intents=[StatusIntent(id="VI6", text="Pause for coffee", severity="info")],
+            view_intents=[StatusIntent(id="VI6", text="Pause for coffee", severity="info"),
+                          ChatIntent(id="chat:room", messages=chat_pending.messages)],
         ),
         # The meeting resumes at the closing round; the question is resolved
         # and tasks are named (the `tasks` field, issue #129).
@@ -358,9 +376,11 @@ def build_frames(now: float | None = None) -> list[Frame]:
                 transcript_recent=transcript_after_tamar,
                 tasks=tasks_named,
                 voice=_voice(None, None, [("Tamar", t3), ("Mira", t2), ("Jonas", t0)]),
+                chat=chat_answered,
             ),
             view_intents=[
                 TasksIntent(id="VI7", tasks=tasks_named),
+                ChatIntent(id="chat:room", messages=chat_answered.messages),
                 VoiceIntent(id="voice:room", speaking=None, since=None,
                            recent=[{"name": "Tamar", "last_at": t3}, {"name": "Mira", "last_at": t2},
                                    {"name": "Jonas", "last_at": t0}]),

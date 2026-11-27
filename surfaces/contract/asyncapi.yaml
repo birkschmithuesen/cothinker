@@ -98,6 +98,107 @@ components:
       - media_type
       title: ArtefactIntent
       type: object
+    ChatIntent:
+      description: '`chat:room`: the meeting-chat block''s view intent (kind `chat`,
+        issue
+
+        #208); the same shape as `StageStateSnapshot.chat`, plus the envelope''s
+
+        `kind`/`id`.'
+      properties:
+        messages:
+          description: The last 50 messages, oldest first.
+          items:
+            $ref: '#/components/schemas/ChatMessage'
+          title: Messages
+          type: array
+        kind:
+          const: chat
+          default: chat
+          title: Kind
+          type: string
+        id:
+          description: Identity a user action refers back to.
+          examples:
+          - chat:room
+          title: Id
+          type: string
+      required:
+      - id
+      title: ChatIntent
+      type: object
+    ChatMessage:
+      description: 'One message of the meeting chat (issue #208): typed by a participant,
+
+        or the agent''s answer to one.'
+      properties:
+        id:
+          description: Identity of this message.
+          examples:
+          - a1b2c3d4e5f60718-1732352400123
+          title: Id
+          type: string
+        role:
+          description: Who wrote it.
+          enum:
+          - participant
+          - agent
+          examples:
+          - participant
+          title: Role
+          type: string
+        name:
+          default: ''
+          description: Display name from the participant's `participant:name` action;
+            empty for an unnamed participant and for the agent (the surface renders
+            its own label).
+          examples:
+          - Person A
+          title: Name
+          type: string
+        text:
+          description: The message text.
+          examples:
+          - Compare X and Y as an interactive page on the stage.
+          title: Text
+          type: string
+        at:
+          description: Wall-clock label of when the message was sent.
+          examples:
+          - '2026-11-23T09:20:00+01:00'
+          title: At
+          type: string
+        reply_to:
+          anyOf:
+          - type: string
+          - type: 'null'
+          default: null
+          description: 'For an agent message: the id of the participant message it
+            answers.'
+          examples:
+          - null
+          title: Reply To
+        status:
+          default: pending
+          description: 'Participant message: `pending` while the agent works on it,
+            then `answered`, `failed` (no answer came) or `unavailable` (this session
+            has no agent that answers chat). Agent message: always `answered`.'
+          enum:
+          - pending
+          - answered
+          - failed
+          - unavailable
+          examples:
+          - pending
+          title: Status
+          type: string
+      required:
+      - id
+      - role
+      - text
+      - at
+      title: ChatMessage
+      type: object
     ChoiceIntent:
       properties:
         kind:
@@ -997,6 +1098,7 @@ components:
       discriminator:
         mapping:
           artefact: '#/components/schemas/ArtefactIntent'
+          chat: '#/components/schemas/ChatIntent'
           choice_list: '#/components/schemas/ChoiceIntent'
           graph: '#/components/schemas/GraphIntent'
           knowledge: '#/components/schemas/KnowledgeIntent'
@@ -1026,3 +1128,4 @@ components:
       - $ref: '#/components/schemas/TranscriptPartialIntent'
       - $ref: '#/components/schemas/TasksIntent'
       - $ref: '#/components/schemas/ListenIntent'
+      - $ref: '#/components/schemas/ChatIntent'

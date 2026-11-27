@@ -33,6 +33,7 @@ import json
 from pathlib import Path
 
 from surfaces.contract.models import (
+    ChatIntent,
     GraphIntent,
     KnowledgeIntent,
     ListenIntent,
@@ -60,6 +61,7 @@ _OWNED_INTENT = {
     "knowledge": (KnowledgeIntent, "knowledge:{topic_id}"),
     "listen": (ListenIntent, "listen:room"),
     "transcript_partial": (TranscriptPartialIntent, "transcript:partial"),
+    "chat": (ChatIntent, "chat:room"),
 }
 
 # Fields holding a bare list rather than a single model (issue #147 point 3:
