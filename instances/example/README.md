@@ -18,7 +18,8 @@ test suite.
   `poster_format`), illustrative `[secrets]` env-var names and `[hosts]` entries (all
   `*.example.org`).
 - `content/` — bilingual (`de`/`en`) question and role pools, app strings, object icons,
-  one dossier topic, a cue sheet and a poster style note. All content is bilingual
+  one dossier topic, a cue sheet, a poster style note, and an STT vocabulary file
+  (`stt_vocab.txt`, docs/instance-format.md). All content is bilingual
   DE/EN, matching `languages = ["de", "en"]`.
 - `profiles/{main,writer,lektor,stoffentwickler,check}/` — minimal neutral `config.yaml`
   (+ `SOUL.md` for every role but `check`, matching the structural asymmetry of the

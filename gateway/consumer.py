@@ -902,8 +902,9 @@ def write_session_pointer(run_dir: Path) -> None:
 
 
 # ========================================================= agenda + timer
-def tick_agenda_item(path: Path, index: int) -> None:
-    """Flip the `index`-th checkbox (0-based, in file order) to `[x]`.
+def _set_agenda_checkbox(path: Path, index: int, done: bool) -> None:
+    """Flip the `index`-th checkbox (0-based, in file order) to `[x]`
+    (`done`) or `[ ]` (not `done`).
 
     Read-modify-write on the whole file: an agenda has at most a handful
     of items, so this is not a hot path, and it keeps every other line
@@ -918,10 +919,21 @@ def tick_agenda_item(path: Path, index: int) -> None:
             continue
         seen += 1
         if seen == index:
-            if m.group(1).lower() != "x":
-                lines[i] = line.replace("[ ]", "[x]", 1)
+            lines[i] = re.sub(r"\[[ xX]\]", "[x]" if done else "[ ]", line,
+                              count=1)
             break
     atomic_write_text(path, "".join(lines))
+
+
+def tick_agenda_item(path: Path, index: int) -> None:
+    """Marks the `index`-th checkbox (0-based, in file order) done."""
+    _set_agenda_checkbox(path, index, True)
+
+
+def untick_agenda_item(path: Path, index: int) -> None:
+    """Marks the `index`-th checkbox (0-based, in file order) not done
+    -- an item left behind by a "back"/"item N" command."""
+    _set_agenda_checkbox(path, index, False)
 
 
 class AgendaController:
@@ -976,14 +988,42 @@ class AgendaController:
 
     def observe(self, intent) -> bool:
         """Takes the view intents the agenda zone is built from; True when
-        `intent` was one of them."""
+        `intent` was one of them.
+
+        Ticks/unticks `agenda.md` here, not in `handle_utterance`: a
+        `timer:current` move can come from a voice command OR straight
+        from a stage tap (`gateway/actions_reader.py` dispatches a tap
+        to the block host directly, bypassing this controller's own
+        `_dispatch`) -- this is the one place both paths go through.
+        """
         if intent.id == "timer:current":
+            before = self._timer.get("current") if self._timer else None
             self._timer = dict(intent.payload)
+            after = self._timer.get("current")
+            if (isinstance(before, int) and isinstance(after, int)
+                    and before != after):
+                try:
+                    self._sync_ticks(before - 1, after - 1)
+                except Exception as e:     # noqa: BLE001
+                    self.log("agenda.md checkbox not updated:", repr(e))
             return True
         if intent.id == "queue:room":
             self._queue = dict(intent.payload)
             return True
         return False
+
+    def _sync_ticks(self, before: int, after: int) -> None:
+        """Ticks every item the current position passed moving forward
+        (`before` .. `after`), or unticks every item it passed moving
+        back (`after` .. `before`) -- a jump of more than one step ticks
+        or unticks all of them, not just the endpoints."""
+        n = len(self.doc.items)
+        if after > before:
+            for i in range(max(before, 0), min(after, n)):
+                tick_agenda_item(self.agenda_path, i)
+        elif after < before:
+            for i in range(max(after, 0), min(before, n)):
+                untick_agenda_item(self.agenda_path, i)
 
     def attach(self, blocks) -> None:
         """Starts the round-robin from the participants. Idempotent: the
@@ -1005,20 +1045,22 @@ class AgendaController:
     def handle_utterance(self, text: str) -> bool:
         """True when `text` is a recognized command -- it must then never
         reach the block builder or the agent. NEVER RAISES: a command
-        phrase must not turn into conversational text because ticking the
-        file failed."""
+        phrase must not turn into conversational text because dispatching
+        it failed. Checkbox ticking happens in `observe()`, not here --
+        see its docstring."""
         kind = detect_agenda_command(text)
         if kind is None:
             return False
         try:
-            before = self._current_index()
             if kind == "person":
                 self._dispatch("queue:room", {"op": "next_person"})
-            else:
+            elif kind == "item":
                 self._dispatch("timer:current", {"op": "next"})
-            after = self._current_index()
-            if after != before and before < len(self.doc.items):
-                tick_agenda_item(self.agenda_path, before)
+            elif kind == "back":
+                self._dispatch("timer:current", {"op": "back"})
+            else:   # ("jump", n)
+                self._dispatch("timer:current",
+                               {"op": "goto", "index": kind[1] - 1})
         except Exception as e:         # noqa: BLE001
             self.log("agenda command not applied:", repr(e))
         return True
@@ -1624,6 +1666,52 @@ def turn_closed(blocks: SessionBlocks, turn: int, *, ok: bool,
     """Tells the blocks the turn is over (`turn_closed`)."""
     blocks.dispatch("block_output", {"turn_closed": {
         "turn": turn, "ok": ok, "answered": answered}})
+
+
+# --lanes --policy (ADR 0026): the reason of a block that exists only to
+# carry level 2's finished orders into a turn of the serial worker.
+ORDERS_REASON = "orders"
+# --lanes (ADR 0026): what an orders turn may put on the stage. The topic
+# and the answer to a call have their own owners under --lanes (the topics
+# block with the call lane, and the call lane), so a `topic` or `main`
+# proposal of an orders turn is not applied; its order settles
+# `unanswered` at turn_closed like any order that brought nothing.
+LANE_ORDER_ACTIONS = frozenset({"decision", "tag_entry"})
+
+
+def order_answers(actions: list) -> list:
+    """The proposals of an orders turn under --lanes that answer a level-2
+    order: a `decision` or `tag_entry` carrying an `order` id. Everything
+    else the agent proposed in that turn is dropped (ADR 0026)."""
+    return [a for a in actions if isinstance(a, dict)
+            and a.get("action") in LANE_ORDER_ACTIONS
+            and is_token(a.get("order"))]
+
+
+def orders_turn_hook(orders_waiting: Callable[[], bool],
+                     enqueue: Callable[[Block], int],
+                     log: Callable[..., None] = log) -> Callable:
+    """The decider result hook `--lanes --policy` installs (ADR 0026).
+
+    Under `--lanes` no ordinary block reaches `RunQueue`, so nothing would
+    ever open a turn for level 2's orders. The hook runs on the decider
+    thread AFTER the policy runner has handled the same result -- every
+    order that result queued is already waiting -- and enqueues one
+    `orders` block (the decided block's text) when any order waits. A
+    result that queued nothing costs nothing: no block, no agent turn.
+
+    Takes no stage lock; `enqueue` takes only the queue's own condition.
+    Never raises: a failing hook must not cost the decider its result."""
+    def hook(result, snap, reason) -> None:
+        try:
+            if not orders_waiting():
+                return
+            text = str(getattr(snap, "block", "") or "")
+            enqueue(Block(sentences=[text] if text else [],
+                          reason=ORDERS_REASON, wake_word=False))
+        except Exception as e:            # noqa: BLE001 -- decider thread
+            log("orders turn not enqueued:", repr(e))
+    return hook
 
 
 class ReplyIntake:
@@ -2517,6 +2605,20 @@ class StageWriter:
         except Exception as e:            # noqa: BLE001 -- agent thread
             self.log("policy delivered failed:", repr(e))
 
+    def _task_filed(self, oid: str, action: dict) -> None:
+        """Hand a filed `tag_entry` that answered order `oid` to level 2,
+        which turns an `aufgabe` into a task (issue #129). Only a policy
+        that has the `task_filed` hook gets it. Never under
+        `StageState._lock`: the task goes out as a view intent and the
+        stage surface writes the stage, writer lock first."""
+        hook = getattr(self.policy, "task_filed", None)
+        if not oid or hook is None:
+            return
+        try:
+            hook(oid, action)
+        except Exception as e:            # noqa: BLE001 -- agent thread
+            self.log("policy task_filed failed:", repr(e))
+
     def _protocol_step(self, action: dict, mark: str = "") -> tuple | None:
         """What an ACCEPTED surface action means for the v2 protocol.
 
@@ -2588,6 +2690,7 @@ class StageWriter:
                                      stamp=action.get("time"), mark=mark)
         if reason in ("", "duplicate"):
             # A duplicate is in the protocol already: the order is answered.
+            self._task_filed(oid, action)
             self._delivered(oid)
         if reason:
             self.log("proposal rejected:", reason, str(action)[:120])
@@ -3640,6 +3743,11 @@ def main() -> int:
         addressed the agent, otherwise the cutting reason."""
         return "order" if b.wake_word else (b.reason or "unknown")
 
+    # --lanes: every turn of the serial worker is an orders turn (ADR 0026,
+    # `orders_turn_hook` is the only producer of its blocks). False on the
+    # serial path, where run_turn is unchanged.
+    orders_only = bool(a.lanes)
+
     def run_turn(b: Block) -> bool:
         """One agent turn: prompt, worker, proposals, stage.
 
@@ -3761,6 +3869,16 @@ def main() -> int:
                 # The run came back, so it saw the entries that still owe
                 # the protocol an appearance. They stop riding along.
                 state.mark_recorded(unrecorded)
+            if orders_only:
+                # --lanes (ADR 0026): this turn exists for level 2's
+                # orders. Only their answers are applied; the minutes items
+                # stay unfiled (under --lanes no agent writes the Verlauf).
+                kept = order_answers(reply.proposals)
+                dropped = len(reply.proposals) - len(kept) + len(reply.bullets)
+                if dropped:
+                    log(f"  orders turn: {dropped} items outside the orders"
+                        " not filed")
+                reply = TurnReply([], kept, reply.failure)
             if writer.protocol is not None:
                 # Once more, right before the entries are filed: an order
                 # run may have CREATED the file its `**erledigt** [[...]]`
@@ -3853,6 +3971,13 @@ def main() -> int:
         return bool(result["ok"])
 
     queue = RunQueue(run=run_turn, max_chars=a.max_batch)
+    if lanes is not None and decisions.policy_on:
+        # ADR 0026: under --lanes level 2's orders get their own turns on
+        # the serial worker -- enqueued by the decider result hook, only
+        # when a result queued an order.
+        decisions.add_result_hook(
+            orders_turn_hook(decisions.orders_waiting, queue.enqueue, log))
+        log("lanes: level-2 orders run on the serial worker")
     # Which announcement is which call-out's: filled by `block_done()`,
     # emptied by `run_turn()`. Both reach it only when called, so it can
     # sit after the one and before the other.

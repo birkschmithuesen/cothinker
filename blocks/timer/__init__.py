@@ -9,9 +9,10 @@ current item, and (via `clock.py`) drift against the plan and the projected
 end. Config: `{"items": [{"label", "minutes"}], "deadline": epoch seconds | null}`.
 
 Consumes `action` with `intent_id` `timer:current` (`payload` `{"op":
-"next" | "back"}`, any kind, voice included) and `block_output` from
-`speaker-queue` carrying `round_wrapped` (moves to the next item), and
-`tick`; emits the view intent `timer:current` (kind `timer`) once on `start`
+"next" | "back" | "goto", "index": 0-based int}` for `"goto"`, any kind,
+voice and tap included) and `block_output` from `speaker-queue` carrying
+`round_wrapped` (moves to the next item), and `tick`; emits the view
+intent `timer:current` (kind `timer`) once on `start`
 (when there are items, so the stage shows the agenda before the first move,
 and the fresh position is persisted so the anchor survives a restart) and
 then only when the current item changes. `next` always restarts the new current item's clock, also on the last
@@ -85,12 +86,15 @@ class TimerBlock:
 
     def on_event(self, ev: CoreEvent) -> Sequence[CoreEvent]:
         op = None
+        index = None
         if ev.kind == "action" and ev.payload.get("intent_id") == "timer:current":
-            op = (ev.payload.get("payload") or {}).get("op")
+            action_payload = ev.payload.get("payload") or {}
+            op = action_payload.get("op")
+            index = action_payload.get("index")
         elif (ev.kind == "block_output" and ev.payload.get("from") == "speaker-queue"
               and "round_wrapped" in ev.payload):
             op = "next"
-        if op is not None and self._move(op):
+        if op is not None and self._move(op, index):
             self._save()
             self._emit_current()
         return ()
@@ -117,7 +121,7 @@ class TimerBlock:
             "started": {str(k): v for k, v in self._item_started_at.items()},
         })
 
-    def _move(self, op: object) -> bool:
+    def _move(self, op: object, index: object = None) -> bool:
         if not self._items:
             return False
         last = len(self._items) - 1
@@ -126,8 +130,17 @@ class TimerBlock:
                 self._index += 1
             self._item_started_at[self._index] = self._ctx.clock()
             return True
-        if op == "back" and self._index > 0:
-            self._index -= 1
+        if op == "back":
+            if self._index > 0:
+                self._index -= 1
+            else:
+                return False
+        elif op == "goto":
+            if (isinstance(index, int) and not isinstance(index, bool)
+                    and 0 <= index <= last and index != self._index):
+                self._index = index
+            else:
+                return False
         else:
             return False
         if self._index not in self._item_started_at:

@@ -26,6 +26,10 @@ from .decider import stage_context as _stage_context
 BLOCK_ID = "decisions-tasks-questions"
 API_VERSION = 1
 
+# The one `tasks` view intent (issue #129): the whole list, replaced on
+# every new task -- a surface loaded mid-session reads it off the snapshot.
+TASKS_INTENT_ID = "tasks:room"
+
 
 class IntentWriter:
     """What the policy runner gets instead of the stage writer (ADR 0006:
@@ -144,7 +148,8 @@ class DecisionsBlock:
 
     Host handles -- called directly by the session host (`gateway/consumer.py`):
     `attach`, `page_order`, `stage_context`, plus the stage's own hooks
-    `marker_for` / `delivered`, `add_result_hook` and `finish`.
+    `marker_for` / `delivered` / `task_filed`, `orders_waiting`,
+    `add_result_hook` and `finish`.
     """
     id = BLOCK_ID
     api_version = API_VERSION
@@ -163,6 +168,7 @@ class DecisionsBlock:
         self._clock: Callable = datetime.now
         self._wants_page: Callable = lambda text: False
         self._order_note_for: Callable = lambda wake_word: ""
+        self._tasks: list = []
 
     # ------------------------------------------------ block contract
     def start(self, ctx, config: Mapping[str, object]) -> None:
@@ -294,6 +300,26 @@ class DecisionsBlock:
     def delivered(self, order_id) -> None:
         if self._runner is not None:
             self._runner.delivered(order_id)
+
+    def orders_waiting(self) -> bool:
+        """Level 2 has orders no turn has taken yet. False without it."""
+        return self._runner is not None and self._runner.orders_waiting()
+
+    def task_filed(self, order_id, action) -> None:
+        """The stage writer filed `action`, a `tag_entry` answering order
+        `order_id`. When that was one of level 2's `aufgabe` orders, the
+        task joins the list and the `tasks` view intent goes out again
+        (issue #129). Called on the agent thread only (`StageWriter.ingest`),
+        never under `StageState._lock`."""
+        if self._runner is None or self._ctx is None:
+            return
+        task = self._runner.task_for(order_id, action)
+        if task is None or task in self._tasks:
+            return
+        self._tasks.append(task)
+        self._ctx.emit(ViewIntent(
+            id=TASKS_INTENT_ID, block=BLOCK_ID, kind="tasks", audience="room",
+            payload={"tasks": [dict(t) for t in self._tasks]}))
 
     def finish(self) -> None:
         """Shutdown of level 1 and 2, bounded (`decider.FINISH_TIMEOUT_S`).

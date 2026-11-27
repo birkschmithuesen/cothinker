@@ -92,20 +92,47 @@ def test_empty_text_no_items_never_raises(parse_agenda_scenario):
 # ======================================================== detect_agenda_command
 @pytest.mark.parametrize("text", [
     "nächster Punkt", "naechster punkt", "nachster Punkt",
-    "Okay, nächster Punkt", "nächste Frage bitte", "Robo, naechste Frage"])
+    "Okay, nächster Punkt", "nächste Frage bitte", "Robo, naechste Frage",
+    "Hey Robo, nächster Punkt"])
 def test_item_command(text):
     assert ss.detect_agenda_command(text) == "item"
 
 
 @pytest.mark.parametrize("text", [
-    "nächste Person", "naechste person bitte", "du bist dran",
-    "wer ist als naechstes dran, naechster Sprecher"])
+    "nächste Person", "naechste person bitte", "du bist dran"])
 def test_person_command(text):
     assert ss.detect_agenda_command(text) == "person"
 
 
 @pytest.mark.parametrize("text", [
-    "Ich finde das Budget zu klein.", "", "Lasst uns weitermachen"])
+    "zurück", "zurueck", "ein Punkt zurück", "einen Punkt zurück",
+    "vorheriger Punkt", "vorherige Frage", "Okay, zurück", "zurück bitte",
+    "Hey Robo, zurück"])
+def test_back_command(text):
+    assert ss.detect_agenda_command(text) == "back"
+
+
+@pytest.mark.parametrize("text,n", [
+    ("Punkt 2", 2), ("Punkt 3", 3), ("gehe zu Punkt 1", 1),
+    ("zurück zu Punkt 2", 2), ("Okay, Punkt 2", 2),
+    ("Hey Robo, Punkt 2", 2)])
+def test_jump_command(text, n):
+    assert ss.detect_agenda_command(text) == ("jump", n)
+
+
+@pytest.mark.parametrize("text", [
+    "Ich finde das Budget zu klein.", "", "Lasst uns weitermachen",
+    # issue #201: the live-trial bug -- a command phrase mentioned inside
+    # a longer sentence must not advance the agenda.
+    "der nächste Punkt ist dann ganz kurz",
+    "ja total, und der nächste Punkt kommt dann gleich danach",
+    # issue #201: the command phrase only at the very end of an otherwise
+    # unrelated utterance is still not a whole/short explicit command
+    # (this used to be test_person_command's "person" case, pre-fix).
+    "wer ist als naechstes dran, naechster Sprecher",
+    # issue #201: same property for the "back" phrase -- mentioned inside
+    # a longer sentence must not count as an explicit command either.
+    "und dann gehen wir noch kurz zurück, bevor wir weitermachen"])
 def test_not_a_command(text):
     assert ss.detect_agenda_command(text) is None
 
@@ -401,6 +428,64 @@ def test_round_wraparound_advances_the_item_and_clamps_at_the_last(tmp_path):
     ctrl.handle_utterance("nächste Person")
     ctrl.handle_utterance("nächste Person")          # wraps again, clamped
     assert ctrl.payload()["current"] == 2
+
+
+# ====================================================== back / jump commands
+def test_back_command_moves_the_item_back_and_unticks(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n- [ ] C\n", [0.0])
+    ctrl.handle_utterance("nächster Punkt")
+    assert ctrl.payload()["current"] == 2
+    assert "- [x] A" in agenda_path.read_text(encoding="utf-8")
+    handled = ctrl.handle_utterance("zurück")
+    assert handled is True
+    assert ctrl.payload()["current"] == 1
+    assert "- [ ] A" in agenda_path.read_text(encoding="utf-8")
+
+
+def test_back_at_the_first_item_is_a_noop(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n", [0.0])
+    handled = ctrl.handle_utterance("zurück")
+    assert handled is True
+    assert ctrl.payload()["current"] == 1
+    assert "- [ ] A" in agenda_path.read_text(encoding="utf-8")
+
+
+def test_jump_command_jumps_straight_to_item_n_and_ticks_skipped_items(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n- [ ] C\n", [0.0])
+    handled = ctrl.handle_utterance("Punkt 3")
+    assert handled is True
+    assert ctrl.payload()["current"] == 3
+    text = agenda_path.read_text(encoding="utf-8")
+    assert "- [x] A" in text and "- [x] B" in text
+
+
+def test_jump_back_unticks_the_skipped_items(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n- [ ] C\n", [0.0])
+    ctrl.handle_utterance("Punkt 3")
+    ctrl.handle_utterance("Punkt 1")
+    assert ctrl.payload()["current"] == 1
+    text = agenda_path.read_text(encoding="utf-8")
+    assert "- [ ] A" in text and "- [ ] B" in text
+
+
+def test_jump_out_of_range_is_a_noop(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n", [0.0])
+    handled = ctrl.handle_utterance("Punkt 9")
+    assert handled is True
+    assert ctrl.payload()["current"] == 1
+    assert "- [ ] A" in agenda_path.read_text(encoding="utf-8")
+
+
+def test_a_direct_timer_tap_also_ticks_the_checkbox(tmp_path):
+    """Checkbox state follows the current item regardless of how it moved
+    -- a stage tap on the timer block goes straight to `blocks.dispatch`,
+    bypassing `handle_utterance` entirely (issue #201's tap target)."""
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n", [0.0])
+    ctrl.blocks.dispatch("action", {
+        "intent_id": "timer:current", "kind": "tap", "person": None,
+        "payload": {"op": "next"}, "at": 0.0})
+    assert ctrl.payload()["current"] == 2
+    assert "- [x] A" in agenda_path.read_text(encoding="utf-8")
 
 
 def test_dauer_deadline_survives_a_restart(tmp_path):

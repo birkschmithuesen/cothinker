@@ -114,7 +114,7 @@ def test_status_rule_sets_operating_line():
     assert surface.name == "stage" and list(surface.actions()) == []
     assert surface.kinds == {"prompt", "status", "artefact", "graph", "timer",
                              "queue", "voice", "share", "knowledge", "listen", "transcript",
-                             "transcript_partial"}
+                             "transcript_partial", "tasks"}
     surface.render([intent("status:line", "status",
                            {"state": "working", "detail": {"count": 3, "failed": False}})])
     assert len(writer.statuses) == 1
@@ -344,3 +344,24 @@ def test_transcript_partial_reaches_the_stage_state_and_clears_on_final():
     done = dict(grow, text="")
     surface.render([intent("transcript:partial", "transcript_partial", done)])
     assert "transcript_partial" not in state.content()
+
+
+# ------------------------------------------------------------ tasks (#129)
+TASKS = [{"text": "Sam bestellt bis Donnerstag Material.", "person": "Sam",
+          "due": "Donnerstag"}]
+
+
+def test_tasks_rule_sets_the_list_and_the_content_key():
+    surface, state, writer, _ = make()
+    assert "tasks" not in state.content()        # key absent until a task
+    surface.render([intent("tasks:room", "tasks", {"tasks": TASKS},
+                           block="decisions-tasks-questions")])
+    assert state.tasks == TASKS
+    assert state.content()["tasks"] == TASKS and writer.writes == 1
+
+
+def test_tasks_leave_the_stage_when_the_intent_leaves_the_board():
+    surface, state, _, _ = make()
+    surface.render([intent("tasks:room", "tasks", {"tasks": TASKS})])
+    surface.render([])
+    assert state.tasks is None and "tasks" not in state.content()

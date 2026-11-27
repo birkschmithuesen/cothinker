@@ -42,6 +42,7 @@ Top-level (both backends):
 | `--audio_logging`     | off                           | enables WAV logging of incoming audio  |
 | `--debug_audio`       | off                           | saves post-resample audio under `audio/stt_rec/` (per-frame for vosk, per-chunk for whisper) |
 | `--settings-file`     | `settings/stt_runtime.json` (or `STT_SETTINGS_FILE`) | JSON file that keeps the thresholds measured on site across a restart — see below |
+| `--instance-dir`      | from `COTHINKER_INSTANCE_DIR`  | an instance directory (`docs/instance-format.md`); see "Instance vocabulary" below |
 
 Whisper subparser:
 
@@ -85,6 +86,32 @@ logs loudly and starts on the defaults — it never refuses to start. Writing go
 through a temp file plus `os.replace`, and a failed write leaves the runtime
 change in force and reports `persisted: false` in the HTTP response (the operator
 page shows „nicht gespeichert: …" next to the slider).
+
+## Instance vocabulary (speechmatics-rt)
+
+The `speechmatics-rt` backend keeps a custom dictionary ("additional
+vocabulary") so the engine recognizes names and project terms it would
+otherwise mishear — the agent's own wake name ("Robo") is always one of
+the entries. There are two ways to add entries, and they do not combine:
+
+- `--vocab WORD[:SOUNDS_LIKE,...]` (repeatable), typed on the command
+  line for one invocation. Typing `--vocab` at all replaces the whole
+  default list for that run — exactly as today — so a bare `--vocab
+  Wiki` means only "Wiki" is in the dictionary, the wake name included.
+- `content/stt_vocab.txt` inside an instance directory
+  (`docs/instance-format.md`, loaded via `--instance-dir` /
+  `COTHINKER_INSTANCE_DIR`), one entry per line in the same
+  `WORD[:SOUNDS_LIKE,...]` syntax, blank lines and `#` comments ignored.
+  This is read automatically at every start and merged with the built-in
+  wake-name default — a missing file, an empty file, or a file that never
+  mentions the wake name all still end up with the wake name in the
+  dictionary. An instance that wants to change the wake name's own
+  pronunciation hints may list it itself; it then wins over the default
+  hints.
+
+Only used when `--vocab` is not typed: typing `--vocab` on the command
+line still overrides the instance file's contribution entirely, same as
+it always overrode the built-in default.
 
 ## Tuning VAD with `--debug_audio`
 

@@ -42,6 +42,7 @@ import numpy as np
 from fundusapps.common.turnid import ulid_now
 from fundusapps.stt_server.backends.base import RecognizerBackend
 from fundusapps.stt_server.events import EventBus, TranscriptionEvent
+from fundusapps.stt_server.instance_vocab import load_vocab_file
 from fundusapps.stt_server.track_speaker_resolver import build_speaker_resolver
 
 BACKEND_NAME = "speechmatics-rt"
@@ -67,6 +68,25 @@ from shared.utterance import DEFAULT_MAX_UTT_S, UtteranceCollector  # noqa: E402
 # passes their own --vocab list: "Hey Robo" is the one phrase the system
 # must hear, and Speechmatics heard "Hugo"/"Bobo" without it (issue #150).
 DEFAULT_VOCAB = ("Robo:Robbo,Roboh",)
+
+
+def merge_vocab(instance_entries=()) -> tuple[str, ...]:
+    """Combine an instance's own `content/stt_vocab.txt` entries with
+    `DEFAULT_VOCAB`. Instance entries come first, so a deployment may give
+    the wake name its own pronunciation hints; whatever the instance did
+    NOT mention (including the wake name itself, in the common case) is
+    filled in from `DEFAULT_VOCAB`. The wake name is therefore present in
+    the result whether the instance file is absent, empty, or simply does
+    not mention it -- it can never be merged away (issue #204)."""
+    seen = set()
+    out: list[str] = []
+    for raw in (*(instance_entries or ()), *DEFAULT_VOCAB):
+        word = str(raw).partition(":")[0].strip().lower()
+        if not word or word in seen:
+            continue
+        seen.add(word)
+        out.append(raw)
+    return tuple(out)
 
 
 def parse_vocab(entries) -> list[dict]:
@@ -192,7 +212,8 @@ class SpeechmaticsRtBackend(RecognizerBackend):
                  url: Optional[str] = None,
                  stream_factory: Optional[Callable] = None,
                  speaker_resolver: Optional[Callable[[float, float], Optional[str]]] = None,
-                 additional_vocab: Optional[list] = None):
+                 additional_vocab: Optional[list] = None,
+                 instance_vocab: Optional[list] = None):
         super().__init__(event_bus)
         default_url, stream_cls = _import_stream()
         self._api_key = api_key
@@ -209,8 +230,14 @@ class SpeechmaticsRtBackend(RecognizerBackend):
         # TrackSpeakerResolver to the recognizer's own AudioClock epoch,
         # since build_speaker_resolver() ran before that clock existed.
         self.speaker_resolver = speaker_resolver
-        self._additional_vocab = (parse_vocab(DEFAULT_VOCAB) if additional_vocab is None
-                                  else list(additional_vocab))
+        # additional_vocab not None means --vocab was typed on the command
+        # line: that replaces the default wholesale, exactly as before
+        # issue #204. Otherwise the default is DEFAULT_VOCAB merged with
+        # whatever the instance vocabulary file (content/stt_vocab.txt, if
+        # any) contributed -- merge_vocab() guarantees the wake name
+        # survives either way.
+        self._additional_vocab = (list(additional_vocab) if additional_vocab is not None
+                                  else parse_vocab(merge_vocab(instance_vocab)))
         self._url = url or default_url
         self._stream_factory = stream_factory or (
             lambda: stream_cls(self._api_key, self._language, None,
@@ -256,7 +283,12 @@ class SpeechmaticsRtBackend(RecognizerBackend):
                    # --per-track tap, which sets args.per_track_sidecar.
                    speaker_resolver=build_speaker_resolver(args),
                    additional_vocab=(parse_vocab(args.vocab)
-                                     if getattr(args, "vocab", None) else None))
+                                     if getattr(args, "vocab", None) else None),
+                   # Issue #204: loaded at STT start from the instance
+                   # directory (args.instance_dir, see args.py
+                   # --instance-dir); [] if there is none or it has no
+                   # vocabulary file.
+                   instance_vocab=load_vocab_file(getattr(args, "instance_dir", None)))
 
     def wants_streaming(self) -> bool:
         return True

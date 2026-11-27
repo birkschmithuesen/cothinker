@@ -725,8 +725,11 @@ components:
       title: Task
       type: object
     TasksIntent:
-      description: 'Tasks named by the meeting, from `decisions-tasks-questions`.
-        Not wired yet, see issue #129.'
+      description: 'Tasks named by the meeting, from `decisions-tasks-questions` (issue
+
+        #129): the whole list each time, the same shape as
+
+        `StageStateSnapshot.tasks`.'
       properties:
         kind:
           const: tasks
@@ -752,8 +755,6 @@ components:
       - tasks
       title: TasksIntent
       type: object
-      x-issue: https://github.com/birkschmithuesen/cothinker/issues/129
-      x-status: planned
     TimerIntent:
       properties:
         kind:

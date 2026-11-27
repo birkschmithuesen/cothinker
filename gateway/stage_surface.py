@@ -45,6 +45,8 @@ table of the migration plan:
                                  mapped here yet -- it stays an unmapped
                                  kind, logged once and dropped, until a
                                  follow-up wires the panel's live delivery)
+    tasks:room      tasks     -> content()["tasks"] (issue #129: the
+                                 decisions-tasks-questions block's list)
 
 Rendering is idempotent: an intent whose payload is unchanged since the
 last call is not applied again, so passing the whole snapshot each time is
@@ -68,7 +70,7 @@ from shared.surface import UserAction, ViewIntent
 
 KINDS = frozenset({"prompt", "status", "artefact", "graph", "timer", "queue",
                    "voice", "share", "knowledge", "listen", "transcript",
-                   "transcript_partial"})
+                   "transcript_partial", "tasks"})
 
 # Keys of the agenda the legacy AgendaController owns and the timer intent
 # does not carry; they survive a timer render.
@@ -119,6 +121,7 @@ class StageSurface:
             # Keyed by the full id: it shares the `transcript` prefix with
             # `transcript:recent` but has its own kind (issue #181).
             "transcript:partial": ("transcript_partial", self._partial),
+            "tasks": ("tasks", self._tasks),
         }
 
     # ------------------------------------------------------------ Surface
@@ -322,6 +325,12 @@ class StageSurface:
             return True
         return rule
 
+    def _tasks(self, intent: ViewIntent) -> bool:
+        """`tasks:room`: the list itself is `content()["tasks"]` (the
+        snapshot's `tasks` is a list, never an object)."""
+        self._state.tasks = [dict(t) for t in intent.payload["tasks"]]
+        return True
+
     def _timer(self, intent: ViewIntent) -> bool:
         # The consumer's block_sink first lets the agenda controller observe()
         # this intent and set state.agenda (it owns the round list: people,
@@ -343,7 +352,8 @@ class StageSurface:
             attribute = {"queue": "queue", "voice": "voice", "share": "share",
                          "graph": "session_graph",
                          "knowledge": "knowledge",
-                         "listen": "listen"}.get(_prefix(intent_id))
+                         "listen": "listen",
+                         "tasks": "tasks"}.get(_prefix(intent_id))
             if attribute is not None and getattr(self._state, attribute) is not None:
                 setattr(self._state, attribute, None)
                 changed = True

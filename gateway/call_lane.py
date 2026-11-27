@@ -222,16 +222,53 @@ def call_paths_text(folder, protocol, extra_dirs=()) -> str:
 
 
 def _extra_dir_files(folder: Path) -> list:
-    """Top-level file names of a reference folder (README first), only when
-    it holds symlinks -- a plain folder is searchable as it is. Sorted, so
-    the prefix stays byte-stable for the whole meeting."""
+    """File names of a reference folder (README first), as paths relative
+    to `folder`, only when a symlink anywhere in the tree makes some of it
+    invisible to `search_files` -- a plain folder is searchable as it is.
+
+    Recurses into symlinked subdirectories (deduped by resolved path, so a
+    symlink cycle cannot loop forever): the real extra dir is "a folder of
+    symlinks into the vault" (`stage_image.py`'s docstring), and the vault
+    itself lives behind directory symlinks, not file symlinks
+    (`graph/vault_notes.py`'s SYMLINK TRAP) -- a top-level-only listing hid
+    every note one of those symlinked directories down (issue #205: the
+    agent answered "not found" for a file that existed one level below the
+    extra dir).
+
+    Sorted, so the prefix stays byte-stable for the whole meeting."""
+    names: list[str] = []
+    has_symlink = False
+    seen: set[str] = set()
+
+    def walk(cur: Path, prefix: str) -> None:
+        nonlocal has_symlink
+        try:
+            entries = sorted(cur.iterdir(), key=lambda e: e.name)
+        except OSError:
+            return
+        for e in entries:
+            if e.is_symlink():
+                has_symlink = True
+            rel = f"{prefix}{e.name}"
+            if e.is_dir():
+                try:
+                    real = str(e.resolve())
+                except OSError:
+                    continue
+                if real in seen:
+                    continue
+                seen.add(real)
+                walk(e, f"{rel}/")
+            elif e.is_file():                           # follows links
+                names.append(rel)
+
     try:
-        entries = sorted(folder.iterdir(), key=lambda e: e.name)
+        seen.add(str(folder.resolve()))
     except OSError:
         return []
-    if not any(e.is_symlink() for e in entries):
+    walk(folder, "")
+    if not has_symlink:
         return []
-    names = [e.name for e in entries if e.is_file()]   # follows links
     names.sort(key=lambda n: (n.lower() != "readme.md", n))
     return names[:CALL_EXTRA_MAX_FILES]
 

@@ -36,8 +36,9 @@ writes `buehne.json`, the consumer stays its single writer.
 Live mode polls the file every 0.3 s (well under the 2 s acceptance
 bound) and, on every content change, diffs the previous mapped snapshot
 against the new one. A field with an obvious owning view-intent kind
-(`queue`, `voice`, `share`, `session_graph`) is pushed as that kind's intent
-(`queue:room`, `voice:room`, `share:room`, `graph:session`); every other
+(`queue`, `voice`, `share`, `session_graph`, `tasks`) is pushed as that
+kind's intent (`queue:room`, `voice:room`, `share:room`, `graph:session`,
+`tasks:live`); every other
 changed field (headline, decisions, notices, the question slot, ...) is
 folded into one `status` intent naming the changed fields, since most of
 the snapshot has no view-intent kind of its own. A field the live core does
@@ -76,10 +77,27 @@ read `surfaces/contract/asyncapi.yaml` for its message shapes, since OpenAPI
 only weakly describes a push channel.
 
 A field marked `"x-status": "planned"` in the schema (e.g. the agenda's
-`items`, or the `transcript:recent` and `tasks` view intents) is not wired
-up in the live core yet; the extra also carries `"x-issue"`, the GitHub
-issue that will fill it. The fixture still populates it, so you can design
-against its shape today.
+`items`, or the `transcript:recent` view intent) is not wired up in the
+live core yet; the extra also carries `"x-issue"`, the GitHub issue that
+will fill it. The fixture still populates it, so you can design against its
+shape today.
+
+### `tasks`
+
+The tasks the meeting named, from the `decisions-tasks-questions` block
+(issue #129). Each task is `{text, person, due}`; `person` and `due` are
+filled when the meeting named them and empty strings otherwise -- never
+guessed. The snapshot's `tasks` list and the `tasks` view intent carry the
+same whole list; the intent is pushed again on every new task. In
+`buehne.json` the key is absent until the first task (read it as `[]`).
+Filled when the core runs with `--policy` (the decider names a task, the
+language agent formulates it), with or without `--lanes`.
+
+```json
+{"kind": "tasks", "id": "tasks:live",
+ "tasks": [{"text": "Order the material.", "person": "Sam",
+            "due": "Thursday"}]}
+```
 
 ## Build
 

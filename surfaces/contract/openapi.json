@@ -1566,17 +1566,21 @@
             "description": "Per-person talk-share, from the `speaking-share` block; `None` when that block is absent from the session (key-absent-means-hidden, `StageState._content()`)."
           },
           "tasks": {
-            "description": "Tasks named by the meeting so far, from `decisions-tasks-questions`; carries the same content as the latest `tasks` view intent, so a surface loaded mid-session sees it without waiting for the next event. The core does not wire this up yet (issue #129); a fixture populates it.",
+            "description": "Tasks named by the meeting so far, from `decisions-tasks-questions`; carries the same content as the latest `tasks` view intent, so a surface loaded mid-session sees it without waiting for the next event. Absent from `buehne.json` (read as empty) until the meeting has named a task.",
             "examples": [
-              []
+              [
+                {
+                  "due": "Thursday",
+                  "person": "Sam",
+                  "text": "Order the material."
+                }
+              ]
             ],
             "items": {
               "$ref": "#/components/schemas/Task"
             },
             "title": "Tasks",
-            "type": "array",
-            "x-issue": "https://github.com/birkschmithuesen/cothinker/issues/129",
-            "x-status": "planned"
+            "type": "array"
           },
           "transcript_partial": {
             "anyOf": [
