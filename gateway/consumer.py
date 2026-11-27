@@ -1122,7 +1122,7 @@ def _flock(f) -> bool:
 class SessionGit:
     """Commits (and syncs) the session's files with git.
 
-    A session-host concern, nothing to do with rendering the minutes: it
+    A concern of the session host, nothing to do with rendering the minutes: it
     commits the protocol file and whatever else the session wrote.
     """
 
@@ -3649,11 +3649,8 @@ def main() -> int:
         # the block's `topic` output reaches the call lane through the host
         # listener; the decisions-tasks-questions block's hook below is
         # what feeds the block. The call lane's own re-announcement
-        # (`from` = session-host) is not a new topic.
-        session_blocks.on_output(
-            lambda payload: lanes.on_topic(payload["topic"])
-            if "topic" in payload and payload.get("from") != "session-host"
-            else None)
+        # (`from` = host) is not a new topic.
+        session_blocks.on_output(call_lane_mod.topic_listener(lanes.on_topic))
         if decisions.decider_on:
             # Confirmed topic changes come from the `topics` block
             # (issue #39): the block's `topic` output reaches the call

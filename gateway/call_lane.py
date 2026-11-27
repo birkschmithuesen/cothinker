@@ -25,7 +25,7 @@ host:
   host's `on_output` listener (`CallLane.on_topic`); titling is that
   block's job. The call lane gives a new topic its history entry on the
   stage (point 6a) and announces it to the blocks as a `block_output`
-  with `topic` (`from` = `session-host`) carrying the stage entry's id.
+  with `topic` (`from` = `host`) carrying the stage entry's id.
 
 Kept out of `gateway/consumer.py` on purpose: that file is huge and runs
 live meetings. Writing to the stage reuses the SAME `state`/`writer` the
@@ -49,6 +49,22 @@ from blocks.mirroring_coach.context import ROLL_EVERY, WINDOW_SIZE, LaneContext 
 from lanes import TIMEOUT_MARKER, Job, LaneQueue  # noqa: E402
 import stage_image  # noqa: E402
 from worker import WorkerClient  # noqa: E402
+
+# The `from` of every `block_output` the session host itself dispatches
+# (issue #28). Blocks and the consumer's topic hook tell the host's own
+# re-announcements from a block's output by it.
+HOST_FROM = "host"
+
+
+def topic_listener(on_topic: Callable[[Mapping], None]) -> Callable[[Mapping], None]:
+    """The session runtime's `on_output` hook that hands a block's confirmed
+    topic to the call lane -- never the lane's own re-announcement
+    (`from` = HOST_FROM), or every confirmed topic would come back as a new
+    one."""
+    def listener(payload: Mapping) -> None:
+        if "topic" in payload and payload.get("from") != HOST_FROM:
+            on_topic(payload["topic"])
+    return listener
 
 # Point 2 (2026-10-20): the call lane gets read-only file tools -- this
 # is a PROMPT instruction, not a Hermes-config limit: the call lane
@@ -385,7 +401,7 @@ class CallLane:
         if self._dispatch is None:
             return
         try:
-            self._dispatch("block_output", {"from": "session-host", **output})
+            self._dispatch("block_output", {"from": HOST_FROM, **output})
         except Exception as e:                # noqa: BLE001 -- a lane must
             # never take the consumer down with a broken block.
             self.log("call lane: block dispatch failed:", repr(e))

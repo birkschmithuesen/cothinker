@@ -32,8 +32,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "gateway"))
 from blocks.mirroring_coach.context import EXCERPT_CHARS  # noqa: E402
 from call_lane import (  # noqa: E402
-    CALL_ANSWER_RULE, CALL_ANSWER_VISIBLE_S, CALL_INTENT_SHAPES, MIRROR_EXPIRY_S,
-    CallLane, call_paths_text, extra_dirs_from_env)
+    CALL_ANSWER_RULE, CALL_ANSWER_VISIBLE_S, CALL_INTENT_SHAPES, HOST_FROM,
+    MIRROR_EXPIRY_S, CallLane, call_paths_text, extra_dirs_from_env,
+    topic_listener)
 from stage_state import StageState  # noqa: E402
 from shared.text import derived_title, one_line  # noqa: E402
 
@@ -1036,7 +1037,7 @@ def test_attach_tells_the_blocks_the_current_stable_prefix():
     lane, state, writer, rec, clock = _lane("bx1")
     lane._dispatch = None
     lane.attach(rec)
-    assert rec.events == [("block_output", {"from": "session-host",
+    assert rec.events == [("block_output", {"from": "host",
                                             "stable_prefix": "PROJECT\nAGENDA"})]
     lane.stop()
 
@@ -1181,3 +1182,16 @@ def test_handle_block_strips_the_wake_phrase_from_the_call_text():
     lane.handle_block("Ann", "Hey Robo, fass zusammen", wake_word=True)
     assert submitted and submitted[0].meta["calls"][0]["text"] == "fass zusammen"
     lane.stop()
+
+
+def test_topic_listener_skips_the_hosts_own_topic_echo():
+    """issue #28: the call lane re-announces a confirmed topic with
+    `from` = HOST_FROM; the consumer's hook must not hand that echo back to
+    the lane as a new topic, but must hand on a block's own topic."""
+    got = []
+    listener = topic_listener(got.append)
+    listener({"from": HOST_FROM, "topic": {"id": "e1", "title": "Echo"}})
+    listener({"from": "topics", "topic": {"id": "t1", "title": "Budget"}})
+    listener({"from": "topics", "condensed": {}})
+    assert HOST_FROM == "host"
+    assert got == [{"id": "t1", "title": "Budget"}]

@@ -111,7 +111,7 @@ NACHTRAG_PREFIX = "Nachtrag "
 COACH_SPEAKER = "Robo (Coach)"
 
 # Block configuration. The first three keys (`lane_coach_delay`,
-# `coach_rhythm`, `lane_coach_worker_command`) replace the former session-host
+# `coach_rhythm`, `lane_coach_worker_command`) replace the former session host's
 # coach settings, same names, same defaults; the rest are the block's own
 # knobs.
 DEFAULT_CONFIG: Mapping[str, object] = {

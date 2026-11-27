@@ -216,7 +216,7 @@ class Rig:
 
             def on_event(inner, ev):
                 if (ev.kind == "block_output" and "topic" in ev.payload
-                        and ev.payload.get("from") != "session-host"):
+                        and ev.payload.get("from") != "host"):
                     rig.lanes.on_topic(ev.payload["topic"])
                 return ()
 
@@ -330,7 +330,7 @@ def test_confirmed_return_reaches_the_coach_without_a_history_row():
         "block": "Zurueck zum Anfang", "previous": ""}}))
     assert "topic: return" in lane_logs
     assert rig.announced[announced_before:] == [("block_output", {
-        "from": "session-host",
+        "from": "host",
         "topic": {"id": "", "title": "Thema", "returned": True,
                   "coach_eligible": False}})]
     assert len(state.history) == n_hist
