@@ -141,3 +141,7 @@ class GraphBlock:
             topics, session_id="file:" + PROTOCOL_FILE,
             session_label=title or "Sitzung", resolve=resolve,
             index=index, edges=edges, hysteresis=self._hysteresis)
+
+
+def make_block() -> GraphBlock:
+    return GraphBlock()

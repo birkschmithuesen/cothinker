@@ -443,3 +443,7 @@ class DecisionsBlock:
         except Exception as e:                # noqa: BLE001 -- agent thread
             self._log("topic page call-out skipped:", repr(e))
             return None
+
+
+def make_block() -> DecisionsBlock:
+    return DecisionsBlock()

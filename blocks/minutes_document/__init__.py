@@ -137,3 +137,7 @@ def _result_event(res: EntryResult) -> CoreEvent:
         "from": BLOCK_ID, "kind": "entry_result", "reason": res.reason,
         "links_seen": res.links_seen, "links_dead": res.links_dead,
         "attempted": res.attempted})
+
+
+def make_block() -> MinutesDocumentBlock:
+    return MinutesDocumentBlock()

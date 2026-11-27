@@ -115,3 +115,7 @@ class LiveTranscriptBlock:
                 "started_at": _wall_clock_label(started_at) if started_at is not None else "",
             },
         ))
+
+
+def make_block() -> LiveTranscriptBlock:
+    return LiveTranscriptBlock()

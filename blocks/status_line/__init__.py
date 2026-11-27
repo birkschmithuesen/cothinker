@@ -141,3 +141,7 @@ class StatusLineBlock:
 
     def stop(self) -> None:
         pass
+
+
+def make_block() -> StatusLineBlock:
+    return StatusLineBlock()

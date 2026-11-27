@@ -116,3 +116,7 @@ class TopicsBlock:
 
     def _on_title_failed(self, entry_id: str, token: str, ms: int) -> None:
         """The provisional title stays (the titler already logged it)."""
+
+
+def make_block() -> TopicsBlock:
+    return TopicsBlock()

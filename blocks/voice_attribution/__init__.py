@@ -102,3 +102,7 @@ class VoiceAttributionBlock:
             id="voice:room", block=self.id, kind="voice", audience="room",
             payload=payload,
         ))
+
+
+def make_block() -> VoiceAttributionBlock:
+    return VoiceAttributionBlock()
