@@ -3,15 +3,12 @@ derived CoThinker state (spec 3.4). Also produces the per-view PR screenshots:
 COTHINKER_SHOT_DIR=pr-shots python -m pytest -q surfaces/room_display/tests/test_room_display_views.py"""
 from __future__ import annotations
 
-from datetime import datetime, timezone
-
 from surfaces.contract.fixtures import Frame, load_scenario
 from surfaces.contract.models import (
-    ListenSnapshot, PendingAnnouncement, ShareRow, ShareSnapshot, VoiceIntent, VoiceSnapshot,
+    ListenSnapshot, PendingAnnouncement, ShareRow, ShareSnapshot, StatusIntent, VoiceIntent,
+    VoiceSnapshot,
 )
-from surfaces.room_display.tests.helpers import (
-    CallAnswerIntent, VIEW_KEYS, empty_snapshot, open_view,
-)
+from surfaces.room_display.tests.helpers import VIEW_KEYS, empty_snapshot, open_view
 
 EXPECTED_TEXT = {
     "live": "migration runbook",
@@ -142,20 +139,51 @@ def test_call_window_without_closes_in_s_omits_the_timer(contract, surface_url, 
     assert page.locator("#state").inner_text() == "Robo listens"
 
 
-def test_call_answer_intent_shows_answer_ready_and_beats_working(contract, surface_url, page):
+def test_call_answer_in_snapshot_shows_answer_ready_and_beats_working(contract, surface_url, page):
     """Priority rule (issue #206): an answer that just landed must not be
-    hidden by a new pending announcement starting at the same moment."""
-    busy = empty_snapshot().model_copy(update={"pending": [
-        PendingAnnouncement(id="P1", kind="decision", label="notiere", since="2026-01-01T00:00:00+00:00"),
-    ]})
+    hidden by a new pending announcement starting at the same moment.
+
+    `call_answer` has no owning view-intent kind of its own
+    (`surfaces/contract/live_player.py` `_OWNED_INTENT`), so a change to it
+    reaches the surface as a generic `StatusIntent` that only tells the
+    client to refetch `/snapshot` -- the answer text itself travels in the
+    snapshot's `call_answer` field, read directly (`stage/stage.py:1356`
+    does the same for the fixed stage display)."""
+    busy = empty_snapshot().model_copy(update={
+        "pending": [PendingAnnouncement(id="P1", kind="decision", label="notiere", since="2026-01-01T00:00:00+00:00")],
+        "call_answer": "The budget is approved.",
+    })
     api = contract([
         Frame(delay_s=0.0, snapshot=empty_snapshot(), view_intents=[]),
         Frame(delay_s=2.0, snapshot=busy, view_intents=[
-            CallAnswerIntent(id="call_answer:1", text="The budget is approved.",
-                              at=datetime.now(timezone.utc).isoformat()),
+            StatusIntent(id="s1", text="stage state changed: call_answer, pending"),
         ]),
     ])
     page.goto(f"{surface_url}?api={api}/")
     page.wait_for_selector('html[data-state="idle"]')
     page.wait_for_selector('html[data-state="answer"]', timeout=10000)
     assert page.locator("#state").inner_text() == "Answer ready"
+    assert page.locator("#answer").inner_text() == "The budget is approved."
+
+
+def test_call_answer_expires_after_300_seconds(contract, surface_url, page):
+    """The fixed answer window is `CALL_ANSWER_VISIBLE_S` (300 s, mirroring
+    `gateway/call_lane.py:161`) measured from the moment the room display
+    first observes the new `call_answer` text, not from a server timestamp
+    (the snapshot carries none)."""
+    answered = empty_snapshot().model_copy(update={"call_answer": "The budget is approved."})
+    api = contract([
+        Frame(delay_s=0.0, snapshot=empty_snapshot(), view_intents=[]),
+        Frame(delay_s=2.0, snapshot=answered, view_intents=[
+            StatusIntent(id="s1", text="stage state changed: call_answer"),
+        ]),
+    ])
+    page.clock.install()
+    page.goto(f"{surface_url}?api={api}/")
+    page.wait_for_selector('html[data-state="idle"]')
+    page.clock.pause_at(page.evaluate("Date.now()") + 1)
+    page.wait_for_selector('html[data-state="answer"]', timeout=10000)
+    page.clock.fast_forward(299000)
+    assert page.locator("html").get_attribute("data-state") == "answer"
+    page.clock.fast_forward(2000)
+    assert page.locator("html").get_attribute("data-state") == "idle"

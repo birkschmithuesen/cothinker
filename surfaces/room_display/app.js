@@ -9,7 +9,7 @@ const api = new URLSearchParams(location.search).get("api") || "/";
 const VIEW_KEYS = ["live", "topics", "results", "queue", "share", "memory"];
 const HANDLED = new Set([
   "timer", "status", "transcript:recent", "tasks", "queue", "share", "knowledge", "voice",
-  "call_answer", "transcript_partial",
+  "transcript_partial",
 ]);
 
 // Mirrors CALL_ANSWER_VISIBLE_S in gateway/call_lane.py:161; hardcoded (not
@@ -32,7 +32,7 @@ const switcher = createSwitcher({
 });
 
 function callAnswerVisible() {
-  return !!callAnswer && (Date.now() - Date.parse(callAnswer.at)) / 1000 < CALL_ANSWER_VISIBLE_S;
+  return !!callAnswer && (Date.now() - callAnswer.at) / 1000 < CALL_ANSWER_VISIBLE_S;
 }
 
 // Priority (issue #206): offline beats everything; then an answer still
@@ -87,6 +87,13 @@ async function refresh() {
     if (!response.ok) throw new Error(`snapshot ${response.status}`);
     const next = await response.json();
     const hit = fetched ? trigger(snapshot, next) : null;
+    // call_answer has no owning intent kind, so it only ever arrives in the
+    // snapshot (a change shows up as a generic StatusIntent, which just
+    // triggers this refetch); the snapshot carries no timestamp for it, so
+    // the visibility window starts when we first see the new text here.
+    if (next.call_answer && next.call_answer !== snapshot.call_answer) {
+      callAnswer = { text: next.call_answer, at: Date.now() };
+    }
     snapshot = next;
     fetched = true;
     snapshotOk = true;
@@ -112,8 +119,7 @@ function onIntent(intent) {
     snapshot.transcript_partial = {
       turn_id: intent.turn_id, speaker: intent.speaker, text: intent.text, started_at: intent.started_at,
     };
-  } else if (intent.kind === "call_answer") callAnswer = { text: intent.text, at: intent.at };
-  else if (intent.kind === "tasks") {
+  } else if (intent.kind === "tasks") {
     const grew = intent.tasks.length > (snapshot.tasks || []).length;
     snapshot.tasks = intent.tasks;
     if (grew) switcher.auto("results");
