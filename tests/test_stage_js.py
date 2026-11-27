@@ -2743,8 +2743,8 @@ El.prototype.addEventListener = function(t, fn){
 El.prototype.removeAttribute = function(k){ delete this.attrs[k]; };
 El.prototype.focus = function(){ this.focused = true; };
 ['join-dlg','join-form','join-name','join-err','teiln-wort','teiln-fertig',
- 'teiln-teilen','teiln-status','share-dlg','share-link','share-qr',
- 'share-close','join-later','listen-toggle'].forEach(el);
+ 'teiln-zurueck','teiln-weiter','teiln-teilen','teiln-status','share-dlg',
+ 'share-link','share-qr','share-close','join-later','listen-toggle'].forEach(el);
 // Both dialogs ship `hidden` in the markup.
 el('join-dlg').attrs.hidden = ''; el('share-dlg').attrs.hidden = '';
 var preset = JSON.parse(process.argv[3] || '{}');
@@ -2969,6 +2969,17 @@ def test_the_buttons_post_the_right_queue_op(part_page, button, op):
                   {"cothinker-joined-name": "Anna"})
     assert v["posts"] == [{"url": f"action?t={TEST_TOKEN}",
                            "body": {"intent_id": "queue:room", "op": op}}]
+
+
+@pytest.mark.parametrize("button,op", [("teiln-zurueck", "back"),
+                                       ("teiln-weiter", "next")])
+def test_the_agenda_nav_buttons_post_the_right_timer_op(part_page, button, op):
+    v = _run_part(part_page, f"""
+      await tap('{button}');
+      out.posts = posts.map(function(p){{ return {{url: p.url, body: p.body}}; }});""",
+                  {"cothinker-joined-name": "Anna"})
+    assert v["posts"] == [{"url": f"action?t={TEST_TOKEN}",
+                           "body": {"intent_id": "timer:current", "op": op}}]
 
 
 # ---------------------------------------------------- the call-window toggle

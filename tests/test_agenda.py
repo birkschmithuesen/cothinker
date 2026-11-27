@@ -129,7 +129,10 @@ def test_jump_command(text, n):
     # issue #201: the command phrase only at the very end of an otherwise
     # unrelated utterance is still not a whole/short explicit command
     # (this used to be test_person_command's "person" case, pre-fix).
-    "wer ist als naechstes dran, naechster Sprecher"])
+    "wer ist als naechstes dran, naechster Sprecher",
+    # issue #201: same property for the "back" phrase -- mentioned inside
+    # a longer sentence must not count as an explicit command either.
+    "und dann gehen wir noch kurz zurück, bevor wir weitermachen"])
 def test_not_a_command(text):
     assert ss.detect_agenda_command(text) is None
 
