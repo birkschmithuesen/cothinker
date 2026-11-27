@@ -133,6 +133,7 @@ block:minutes-document       block — minutes document
 block:mirroring-coach        block — mirroring / coach question
 block:knowledge-link         block — knowledge link (vault notes)
 block:status-line            block — status line
+block:release                block — release (publish a session's results to guests)
 block:graph                  block — graph (session / results / term graph)
 block:write-text             block — write text (prologue, scene, script)
 block:speaking-share         block — speaking share (talk share + room talk time)
@@ -183,6 +184,8 @@ blocks/topics/title.py                                                          
 gateway/actions_reader.py                                                         core:session
 blocks/graph/__init__.py                                                          block:graph
 blocks/graph/session_graph.py                                                     block:graph
+blocks/release/__init__.py                                                       block:release
+blocks/release/logic.py                                                          block:release
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
 gateway/conflict_triage.py                                                        core:session
