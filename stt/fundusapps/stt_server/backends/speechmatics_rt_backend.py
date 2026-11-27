@@ -204,8 +204,11 @@ class SpeechmaticsRtBackend(RecognizerBackend):
         self._prefer_current_speaker = bool(prefer_current_speaker)
         # Issue #128: passed straight through to every per-channel
         # _UtteranceCollector; see its own docstring/comment for the
-        # contract. None (the default) is a no-op.
-        self._speaker_resolver = speaker_resolver
+        # contract. None (the default) is a no-op. Public (not _-prefixed):
+        # issue #202's sr.py._make_recognizer reads this to wire a
+        # TrackSpeakerResolver to the recognizer's own AudioClock epoch,
+        # since build_speaker_resolver() ran before that clock existed.
+        self.speaker_resolver = speaker_resolver
         self._additional_vocab = (parse_vocab(DEFAULT_VOCAB) if additional_vocab is None
                                   else list(additional_vocab))
         self._url = url or default_url
@@ -273,7 +276,7 @@ class SpeechmaticsRtBackend(RecognizerBackend):
             q = asyncio.Queue()
             self._queues[rid] = q
             self._collectors[rid] = _UtteranceCollector(
-                rid, self._bus, self._max_utt_s, speaker_resolver=self._speaker_resolver)
+                rid, self._bus, self._max_utt_s, speaker_resolver=self.speaker_resolver)
             self._tasks[rid] = self._loop.create_task(self._run(rid))
         q.put_nowait((offset, pcm))
 

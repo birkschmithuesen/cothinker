@@ -35,6 +35,10 @@ from fundusapps.bbb_tap.pcm import PcmSink, WavRecorder, decode_chunk
 
 HERE = Path(__file__).resolve().parent
 
+#: Sample rate of the mixed/per-track WAVs this tap records (pcm.py,
+#: fundusapps.bbb_tap.speaker_attribution.RATE).
+RATE = 16000
+
 
 def _resolve_record_time(record_time):
     """`record_time` if given (format YYYYMMDD-HHMMSS, see --record-time),
@@ -101,15 +105,22 @@ class PerTrack:
     the track appears, so every file shares the mixed WAV's time axis
     (accurate to one 128 ms chunk)."""
 
-    def __init__(self, base_path, mixed_frames=lambda: 0):
+    def __init__(self, base_path, mixed_frames=lambda: 0, now=time.time):
         self.base = Path(base_path)               # .../bbb-HHMMSS (no suffix)
         self.mixed_frames = mixed_frames
+        self._now = now
         self.sidecar = self.base.parent / (self.base.name + "-tracks.json")
         self.epoch = 0
         self.global_n = {}                        # (epoch, n) -> global number
         self.recorders = {}                       # global number -> WavRecorder
         self.info = {}                            # global number -> sidecar entry
         self.failed = False
+        #: Issue #202: unix time of frame 0 of the MIXED recording --
+        #: computed from mixed_frames() the moment it is first needed (see
+        #: write() below), the same "now - elapsed" anchoring AudioClock
+        #: uses on its own first frame. None until a track first appears
+        #: (nothing to anchor to yet).
+        self.start_epoch = None
 
     def new_page(self):
         self.epoch += 1
@@ -132,6 +143,8 @@ class PerTrack:
                 pad = int(self.mixed_frames())
                 if pad > 0:
                     rec.write(b"\x00\x00" * pad)
+                if self.start_epoch is None:
+                    self.start_epoch = self._now() - pad / RATE
                 self.info.setdefault(g, {"file": path.name, "owners": []})
                 self.info[g]["start_frame"] = pad
                 self.save()
@@ -175,6 +188,8 @@ class PerTrack:
         if self.failed:
             return
         doc = {"mixed": self.base.name + ".wav", "sample_rate": 16000,
+               "start_epoch": (round(self.start_epoch, 3)
+                               if self.start_epoch is not None else None),
                "tracks": {str(g): self.info[g] for g in sorted(self.info)}}
         tmp = self.sidecar.with_suffix(".json.tmp")
         try:
