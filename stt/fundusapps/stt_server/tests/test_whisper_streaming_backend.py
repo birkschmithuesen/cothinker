@@ -4,6 +4,8 @@ import threading
 import numpy as np
 import pytest
 
+pytest.importorskip("faster_whisper")
+
 from fundusapps.stt_server.events import EventBus, TranscriptionEvent
 from fundusapps.stt_server.backends.whisper_streaming_backend import (
     WhisperStreamingBackend,
