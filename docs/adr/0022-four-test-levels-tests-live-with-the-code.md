@@ -1,6 +1,6 @@
 # ADR 0022: Four test levels, and tests live with the code they test
 
-- **Status:** accepted
+- **Status:** accepted, amended by ADR 0025
 - **Date:** 2026-11-24
 
 ## Context
