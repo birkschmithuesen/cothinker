@@ -16,3 +16,4 @@ jobs:
       - run: pip install -r stt/requirements-vserver.txt
       - run: playwright install chromium
       - run: python -m pytest -q
+      - run: cd stt && python -m pytest -q
