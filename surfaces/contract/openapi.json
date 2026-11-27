@@ -91,6 +91,21 @@
             "title": "Current Text",
             "type": "string"
           },
+          "drift_s": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Seconds the ORIGINAL plan had already slipped by the time the current item started (issue #203) -- fixed once the item has started, unlike the live countdown `item_started_at`/ `item_budget_s` drive.",
+            "examples": [
+              60.0
+            ],
+            "title": "Drift S"
+          },
           "item_budget_s": {
             "anyOf": [
               {
@@ -206,6 +221,21 @@
             },
             "title": "People",
             "type": "array"
+          },
+          "projected_end": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Epoch seconds the plan's end is pushed out to by `drift_s` (issue #203); the reader ticks it the same way as `meeting_deadline`.",
+            "examples": [
+              1732356060.0
+            ],
+            "title": "Projected End"
           },
           "speaker": {
             "anyOf": [

@@ -167,6 +167,21 @@ class AgendaSnapshot(BaseModel):
     )
     item_budget_s: float | None = Field(default=None, description="Budget of the current item in seconds.", examples=[600.0])
     meeting_deadline: float | None = Field(default=None, description="Epoch seconds the whole meeting is due to end.", examples=[1732356000.0])
+    drift_s: float | None = Field(
+        default=None,
+        description="Seconds the ORIGINAL plan had already slipped by the"
+        " time the current item started (issue #203) -- fixed once the item"
+        " has started, unlike the live countdown `item_started_at`/"
+        " `item_budget_s` drive.",
+        examples=[60.0],
+    )
+    projected_end: float | None = Field(
+        default=None,
+        description="Epoch seconds the plan's end is pushed out to by"
+        " `drift_s` (issue #203); the reader ticks it the same way as"
+        " `meeting_deadline`.",
+        examples=[1732356060.0],
+    )
     people: list[str] = Field(default_factory=list, description="The speaker queue, in order.", examples=[["Mira", "Jonas", "Tamar"]])
     speaker: str | None = Field(default=None, description="Who is currently speaking, if the queue is non-empty.", examples=["Mira"])
     next_speaker: str | None = Field(default=None, description="Who speaks next, if the queue has more than one person.", examples=["Jonas"])

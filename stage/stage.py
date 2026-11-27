@@ -1097,6 +1097,12 @@ def agenda_part(raw: object) -> dict | None:
         "item_started_at": _agenda_number(raw.get("item_started_at")),
         "item_budget_s": _int(budget, 0) if budget is not None else None,
         "meeting_deadline": _agenda_number(raw.get("meeting_deadline")),
+        # issue #203: how far the ORIGINAL plan has slipped as of this
+        # item's own start, and the plan's end pushed out by that drift --
+        # absolute, like `meeting_deadline` above, so the page ticks it
+        # itself instead of this being baked in server-side.
+        "drift_s": _agenda_number(raw.get("drift_s")),
+        "projected_end": _agenda_number(raw.get("projected_end")),
         "people": people,
         "speaker": speaker or None,
         "next_speaker": next_speaker or None,
@@ -2606,7 +2612,8 @@ sgBlockAnchorJump();
         +'<span id="agenda-timer"></span></div>'
         +'<div id="agenda-next" class="agenda-next"></div>'
         +'<div id="agenda-who" class="agenda-who"></div>'
-        +'<div id="agenda-meeting" class="agenda-meeting"></div>';
+        +'<div id="agenda-meeting" class="agenda-meeting"></div>'
+        +'<div id="agenda-plan" class="agenda-meeting"></div>';
     }
     document.getElementById('agenda-current').textContent=
       'Punkt '+data.current+'/'+data.total+': '+(data.current_text||'');
@@ -2662,6 +2669,21 @@ sgBlockAnchorJump();
       } else {
         meetingEl.textContent='';
         meetingEl.classList.remove('agenda-over');
+      }
+    }
+    // issue #203: `projected_end` is the plan's end pushed out by the
+    // drift already measured when this item started -- same shape as
+    // `meeting_deadline` above (an absolute epoch second), so it ticks
+    // down the same way and shares its `.agenda-over` accent once passed.
+    var planEl=document.getElementById('agenda-plan');
+    if(planEl){
+      if(typeof agendaState.projected_end==='number'){
+        var planRest=agendaState.projected_end-now;
+        planEl.textContent='Plan: '+(planRest<0?'+':'')+mmss(Math.abs(planRest)*1000);
+        planEl.classList.toggle('agenda-over', planRest<0);
+      } else {
+        planEl.textContent='';
+        planEl.classList.remove('agenda-over');
       }
     }
   }
