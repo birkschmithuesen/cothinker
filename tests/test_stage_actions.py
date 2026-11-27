@@ -155,6 +155,23 @@ def test_line_format(env):
         assert post(env, "/action", body, cookie=join(env, "Bob"))[0] == 400
 
 
+def test_timer_tap_actions_are_recorded(env):
+    """issue #201: tap targets (previous/next item) through the action
+    API, same POST plumbing as the existing queue:room tap."""
+    next_pid = join(env, "Alice")
+    assert post(env, "/action", {"intent_id": "timer:current", "op": "next"},
+                cookie=next_pid)[0] == 200
+    back_pid = join(env, "Bob")
+    assert post(env, "/action", {"intent_id": "timer:current", "op": "back"},
+                cookie=back_pid)[0] == 200
+    taps = [e for e in lines(env) if e["intent_id"] == "timer:current"]
+    assert [(t["kind"], t["payload"]) for t in taps] == [
+        ("tap", {"op": "next"}), ("tap", {"op": "back"})]
+    bad_pid = join(env, "Carol")
+    assert post(env, "/action", {"intent_id": "timer:current", "op": "goto"},
+                cookie=bad_pid)[0] == 400
+
+
 def test_stage_never_writes_buehne_json(env):
     target = env["session"] / "buehne.json"
     before = (target.read_bytes(), target.stat().st_mtime_ns)

@@ -108,6 +108,10 @@ MAX_POST_BYTES = 2048
 MIN_ACTION_GAP_S = 0.5           # per participant
 NAME_MAX = 40
 QUEUE_OPS = ("request", "done")
+# Tap targets on the stage (issue #201): previous/next item, same action
+# API and rate gate as the queue:room tap above.
+TIMER_OPS = ("next", "back")
+ACTION_INTENTS = {"queue:room": QUEUE_OPS, "timer:current": TIMER_OPS}
 _PID_RE = re.compile(r"[0-9a-f]{16}")
 _last_action: dict[str, float] = {}      # pid -> time.monotonic() of last POST
 _join_times: dict[str, list[float]] = {}  # client IP -> cookieless join times
@@ -1923,6 +1927,7 @@ sgBlockAnchorJump();
   function $(id){ return document.getElementById(id); }
   var dlg=$('join-dlg'), form=$('join-form'), inp=$('join-name'),
       err=$('join-err'), wort=$('teiln-wort'), fertig=$('teiln-fertig'),
+      zurueck=$('teiln-zurueck'), weiter=$('teiln-weiter'),
       teilen=$('teiln-teilen'), stat=$('teiln-status'),
       share=$('share-dlg'), shareLink=$('share-link'),
       shareQr=$('share-qr'), shareClose=$('share-close'),
@@ -1964,33 +1969,40 @@ sgBlockAnchorJump();
       try{ sessionStorage.setItem(KEY, name); }catch(e){}
       err.textContent='';
       dlg.toggleAttribute('hidden', true);
-      if(pending){ var p=pending; pending=null; senden(p.op, p.text, true); }
+      if(pending){
+        var p=pending; pending=null;
+        senden(p.intentId, p.op, p.text, true);
+      }
     }catch(e){
       err.textContent='Das hat nicht geklappt. Bitte versuche es noch einmal.';
     }
   });
-  var btns=[wort, fertig];
+  var btns=[wort, fertig, zurueck, weiter];
   function lock(on){
     btns.forEach(function(b){ if(b) b.toggleAttribute('disabled', on); });
   }
-  async function senden(op, text, retry){
+  // `intentId`: 'queue:room' (Wortmeldung/Fertig) or 'timer:current'
+  // (issue #201's previous/next item tap) -- same POST, same retry and
+  // rate-limit handling either way.
+  async function senden(intentId, op, text, retry){
     if(!joined()){
-      pending={op:op, text:text};
+      pending={intentId:intentId, op:op, text:text};
       openDlg();
       return;
     }
     lock(true);
     var wait=false;
     try{
-      var r=await post('action',{intent_id:'queue:room', op:op});
+      var r=await post('action',{intent_id:intentId, op:op});
       if(r.status===401){
         try{ sessionStorage.removeItem(KEY); }catch(e){}
-        if(!retry) pending={op:op, text:text};
+        if(!retry) pending={intentId:intentId, op:op, text:text};
         openDlg();
       } else if(r.status===429){
         wait=true;                      // too quick: a brief pause, no message
         // A tap queued before joining must not be lost: retry it once.
-        if(retry===true) setTimeout(function(){ senden(op, text, 'again'); }, 600);
+        if(retry===true) setTimeout(function(){
+          senden(intentId, op, text, 'again'); }, 600);
       } else if(r.ok){
         if(stat) stat.textContent=text;
       } else if(stat){
@@ -2000,9 +2012,13 @@ sgBlockAnchorJump();
     if(wait) setTimeout(function(){ lock(false); }, 600); else lock(false);
   }
   if(wort) wort.addEventListener('click', function(){
-    senden('request','Wortmeldung gesendet'); });
+    senden('queue:room', 'request', 'Wortmeldung gesendet'); });
   if(fertig) fertig.addEventListener('click', function(){
-    senden('done','Fertig gemeldet'); });
+    senden('queue:room', 'done', 'Fertig gemeldet'); });
+  if(zurueck) zurueck.addEventListener('click', function(){
+    senden('timer:current', 'back', 'Vorheriger Punkt'); });
+  if(weiter) weiter.addEventListener('click', function(){
+    senden('timer:current', 'next', 'Nächster Punkt'); });
   // The shared link: the stage root with its token, as a participant has
   // to open it -- no fragment, nothing page- or person-specific.
   function shareUrl(){
@@ -2842,6 +2858,8 @@ PARTICIPATE_HTML = """
 <span class="listen-label">Robo</span></button>
 <button type="button" id="teiln-wort">Wortmeldung</button>
 <button type="button" id="teiln-fertig">Fertig</button>
+<button type="button" id="teiln-zurueck" title="Vorheriger Punkt">◀ Punkt</button>
+<button type="button" id="teiln-weiter" title="Nächster Punkt">Punkt ▶</button>
 <button type="button" id="teiln-teilen">Link teilen</button></div>
 <div id="join-dlg" role="dialog" aria-modal="true" aria-labelledby="join-titel" hidden>
 <form id="join-form" class="teiln-box" autocomplete="off">
@@ -3107,12 +3125,13 @@ class H(BaseHTTPRequestHandler):
             except (BrokenPipeError, ConnectionResetError, OSError):
                 self.close_connection = True
             return
-        if body.get("intent_id") != "queue:room" or \
-                body.get("op") not in QUEUE_OPS:
+        intent_id = body.get("intent_id")
+        ops = ACTION_INTENTS.get(intent_id)
+        if ops is None or body.get("op") not in ops:
             return self._send(400, b"bad action", "text/plain")
         if self._action_limited(pid):
             return self._send(429, b"slow down", "text/plain")
-        append_action(pid, "queue:room", "tap", {"op": body["op"]})
+        append_action(pid, intent_id, "tap", {"op": body["op"]})
         self._send(200, b'{"ok": true}', "application/json")
 
     def do_GET(self):
