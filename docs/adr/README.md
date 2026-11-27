@@ -30,10 +30,11 @@ an entry number of the 2026-11-20 concept-round decision log, or a decision (D1,
 | [0017](0017-network-seams-fastapi-blocks-in-process.md) | Network seams on FastAPI, blocks stay in-process | accepted |
 | [0018](0018-product-names-interaction-migration-rules.md) | Product names, interaction and migration rules | accepted |
 | [0019](0019-surface-contract-for-external-designers.md) | Surface contract for external designers | accepted |
-| [0020](0020-host-names-and-paths-of-a-deployment.md) | Host names and paths of a deployment | accepted, amended by ADR 0021 |
+| [0020](0020-host-names-and-paths-of-a-deployment.md) | Host names and paths of a deployment | accepted, amended by ADR 0021, ADR 0027 |
 | [0021](0021-meeting-page-without-the-stage.md) | Meeting page without the stage | accepted |
 | [0022](0022-four-test-levels-tests-live-with-the-code.md) | Four test levels, and tests live with the code they test | accepted, amended by ADR 0025 |
 | [0023](0023-design-tokens.md) | Design tokens — one token file, generated CSS, the CoThinker default look | proposed |
 | [0024](0024-call-window.md) | Call window replaces the instant wake-word cut | accepted |
 | [0025](0025-level-4-tests-what-a-real-participant-hits.md) | Level-4 acceptance tests what a real participant hits | proposed |
 | [0026](0026-level-2-orders-under-lanes.md) | Level-2 orders under `--lanes` run as orders turns on the serial worker | proposed |
+| [0027](0027-meeting-chat.md) | Meeting chat — typed tasks for the agent through the surface contract | proposed |
