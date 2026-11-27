@@ -47,6 +47,8 @@ table of the migration plan:
                                  follow-up wires the panel's live delivery)
     tasks:room      tasks     -> content()["tasks"] (issue #129: the
                                  decisions-tasks-questions block's list)
+    chat:room       chat      -> content()["chat"] (issue #208: the
+                                 meeting-chat block's thread)
 
 Rendering is idempotent: an intent whose payload is unchanged since the
 last call is not applied again, so passing the whole snapshot each time is
@@ -70,7 +72,7 @@ from shared.surface import UserAction, ViewIntent
 
 KINDS = frozenset({"prompt", "status", "artefact", "graph", "timer", "queue",
                    "voice", "share", "knowledge", "listen", "transcript",
-                   "transcript_partial", "tasks"})
+                   "transcript_partial", "tasks", "chat"})
 
 # Keys of the agenda the legacy AgendaController owns and the timer intent
 # does not carry; they survive a timer render.
@@ -118,6 +120,7 @@ class StageSurface:
             "knowledge": ("knowledge", self._region("knowledge")),
             "listen": ("listen", self._region("listen")),
             "transcript": ("transcript", self._region("transcript_recent")),
+            "chat": ("chat", self._region("chat")),
             # Keyed by the full id: it shares the `transcript` prefix with
             # `transcript:recent` but has its own kind (issue #181).
             "transcript:partial": ("transcript_partial", self._partial),
@@ -353,7 +356,8 @@ class StageSurface:
                          "graph": "session_graph",
                          "knowledge": "knowledge",
                          "listen": "listen",
-                         "tasks": "tasks"}.get(_prefix(intent_id))
+                         "tasks": "tasks",
+                         "chat": "chat"}.get(_prefix(intent_id))
             if attribute is not None and getattr(self._state, attribute) is not None:
                 setattr(self._state, attribute, None)
                 changed = True
