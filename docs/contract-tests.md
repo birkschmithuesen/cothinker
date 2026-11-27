@@ -86,9 +86,21 @@ with a report and screenshots, as
 `surfaces/contract/examples/minimal/`; the broken fake is
 `tests/contract/surface/broken_surface/`.
 
-## STT API (target.md §2.1)
+## STT API (`tests/contract/stt/`, target.md §2.1)
 
-The STT contract follows once the STT API (`shared/stt.py`, `open_stt`) is on
-`main`; it is tracked as its own issue, linked from the issue that added this
-page. It will take `COTHINKER_CONTRACT_STT=package.module:make` in the same
-way as the agent contract.
+`COTHINKER_CONTRACT_STT=package.module:make`. `make(scenario)` is a callable
+that returns a context manager yielding an `SttSource` whose `events()` plays
+the named scenario: `utterance` (partials, then one final with a speaker and
+an audio clock), `two_speakers` (two finals, two speakers, in audio-clock
+order) and `end` (the stream ends, no events). The contract: every event's
+`type` is one of `partial`, `final`, `thought_end`, `mic_gate`;
+`recognizer_id` is a string and `timestamp` a number; a `t_start`/`t_end`
+pair never has `t_start` after `t_end`, and a recognizer's finals never go
+back in audio-clock time; no partial for a turn arrives after that turn's
+final; every final carries a speaker, and two speakers in a scenario stay two
+distinct speakers; `events()` ends within 5 s of `close()`, with nothing
+arriving after. For the SSE transport, `to_wire()` on every event reproduces
+the recorded wire dict `from_wire()` built it from, unchanged. The built-ins
+are the SSE transport (`SseSource`) against a fake SSE server on
+`127.0.0.1`, and the in-process transport (`InprocessSession`) with a
+recorded-event fake engine in place of the real Speechmatics client.
