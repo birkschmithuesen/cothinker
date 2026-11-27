@@ -31,7 +31,11 @@ instances/<name>/
   instance must have.
 - `content/` — the deployment's own text material: question pools, role
   descriptions, app strings, anything a session reads that is specific to
-  this deployment rather than to the core.
+  this deployment rather than to the core. One recognized file here is
+  `stt_vocab.txt` (`stt/fundusapps/stt_server/README.md`, "Instance
+  vocabulary"): extra words/names the STT server's speechmatics-rt backend
+  loads at start, one `word[:sounds_like,...]` entry per line; optional,
+  and never able to drop the agent's own wake name even when absent.
 - `profiles/<role>/` — one directory per agent role this deployment uses,
   each with whatever profile material (a `SOUL.md`, skill configuration)
   the agent-side code expects. `shared/instance.py` only resolves the
