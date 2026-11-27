@@ -57,3 +57,11 @@
     <https://cothinker.eu/design/>. A surface never writes its own colour,
     font or size literal; an instance changes its look by overriding tokens
     in its private repository.
+12. **A change under `stt/` also runs the stt suite.** `stt/` has its own
+    `stt/pytest.ini` and is not part of the root `pyproject.toml`
+    `testpaths`; the root `python -m pytest -q` never collects it. Run it
+    with `cd stt && python -m pytest -q`, which is also the exact command
+    CI runs as its own step in `.github/workflows/tests.yml`. Tests that
+    need an optional backend (`faster_whisper`, a vendor-specific speech
+    backend, …) skip cleanly via `pytest.importorskip(...)` when that
+    backend is absent, instead of failing collection.
