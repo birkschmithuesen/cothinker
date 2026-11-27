@@ -58,9 +58,9 @@ def _ctx(tmp_path, clock):
     return ctx, emitted
 
 
-def _act(op, intent_id="timer:current", kind="voice"):
+def _act(op, intent_id="timer:current", kind="voice", **extra):
     return CoreEvent("action", {"intent_id": intent_id, "kind": kind, "person": None,
-                                "payload": {"op": op}, "at": 0.0})
+                                "payload": {"op": op, **extra}, "at": 0.0})
 
 
 def _config():
@@ -184,6 +184,45 @@ def test_item_without_minutes_has_no_budget(tmp_path):
     block.on_event(_act("back"))
     assert emitted[-1].payload["item_budget_s"] is None
     assert emitted[-1].payload["meeting_deadline"] == 99.0
+
+
+def test_goto_jumps_to_the_given_index(tmp_path):
+    ctx, emitted = _ctx(tmp_path, lambda: 0.0)
+    block = TimerBlock()
+    block.start(ctx, _config())
+    out = block.on_event(_act("goto", index=2))
+    assert out == ()
+    payload = emitted[-1].payload
+    assert payload["current"] == 3 and payload["current_text"] == "Closing"
+
+
+def test_goto_out_of_range_is_noop(tmp_path):
+    ctx, emitted = _ctx(tmp_path, lambda: 0.0)
+    block = TimerBlock()
+    block.start(ctx, _config())
+    out = block.on_event(_act("goto", index=5))
+    assert out == ()
+    assert len(emitted) == 1      # the start emit only
+    assert block._index == 0
+
+
+def test_goto_same_index_is_noop(tmp_path):
+    ctx, emitted = _ctx(tmp_path, lambda: 0.0)
+    block = TimerBlock()
+    block.start(ctx, _config())
+    out = block.on_event(_act("goto", index=0))
+    assert out == ()
+    assert len(emitted) == 1      # the start emit only
+
+
+def test_goto_keeps_an_already_started_item_clock(tmp_path):
+    times = iter([0.0, 1.0, 2.0])
+    ctx, emitted = _ctx(tmp_path, lambda: next(times))
+    block = TimerBlock()
+    block.start(ctx, _config())
+    block.on_event(_act("next"))              # index 1, started at 1.0
+    block.on_event(_act("goto", index=0))      # back to index 0, started at 0.0
+    assert emitted[-1].payload["item_started_at"] == 0.0
 
 
 def test_round_wrapped_output_advances_item(tmp_path):
