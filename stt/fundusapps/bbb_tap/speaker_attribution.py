@@ -73,6 +73,17 @@ def resolve_speaker(owners, at):
     return best.get("display_name") or None
 
 
+def _best_track(tracks, start_s, end_s):
+    """The track number with the most energy in [start_s, end_s), or
+    `None` if none has any."""
+    best_track, best_energy = None, 0.0
+    for track_n, energy in tracks.items():
+        value = energy.energy_between(start_s, end_s)
+        if value > best_energy:
+            best_energy, best_track = value, track_n
+    return best_track
+
+
 def attribute_word(tracks, owners_by_track, t_start, t_end):
     """The display name of whichever track carried the most energy in
     [t_start, t_end) -- "every recognised word goes to the participant
@@ -81,11 +92,28 @@ def attribute_word(tracks, owners_by_track, t_start, t_end):
     track numbers -> an owner timeline for `resolve_speaker`. `None` when
     no track has any energy in the span (e.g. a recognition artifact with
     no real speech, or data gaps)."""
-    best_track, best_energy = None, 0.0
-    for track_n, energy in tracks.items():
-        value = energy.energy_between(t_start, t_end)
-        if value > best_energy:
-            best_energy, best_track = value, track_n
+    best_track = _best_track(tracks, t_start, t_end)
     if best_track is None:
         return None
     return resolve_speaker(owners_by_track.get(best_track, []), t_start)
+
+
+def attribute_by_wall_clock(tracks, owners_by_track, at, duration, tap_start_epoch):
+    """Issue #202's retroactive re-attribution: `attribute_word` above
+    assumes `t_start`/`t_end` are already on bbb_tap's own per-track
+    frame axis -- true only while tap and STT started together. A line
+    written DURING the clock-offset window this issue describes has no
+    such span to trust any more; what is still reliable is `at`, the
+    line's own wall-clock instant (every caller already has this --
+    `gateway/timing.py`'s `TimingLog` rows, for one), and bbb_tap's own
+    `start_epoch` anchor (`PerTrack.save()`). This converts straight from
+    those two wall-clock numbers to the tap frame axis, then ranks tracks
+    and resolves the owner exactly as `attribute_word` does -- `duration`
+    stands in for the recognised span's own length (`t_end - t_start` as
+    originally measured, however wrong its absolute position was)."""
+    track_end = at - tap_start_epoch
+    track_start = track_end - duration
+    best_track = _best_track(tracks, track_start, track_end)
+    if best_track is None:
+        return None
+    return resolve_speaker(owners_by_track.get(best_track, []), at)

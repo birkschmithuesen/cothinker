@@ -631,7 +631,7 @@ class STTServer:
         arguments, so a recognizer built after the operator moved the
         threshold starts with the value that is currently in force.
         """
-        return STTRecognizer(
+        recognizer = STTRecognizer(
             backend=self.backend,
             recognizer_id=recognizer_id,
             audio_source=source,
@@ -646,6 +646,17 @@ class STTServer:
             silero_threshold=self.silero_threshold,
             thought_end_tap=self.thought_end_tap,
         )
+        # Issue #202: a TrackSpeakerResolver (build_speaker_resolver(),
+        # wired into the backend before any recognizer -- and therefore
+        # any AudioClock -- existed) needs that clock's own epoch to
+        # convert its t_start/t_end onto bbb_tap's own frame axis. This is
+        # the one place a recognizer is built, so it is the one place
+        # that clock becomes available. getattr/hasattr: most backends
+        # (vosk, whisper-streaming) have no speaker_resolver at all.
+        resolver = getattr(self.backend, "speaker_resolver", None)
+        if resolver is not None and hasattr(resolver, "set_stt_epoch"):
+            resolver.set_stt_epoch(lambda: recognizer.clock.epoch)
+        return recognizer
 
     # --- runtime VAD tuning --------------------------------------------------
 
