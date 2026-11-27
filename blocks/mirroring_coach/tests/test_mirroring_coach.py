@@ -212,7 +212,7 @@ class Rig:
         # call lane, which pushes the history entry and re-announces it.
         self.blocks.on_output(
             lambda payload: self.call.on_topic(payload["topic"])
-            if "topic" in payload and payload.get("from") != "session-host"
+            if "topic" in payload and payload.get("from") != "host"
             else None)
         self.call.start()
 
@@ -895,7 +895,7 @@ def test_speaker_split_lines_become_one_utterance_each(h):
 
 
 def test_the_assistants_own_line_joins_the_window_as_an_ordinary_line(h):
-    h.send("block_output", {"from": "session-host",
+    h.send("block_output", {"from": "host",
                             "robo_line": {"speaker": "Robo (Zuruf)", "text": "Ack"}})
     assert [(u.speaker, u.text) for u in h.block.context.window()] == [
         ("Robo (Zuruf)", "Ack")]
@@ -942,7 +942,7 @@ def test_the_prompt_carries_the_topic_header_and_the_request(h):
 
 def test_a_retitle_updates_the_header_of_the_running_topic(h):
     h.topic("t1", "Budget")
-    h.send("block_output", {"from": "session-host", "topic": {
+    h.send("block_output", {"from": "host", "topic": {
         "id": "t1", "title": "Haushalt", "retitled": True}})
     h.clock.advance(46)
     h.segment("los")
@@ -950,7 +950,7 @@ def test_a_retitle_updates_the_header_of_the_running_topic(h):
 
 
 def test_the_stable_prefix_event_replaces_the_agenda_and_keeps_the_grounding(h):
-    h.send("block_output", {"from": "session-host",
+    h.send("block_output", {"from": "host",
                             "stable_prefix": "Projekt: X\nTeilnehmende: A, B"})
     prefix = h.block.context.project_agenda
     assert prefix.startswith("Projekt: X\nTeilnehmende: A, B")
