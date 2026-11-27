@@ -1,6 +1,6 @@
 """Fixture-project reproduction for issue #205: the call lane told the agent
 to use `read_file` on the names in `CALL_EXTRA_FILES_LINE` because its
-`search_files` tool cannot see symlinks (`gateway/lane_integration.py`'s
+`search_files` tool cannot see symlinks (`gateway/call_lane.py`'s
 `CALL_EXTRA_FILES_LINE`). `_extra_dir_files()` built that name list by
 looking at the extra dir's TOP level only -- but the real extra dir is "a
 folder of symlinks into the vault" (`gateway/stage_image.py`), and the
@@ -24,7 +24,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "gateway"))
 
-import lane_integration as li  # noqa: E402
+import call_lane as li  # noqa: E402
 
 
 def _make_vault_fixture(tmp_path: Path) -> Path:
