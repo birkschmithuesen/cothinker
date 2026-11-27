@@ -279,6 +279,7 @@ stt/fundusapps/bbb_tap/__main__.py                                              
 stt/fundusapps/bbb_tap/cdp.py                                                    stt:audio
 stt/fundusapps/bbb_tap/feed_wav.py                                               stt:audio
 stt/fundusapps/bbb_tap/pcm.py                                                    stt:audio
+stt/fundusapps/bbb_tap/reattribute.py                                            stt:audio
 stt/fundusapps/bbb_tap/speaker_attribution.py                                    stt:audio
 stt/fundusapps/common/__init__.py                                                stt:server
 stt/fundusapps/common/turnid.py                                                  stt:server
