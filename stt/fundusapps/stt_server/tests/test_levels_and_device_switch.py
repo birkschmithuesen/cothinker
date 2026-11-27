@@ -293,6 +293,62 @@ def test_asio_source_refuses_non_asio_target(monkeypatch):
         assert len(stt.threads) == 2
 
 
+# --- speaker resolver wiring (issue #202) -----------------------------------
+
+class FakeTrackResolver:
+    """Stands in for TrackSpeakerResolver -- records whatever epoch getter
+    _make_recognizer wires it to."""
+
+    def __init__(self):
+        self.epoch_getter = None
+
+    def set_stt_epoch(self, epoch_getter):
+        self.epoch_getter = epoch_getter
+
+
+class ResolverBackend(FakeBackend):
+    """A FakeBackend with the public `speaker_resolver` attribute real
+    backends expose (SpeechmaticsRtBackend) once build_speaker_resolver()
+    returned one -- see speechmatics_rt_backend.py."""
+
+    def __init__(self):
+        super().__init__()
+        self.speaker_resolver = FakeTrackResolver()
+
+
+def test_make_recognizer_wires_the_speaker_resolver_to_its_own_audio_clock(monkeypatch):
+    # _make_recognizer is the one place a recognizer -- and therefore its
+    # AudioClock -- is built; build_speaker_resolver() itself ran earlier
+    # with no clock to read yet (track_speaker_resolver.py's own
+    # docstring). Live-wiring has to happen here.
+    monkeypatch.setattr(sr_module, "sd", FakeSd())
+    backend = ResolverBackend()
+    stt = STTServer(
+        audio_device_indexes=[0], backend=backend, event_bus=EventBus(),
+        enable_audio_logging=False, sample_rates=[44100],
+    )
+    source = FakeAudioSource(device=0, sample_rate=44100, num_channels=1,
+                             asio_channels=None, blocksize=stt.chunk_size)
+    recognizer = stt._make_recognizer("0", source, None)
+    assert backend.speaker_resolver.epoch_getter is not None
+    assert backend.speaker_resolver.epoch_getter() is None   # no frame advanced yet
+    recognizer.clock.advance(1600, now=1000.0)
+    assert backend.speaker_resolver.epoch_getter() == pytest.approx(999.9)
+
+
+def test_make_recognizer_tolerates_a_backend_without_a_speaker_resolver(monkeypatch):
+    # vosk, whisper-streaming, every non-speechmatics-rt backend: no
+    # `speaker_resolver` attribute at all. Must not raise.
+    monkeypatch.setattr(sr_module, "sd", FakeSd())
+    stt = STTServer(
+        audio_device_indexes=[0], backend=FakeBackend(), event_bus=EventBus(),
+        enable_audio_logging=False, sample_rates=[44100],
+    )
+    source = FakeAudioSource(device=0, sample_rate=44100, num_channels=1,
+                             asio_channels=None, blocksize=stt.chunk_size)
+    stt._make_recognizer("0", source, None)   # must not raise
+
+
 # --- introspection ----------------------------------------------------------
 
 def test_describe_sources_reports_device_and_level(server):

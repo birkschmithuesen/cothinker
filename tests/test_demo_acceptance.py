@@ -85,3 +85,20 @@ def test_participant_requires_cdp_port():
     with pytest.raises(SystemExit) as e:
         p.main(["--url-file", "x", "--name", "A", "--wav", "w"])
     assert e.value.code == 2
+
+
+def test_participant_accepts_stats_out(tmp_path):
+    pytest.importorskip("websocket")
+    p = _load("participant")
+    a = p.build_arg_parser().parse_args(
+        ["--url-file", "x", "--name", "A", "--wav", "w", "--cdp-port", "9301",
+         "--stats-out", str(tmp_path / "stats.json")])
+    assert a.stats_out == str(tmp_path / "stats.json")
+    assert a.stats_timeout == 15
+
+
+def test_gather_stats_script_awaits_every_captured_peer_connection():
+    pytest.importorskip("websocket")
+    p = _load("participant")
+    assert "window.__pcs" in p.CAPTURE_PEER_CONNECTIONS_SCRIPT
+    assert "getStats" in p.GATHER_STATS_SCRIPT

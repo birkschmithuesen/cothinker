@@ -20,7 +20,7 @@ LEFT = {
 def test_every_view_and_region_shows_its_empty_state(contract, surface_url, page, shot_dir):
     api = contract([Frame(delay_s=0.0, snapshot=empty_snapshot(), view_intents=[])])
     page.goto(f"{surface_url}?api={api}/")
-    page.wait_for_selector('html[data-state="listening"]')
+    page.wait_for_selector('html[data-state="idle"]')
 
     for key, text in LEFT.items():
         empty = page.locator(f'[data-empty="{key}"]')

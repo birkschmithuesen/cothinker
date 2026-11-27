@@ -28,9 +28,11 @@ def _append_pcm(path, pcm):
     path.write_bytes(_wav_header(len(body)) + body)
 
 
-def _write_sidecar(path, tracks):
-    path.write_text(json.dumps({"mixed": "bbb-1.wav", "sample_rate": RATE,
-                                "tracks": tracks}), encoding="utf-8")
+def _write_sidecar(path, tracks, start_epoch=None):
+    doc = {"mixed": "bbb-1.wav", "sample_rate": RATE, "tracks": tracks}
+    if start_epoch is not None:
+        doc["start_epoch"] = start_epoch
+    path.write_text(json.dumps(doc), encoding="utf-8")
 
 
 def _loud(n, value=6000):
@@ -110,6 +112,64 @@ def test_reload_is_throttled_between_calls(tmp_path):
 
     clock["t"] = 10.0                            # past the throttle window
     assert resolver(0.0, 0.1) == "Ben B."        # now it reloads and sees the rename
+
+
+def test_offset_between_tap_start_and_stt_restart_is_corrected(tmp_path):
+    # Issue #202: tap started recording 1000s (unix epoch) before STT
+    # (re)started, so a word at STT's own t_start=0 actually happened 30s
+    # into the tap recording. Track 1 carries the word there; without the
+    # shared-time-base fix the resolver would instead match whatever
+    # energy track 2 happens to have at second 0 of the MIXED recording
+    # and misattribute the line to the wrong participant.
+    sidecar = tmp_path / "bbb-6-tracks.json"
+    _write_sidecar(sidecar, {
+        "1": {"file": "bbb-6-trk1.wav", "owners": [{"display_name": "Anna", "since": 0.0}]},
+        "2": {"file": "bbb-6-trk2.wav", "owners": [{"display_name": "Ben", "since": 0.0}]},
+    }, start_epoch=1000.0)
+    _write_wav(tmp_path / "bbb-6-trk1.wav", _silence(30 * RATE) + _loud(1600))
+    _write_wav(tmp_path / "bbb-6-trk2.wav", _loud(1600) + _silence(30 * RATE))
+
+    resolver = TrackSpeakerResolver(sidecar, reload_every_s=0.0)
+    resolver.set_stt_epoch(lambda: 1030.0)     # STT (re)started 30s after tap
+    assert resolver(0.0, 0.1) == "Anna"
+
+
+def test_falls_back_to_no_shift_without_a_start_epoch_in_the_sidecar(tmp_path):
+    # An older tap run's sidecar has no "start_epoch" field; the resolver
+    # must behave exactly as before this fix (no conversion) rather than
+    # guessing, even once a caller wires set_stt_epoch.
+    sidecar = tmp_path / "bbb-7-tracks.json"
+    _write_sidecar(sidecar, {
+        "1": {"file": "bbb-7-trk1.wav", "owners": [{"display_name": "Anna", "since": 0.0}]},
+    })
+    _write_wav(tmp_path / "bbb-7-trk1.wav", _loud(1600))
+
+    resolver = TrackSpeakerResolver(sidecar, reload_every_s=0.0)
+    resolver.set_stt_epoch(lambda: 12345.0)
+    assert resolver(0.0, 0.1) == "Anna"
+
+
+def test_owner_lookup_uses_the_converted_wall_clock_once_the_stt_epoch_is_known(tmp_path):
+    # Same root cause as the energy-track offset: the owner lookup used
+    # self._now() as a stand-in for a word's real wall-clock instant only
+    # because the STT recognizer's own epoch was "not reachable from
+    # here" (see this module's docstring). Now that set_stt_epoch wires
+    # it in, the owner lookup must use the converted instant, not an
+    # unrelated "now" that could be arbitrarily far from the word itself.
+    sidecar = tmp_path / "bbb-8-tracks.json"
+    _write_sidecar(sidecar, {
+        "1": {"file": "bbb-8-trk1.wav",
+              "owners": [{"display_name": "Anna", "since": 1000.0},
+                         {"display_name": "Ben", "since": 1035.0}]},
+    }, start_epoch=1000.0)
+    _write_wav(tmp_path / "bbb-8-trk1.wav", _silence(34 * RATE) + _loud(1600))
+
+    resolver = TrackSpeakerResolver(sidecar, reload_every_s=0.0,
+                                     now=lambda: 9999999999.0)
+    resolver.set_stt_epoch(lambda: 1030.0)
+    # Wall time of this word: 1030 (stt_epoch) + 4.0 (t_start) == 1034.0,
+    # still Anna's -- self._now() would long since have picked "Ben".
+    assert resolver(4.0, 4.1) == "Anna"
 
 
 def test_build_speaker_resolver_is_none_without_the_flag():

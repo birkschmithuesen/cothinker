@@ -229,7 +229,7 @@ def test_from_args_leaves_speaker_resolver_none_without_per_track(monkeypatch):
                            max_speakers=7, prefer_current_speaker=True)
     be = SpeechmaticsRtBackend.from_args(EventBus(), args)
     try:
-        assert be._speaker_resolver is None
+        assert be.speaker_resolver is None
     finally:
         be.close()
 
@@ -247,7 +247,7 @@ def test_from_args_builds_speaker_resolver_for_the_per_track_tap(monkeypatch, tm
                            per_track_sidecar=str(sidecar))
     be = SpeechmaticsRtBackend.from_args(EventBus(), args)
     try:
-        assert isinstance(be._speaker_resolver, TrackSpeakerResolver)
+        assert isinstance(be.speaker_resolver, TrackSpeakerResolver)
     finally:
         be.close()
 
