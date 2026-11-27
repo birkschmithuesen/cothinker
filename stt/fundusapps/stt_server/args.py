@@ -84,6 +84,14 @@ parser.add_argument('--settings-file', dest='settings_file', type=str,
                          'accepted POST /vad_threshold and /mic_gate, read at startup. '
                          'Deliberately not the .env: that one is hand-maintained and holds keys.')
 
+parser.add_argument('--instance-dir', dest='instance_dir', type=str,
+                    default=os.environ.get('COTHINKER_INSTANCE_DIR', ''),
+                    help='Instance directory (shared.instance seam, docs/instance-format.md). '
+                         'If it has a content/stt_vocab.txt, the speechmatics-rt backend loads '
+                         'it at start and merges it with the wake-name default (issue #204); '
+                         'absent is normal and simply contributes nothing. Defaults to the '
+                         'COTHINKER_INSTANCE_DIR environment variable.')
+
 parser.add_argument('--audio_logging', action='store_true', help='Enable logging of audio to WAV files')
 parser.add_argument('--debug_audio', action='store_true', help='Save post-resampled audio fed to Vosk as WAV files under audio/stt_rec/')
 parser.add_argument('--thought-end', dest='thought_end',
