@@ -62,6 +62,22 @@ def test_track_chunks_go_to_their_own_wav_and_never_into_the_mix(tmp_path):
     assert side["tracks"]["1"]["start_frame"] == 2048
 
 
+def test_sidecar_carries_the_mixed_recording_s_own_start_epoch(tmp_path):
+    # Issue #202: STT needs this wall-clock anchor for frame 0 of the
+    # MIXED recording to convert its own t_start/t_end onto bbb_tap's own
+    # per-track frame axis after a restart that left the two clocks
+    # offset from each other.
+    rec = WavRecorder(tmp_path / "bbb-130000.wav")
+    pt = PerTrack(tmp_path / "bbb-130000", mixed_frames=lambda: rec.frames,
+                  now=lambda: 1000.0)
+    pt.new_page()
+    rec.write(b"\x01\x00" * 1600)                # 0.1s of mixed audio already elapsed
+    pt.write(1, b"\x02\x00" * 4)
+    pt.close(); rec.close()
+    side = json.loads((tmp_path / "bbb-130000-tracks.json").read_text())
+    assert side["start_epoch"] == 999.9           # 1000.0 - 1600/16000s already elapsed
+
+
 def test_without_per_track_the_track_binding_is_ignored(tmp_path):
     tap = Tap(FakeSink(), None, None)
     tap.on_binding({"name": "__roboTrack", "payload": "1:" + _b64(b"\x02\x00" * 8)})

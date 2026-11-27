@@ -12,25 +12,37 @@ feature; `TrackSpeakerResolver` just re-reads the sidecar and tails the
 WAV files, feeding newly-appeared PCM into
 `fundusapps.bbb_tap.speaker_attribution.TrackEnergy`.
 
-Clock note: a word's `t_start`/`t_end` here are on the STT recognizer's
-own `AudioClock` (`fundusapps.stt_server.audio_clock`), i.e. seconds
-since that recognizer's own stream started -- the same frame axis
-`TrackEnergy` expects (both start counting at the first PCM byte of the
-one live mixed stream bbb_tap's tap sends, see `PerTrack`'s own
-docstring), so no conversion is needed to rank tracks by energy. An
-owner's `since`, however, is wall-clock (`PerTrack.update_owners`), and
-converting a word's audio-clock `t_start` into the SAME wall-clock exactly
-needs that recognizer's `AudioClock.epoch` -- not reachable from here (it
-is created only once `STTServer` builds its recognizers, well after the
-backend, and therefore this resolver, already exist; see
-`fundusapps.stt_server.sr.STTServer`/`__main__.py`). Rather than guess at
-that wiring, the owner lookup below uses the current wall-clock instead
-of a converted `t_start`: owner identity changes are coarse-grained
-(a participant joins/renames/leaves), seconds apart at the least, while
-the gap between a word being spoken and this resolver being asked about
-it is the STT pipeline's own small latency (low single-digit seconds) --
-close enough for "whoever currently owns the loudest track" not to flip
-mid-utterance in practice.
+Clock note (issue #202): a word's `t_start`/`t_end` here are on the STT
+recognizer's own `AudioClock` (`fundusapps.stt_server.audio_clock`), i.e.
+seconds since THAT recognizer's own stream started -- a wall-clock anchor
+(`AudioClock.epoch`) that resets on every STT restart. `TrackEnergy`'s
+frame axis, on the other hand, is anchored to bbb_tap's own mixed
+recording start and never resets (see `PerTrack`'s own docstring). The
+two only line up when tap and STT started at the very same instant; a
+restart of one without the other (the live trial that is issue #202)
+offsets them by exactly how much later one started than the other.
+
+`set_stt_epoch()` below closes that gap: once wired to the owning
+recognizer's `AudioClock.epoch` (`fundusapps.stt_server.sr.STTServer.
+_make_recognizer`, the one place a recognizer -- and therefore its clock
+-- is built; `build_speaker_resolver()` itself runs earlier and has no
+clock to read yet), `__call__` shifts an incoming `t_start`/`t_end` by
+`stt_epoch - tap_start_epoch` (the tap's own anchor, written into the
+sidecar as `start_epoch` by `PerTrack`) before ranking track energy on
+it. Either anchor missing (an older sidecar with no `start_epoch`, or no
+live wiring at all) means shift 0 -- byte-for-byte the pre-#202
+behaviour, including every existing direct caller of this class.
+
+That same pair of anchors turns a word's `t_start` into an actual
+wall-clock instant (`stt_epoch + t_start`), which is what the owner
+lookup below now uses to pick the display name active at the time the
+word was actually spoken -- more exact than, and replacing, the previous
+approximation of just asking for the current wall-clock (viable only
+because an owner change is coarse-grained and the STT pipeline's own
+latency is in low single-digit seconds; it never had access to a word's
+real instant, since the same clock gap this file now closes blocked it
+too). The current wall-clock is kept as the fallback for exactly the
+no-wiring/no-anchor case above.
 """
 from __future__ import annotations
 
@@ -66,6 +78,16 @@ class TrackSpeakerResolver:
         self._track_files: Dict[int, str] = {}
         self._read_pos: Dict[int, int] = {}
         self._last_refresh: Optional[float] = None
+        self._tap_start_epoch: Optional[float] = None
+        #: no-op until a caller wires the owning recognizer's AudioClock
+        #: epoch in via set_stt_epoch(); see the module docstring.
+        self._stt_epoch: Callable[[], Optional[float]] = lambda: None
+
+    def set_stt_epoch(self, stt_epoch: Callable[[], Optional[float]]) -> None:
+        """Wires this resolver to the STT recognizer's own `AudioClock`
+        epoch (a no-arg callable, read live on every call -- the epoch can
+        change, e.g. `AudioClock.reset_epoch()` after a mute/resume)."""
+        self._stt_epoch = stt_epoch
 
     def _refresh_sidecar(self) -> None:
         try:
@@ -77,6 +99,7 @@ class TrackSpeakerResolver:
             return
         self._owners_by_track = {}
         self._track_files = {}
+        self._tap_start_epoch = doc.get("start_epoch")
         for key, info in tracks.items():
             if not isinstance(info, dict):
                 continue
@@ -119,16 +142,30 @@ class TrackSpeakerResolver:
         self._refresh_sidecar()
         self._pump_tracks()
 
+    def _stt_epoch_now(self) -> Optional[float]:
+        """The wired STT recognizer's current `AudioClock.epoch`, or
+        `None` when either that wiring or the sidecar's own `start_epoch`
+        anchor is missing -- the pre-#202 behaviour, no conversion."""
+        if self._tap_start_epoch is None:
+            return None
+        return self._stt_epoch()
+
     def __call__(self, t_start: float, t_end: float) -> Optional[str]:
         self._maybe_refresh()
+        stt_epoch = self._stt_epoch_now()
+        if stt_epoch is None:
+            track_start, track_end, at = t_start, t_end, self._now()
+        else:
+            shift = stt_epoch - self._tap_start_epoch
+            track_start, track_end, at = t_start + shift, t_end + shift, stt_epoch + t_start
         best_track, best_energy = None, 0.0
         for track_n, energy in self._tracks.items():
-            value = energy.energy_between(t_start, t_end)
+            value = energy.energy_between(track_start, track_end)
             if value > best_energy:
                 best_energy, best_track = value, track_n
         if best_track is None:
             return None
-        return resolve_speaker(self._owners_by_track.get(best_track, []), self._now())
+        return resolve_speaker(self._owners_by_track.get(best_track, []), at)
 
 
 def build_speaker_resolver(args) -> Optional[TrackSpeakerResolver]:
