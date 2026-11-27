@@ -110,6 +110,11 @@ python3 score.py --transcript <project>/sessions/<date>-<project>/protokoll.md -
 contain a script keyword carry the right speaker. Start both participants
 at the same moment, each with its own `--cdp-port`; the WAVs begin with a silent lead-in for join jitter.
 
+These helpers are orchestrated by one standard acceptance run,
+`python -m demo.acceptance.e2e` — see [`docs/acceptance.md`](../docs/acceptance.md)
+for what it proves and how to run it from outside the server; a deployment is
+considered ready once that report has no FAIL.
+
 ## Rollback
 
 ```

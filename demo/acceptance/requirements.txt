@@ -1,0 +1,15 @@
+# demo/acceptance/: dependencies for the helper scripts and the
+# level-4 deployment acceptance run (ADR 0022, issue #153).
+websocket-client
+
+# demo/acceptance/e2e.py: Playwright drives stage and monitor for the
+# surfaces check (point 5) and surfaces/contract/check.py's own
+# conformance run (point 6). Run `playwright install chromium` once
+# after installing this file.
+playwright
+
+# demo/acceptance/e2e.py's natural-voice TTS (point 2): a Piper voice
+# model per speaker, local, no network call at render time. Only
+# espeak-ng (already a system package, see make_tts.py) is needed for
+# the explicit --tts espeak fallback.
+piper-tts
