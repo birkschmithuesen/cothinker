@@ -1,5 +1,20 @@
 [tool.pytest.ini_options]
 # ADR 0022 level 1: tests live with the code. Collects the central
-# tests/ tree plus every component's own tests/ directory.
-testpaths = ["tests", "blocks", "modules", "templates", "surfaces"]
-addopts = "--import-mode=importlib"
+# tests/ tree, every component's own tests/ directory, AND stt/'s own
+# three test directories -- a bare `pytest` run (no explicit path) only
+# ever reads the nearest ini file found by climbing up from the
+# invocation directory, so stt/pytest.ini (a descendant, not an ancestor)
+# was never picked up and stt/'s tests were silently skipped by every
+# bare run and by CI. testpaths lists stt's own three test directories
+# (not a bare "stt") to match stt/pytest.ini's scope exactly.
+testpaths = ["tests", "blocks", "modules", "templates", "surfaces", "stt/fundusapps/stt_server/tests", "stt/fundusapps/common/tests", "stt/fundusapps/bbb_tap/tests"]
+# --import-mode=importlib: existing requirement for the central tree.
+# Ported from stt/pytest.ini: tests needing a real whisper/CUDA setup, a
+# vosk model on disk, or an audio device are off by default so a bare run
+# doesn't try to load them.
+addopts = "--import-mode=importlib -m \"not needs_whisper and not needs_vosk_model and not needs_audio_device\""
+markers = [
+    "needs_vosk_model: requires a vosk model on disk",
+    "needs_whisper: requires faster-whisper installed and CUDA available",
+    "needs_audio_device: requires a working sounddevice input device",
+]
