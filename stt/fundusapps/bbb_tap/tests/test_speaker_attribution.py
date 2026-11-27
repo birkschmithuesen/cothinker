@@ -3,6 +3,7 @@ spans, >=95% of recognised words attributed to the right participant."""
 import numpy as np
 
 from fundusapps.bbb_tap.speaker_attribution import (TrackEnergy,
+                                                      attribute_by_wall_clock,
                                                       attribute_word,
                                                       resolve_speaker)
 
@@ -73,6 +74,28 @@ def test_three_synthetic_tracks_known_spans_attribute_at_least_95_percent():
 def test_attribute_word_returns_none_when_no_track_has_energy():
     tracks = {1: TrackEnergy(), 2: TrackEnergy()}
     assert attribute_word(tracks, {}, 0.0, 1.0) is None
+
+
+def test_attribute_by_wall_clock_converts_to_the_tap_frame_axis():
+    # Issue #202's retroactive tool: a line's wall-clock instant ("at")
+    # plus bbb_tap's own start_epoch, not the STT clock span that was
+    # wrong at the time, is what this re-derives the speaker from.
+    tracks = {1: TrackEnergy(), 2: TrackEnergy()}
+    tracks[1].add_chunk(30 * RATE, b"\x00\x18" * 1600)   # loud 30.0-30.1s
+    tracks[2].add_chunk(0, b"\x00\x18" * 1600)            # loud 0.0-0.1s
+    owners_by_track = {1: [{"display_name": "Anna", "since": 0.0}],
+                       2: [{"display_name": "Ben", "since": 0.0}]}
+    tap_start_epoch = 1000.0
+    at = 1030.1                                           # 30.1s into the tap
+    got = attribute_by_wall_clock(tracks, owners_by_track, at,
+                                   duration=0.1, tap_start_epoch=tap_start_epoch)
+    assert got == "Anna"
+
+
+def test_attribute_by_wall_clock_returns_none_when_no_track_has_energy():
+    tracks = {1: TrackEnergy()}
+    assert attribute_by_wall_clock(tracks, {}, at=1000.0, duration=0.1,
+                                    tap_start_epoch=1000.0) is None
 
 
 def test_resolve_speaker_follows_owner_changes_over_time():
