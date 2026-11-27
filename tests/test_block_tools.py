@@ -236,3 +236,29 @@ def test_observer_sees_every_routed_event(tmp_path):
     kinds = [ev.kind for ev in observed]
     assert kinds.count("utterance") == 1
     assert kinds.count("block_output") == 1
+
+
+class _Ordered(Echo):
+    """Appends (own id, event kind) to a shared list on every event."""
+
+    def __init__(self, id_, order):
+        super().__init__(id_)
+        self.order = order
+
+    def on_event(self, ev):
+        self.order.append((self.id, ev.kind))
+        return super().on_event(ev) if self.id == "a" else []
+
+
+def test_observer_sees_an_event_after_every_block(tmp_path):
+    """issue #28: an observer that dispatches a follow-up (the call lane
+    correcting a topic's id) must not race the blocks still about to see
+    the same event."""
+    order = []
+    host = sb.BlockHost([_Ordered("a", order), _Ordered("b", order)],
+                        ctx_for=ctx_for(tmp_path), log=lambda line: None,
+                        observe=lambda ev: order.append(("observe", ev.kind)))
+    host.start({})
+    host.dispatch(CoreEvent("utterance", {"text": "hi"}))
+    assert order == [("a", "utterance"), ("b", "utterance"), ("observe", "utterance"),
+                     ("a", "block_output"), ("b", "block_output"), ("observe", "block_output")]

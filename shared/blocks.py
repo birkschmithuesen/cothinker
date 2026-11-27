@@ -177,8 +177,6 @@ class BlockHost:
             cur, depth = queue.popleft()
             if cur.kind not in EVENT_KINDS:
                 raise ValueError(f"unknown event kind {cur.kind!r}")
-            if self._observe is not None:
-                self._observe(cur)
             if depth >= MAX_FANOUT_DEPTH:
                 self._log(f"block host: fan-out depth {depth} reached, dropping {cur.kind}")
                 continue
@@ -193,6 +191,13 @@ class BlockHost:
                     continue
                 for o in out:
                     queue.append((o, depth + 1))
+            # After every block has seen `cur`, not before: an observer that
+            # reacts by dispatching a follow-up event of its own (the call
+            # lane correcting a topic's id to the stage's real entry, see
+            # gateway/call_lane.py's `on_topic`) must not race the blocks
+            # still about to see `cur` itself on this same pass.
+            if self._observe is not None:
+                self._observe(cur)
         return calls
 
     def stop(self) -> None:
