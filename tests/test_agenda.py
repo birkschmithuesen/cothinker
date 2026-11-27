@@ -424,6 +424,64 @@ def test_round_wraparound_advances_the_item_and_clamps_at_the_last(tmp_path):
     assert ctrl.payload()["current"] == 2
 
 
+# ====================================================== back / jump commands
+def test_back_command_moves_the_item_back_and_unticks(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n- [ ] C\n", [0.0])
+    ctrl.handle_utterance("nächster Punkt")
+    assert ctrl.payload()["current"] == 2
+    assert "- [x] A" in agenda_path.read_text(encoding="utf-8")
+    handled = ctrl.handle_utterance("zurück")
+    assert handled is True
+    assert ctrl.payload()["current"] == 1
+    assert "- [ ] A" in agenda_path.read_text(encoding="utf-8")
+
+
+def test_back_at_the_first_item_is_a_noop(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n", [0.0])
+    handled = ctrl.handle_utterance("zurück")
+    assert handled is True
+    assert ctrl.payload()["current"] == 1
+    assert "- [ ] A" in agenda_path.read_text(encoding="utf-8")
+
+
+def test_jump_command_jumps_straight_to_item_n_and_ticks_skipped_items(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n- [ ] C\n", [0.0])
+    handled = ctrl.handle_utterance("Punkt 3")
+    assert handled is True
+    assert ctrl.payload()["current"] == 3
+    text = agenda_path.read_text(encoding="utf-8")
+    assert "- [x] A" in text and "- [x] B" in text
+
+
+def test_jump_back_unticks_the_skipped_items(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n- [ ] C\n", [0.0])
+    ctrl.handle_utterance("Punkt 3")
+    ctrl.handle_utterance("Punkt 1")
+    assert ctrl.payload()["current"] == 1
+    text = agenda_path.read_text(encoding="utf-8")
+    assert "- [ ] A" in text and "- [ ] B" in text
+
+
+def test_jump_out_of_range_is_a_noop(tmp_path):
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n", [0.0])
+    handled = ctrl.handle_utterance("Punkt 9")
+    assert handled is True
+    assert ctrl.payload()["current"] == 1
+    assert "- [ ] A" in agenda_path.read_text(encoding="utf-8")
+
+
+def test_a_direct_timer_tap_also_ticks_the_checkbox(tmp_path):
+    """Checkbox state follows the current item regardless of how it moved
+    -- a stage tap on the timer block goes straight to `blocks.dispatch`,
+    bypassing `handle_utterance` entirely (issue #201's tap target)."""
+    ctrl, agenda_path = _wired(tmp_path / "s", "- [ ] A\n- [ ] B\n", [0.0])
+    ctrl.blocks.dispatch("action", {
+        "intent_id": "timer:current", "kind": "tap", "person": None,
+        "payload": {"op": "next"}, "at": 0.0})
+    assert ctrl.payload()["current"] == 2
+    assert "- [x] A" in agenda_path.read_text(encoding="utf-8")
+
+
 def test_dauer_deadline_survives_a_restart(tmp_path):
     text = "- [ ] A\nDauer: 30 min\n"
     ctrl, _ = _wired(tmp_path / "s", text, [1000.0])
