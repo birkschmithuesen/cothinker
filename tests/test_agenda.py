@@ -92,7 +92,8 @@ def test_empty_text_no_items_never_raises(parse_agenda_scenario):
 # ======================================================== detect_agenda_command
 @pytest.mark.parametrize("text", [
     "nächster Punkt", "naechster punkt", "nachster Punkt",
-    "Okay, nächster Punkt", "nächste Frage bitte", "Robo, naechste Frage"])
+    "Okay, nächster Punkt", "nächste Frage bitte", "Robo, naechste Frage",
+    "Hey Robo, nächster Punkt"])
 def test_item_command(text):
     assert ss.detect_agenda_command(text) == "item"
 
@@ -105,14 +106,16 @@ def test_person_command(text):
 
 @pytest.mark.parametrize("text", [
     "zurück", "zurueck", "ein Punkt zurück", "einen Punkt zurück",
-    "vorheriger Punkt", "vorherige Frage", "Okay, zurück", "zurück bitte"])
+    "vorheriger Punkt", "vorherige Frage", "Okay, zurück", "zurück bitte",
+    "Hey Robo, zurück"])
 def test_back_command(text):
     assert ss.detect_agenda_command(text) == "back"
 
 
 @pytest.mark.parametrize("text,n", [
     ("Punkt 2", 2), ("Punkt 3", 3), ("gehe zu Punkt 1", 1),
-    ("zurück zu Punkt 2", 2), ("Okay, Punkt 2", 2)])
+    ("zurück zu Punkt 2", 2), ("Okay, Punkt 2", 2),
+    ("Hey Robo, Punkt 2", 2)])
 def test_jump_command(text, n):
     assert ss.detect_agenda_command(text) == ("jump", n)
 
