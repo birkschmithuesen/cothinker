@@ -1,0 +1,39 @@
+# CoThinker — blocks/forms_styles/catalogue/scene_forms.toml: the scene forms
+# Copyright (C) 2026 Birk Schmithuesen
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License, version 3.
+# It is provided WITHOUT ANY WARRANTY. See LICENSE.
+#
+# Ported from `workshop.VORGABE_FORMEN` of the archived interview-theater
+# repository (one-time content port, not a code import). `prosa` (the
+# phase-6 story variant, set by code rather than chosen by a group) is
+# deliberately left out: it is not one of the five group-facing scene
+# forms this block catalogues.
+
+default = "dialogue"
+
+[[scene_form]]
+name = "dialogue"
+label = "Dialogue"
+keywords = ["dialogue", "dialog", "conversation", "spoken scene", "spoken theatre", "scene"]
+
+[[scene_form]]
+name = "monologue"
+label = "Monologue"
+keywords = ["monologue", "solo scene", "solo"]
+
+[[scene_form]]
+name = "chorus"
+label = "Chorus"
+keywords = ["chorus", "choral", "we-form", "speaking chorus"]
+
+[[scene_form]]
+name = "song"
+label = "Song"
+keywords = ["song", "singing", "sung", "music", "aria"]
+
+[[scene_form]]
+name = "rap"
+label = "Rap"
+keywords = ["rap", "rapping", "spoken-word rhyme", "beat", "rhyme", "hip-hop", "hiphop"]
