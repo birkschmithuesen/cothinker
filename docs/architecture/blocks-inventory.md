@@ -315,5 +315,6 @@ stt/pipeline/speaker_labels/__init__.py                                         
 stt/pipeline/speaker_labels/enroll.py                                             stt:speaker-labels
 stt/pipeline/speaker_labels/label.py                                              stt:speaker-labels
 stt/pipeline/speaker_labels/label_llm.py                                          stt:speaker-labels
+stt/pipeline/speaker_labels/mic_holder.py                                         stt:speaker-labels
 stt/pipeline/speaker_labels/split.py                                              stt:speaker-labels
 ```
