@@ -234,6 +234,7 @@ print("\nconsumer: a topic action writes the links into the v2 protocol")
 from gateway import consumer  # noqa: E402
 import threading  # noqa: E402
 import gateway.block_host_wiring as bhw  # noqa: E402
+from shared.block_registry import load_from  # noqa: E402
 from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
 from shared import events as _events  # noqa: E402
 from stage_state import StageState  # noqa: E402
@@ -251,7 +252,7 @@ def _make_protocol(path, repo):
     minutes_file = consumer.MinutesFile(path, threading.RLock())
     session_blocks = bhw.build_session_blocks(
         session_dir=path.parent, sink=lambda intent: None, log=lambda *a: None,
-        registry={"minutes-document": MinutesDocumentBlock})
+        load=load_from({"minutes-document": MinutesDocumentBlock}))
     return consumer.MinutesPort(minutes_file, session_blocks, session_dir=path.parent)
 
 

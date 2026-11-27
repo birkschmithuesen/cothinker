@@ -10,6 +10,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from gateway.block_host_wiring import (  # noqa: E402
     build_session_blocks, feed_utterance)
 from gateway.raw_transcript import MinutesFile  # noqa: E402
+from shared.block_registry import load_from  # noqa: E402
 from shared.blocks import BLOCK_API_VERSION  # noqa: E402
 
 FRONT = "# Titel\n\n## Verlauf\n\n## Entscheidungen\n\n"
@@ -41,7 +42,7 @@ def test_raw_append_survives_block_crash(tmp_path):
     logs: list[str] = []
     blocks = build_session_blocks(
         session_dir=tmp_path / "sess", sink=lambda intent: None,
-        log=logs.append, registry={"capture-bullets": Crashing},
+        log=logs.append, load=load_from({"capture-bullets": Crashing}),
         clock=lambda: 0.0)
     feed_utterance(mf, blocks, "Wir nehmen Option B", "Anna", {})
     data = mf.path.read_text(encoding="utf-8")

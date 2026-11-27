@@ -9,6 +9,7 @@
 from __future__ import annotations
 
 from gateway import block_host_wiring as bhw
+from shared.block_registry import load_from
 from shared.blocks import BLOCK_API_VERSION
 
 
@@ -21,7 +22,7 @@ class FakeMinutesFile:
 
 
 class FakeBlocks:
-    """A SessionBlocks stand-in that records dispatch() calls or breaks on
+    """A SessionRuntime stand-in that records dispatch() calls or breaks on
     demand, without needing a real BlockHost."""
     def __init__(self, calls, *, raise_on_dispatch=False):
         self.calls = calls
@@ -66,7 +67,7 @@ def test_feed_utterance_survives_a_raising_block(tmp_path):
     logs = []
     session_blocks = bhw.build_session_blocks(
         session_dir=tmp_path, sink=lambda intent: None, log=logs.append,
-        registry={"capture-bullets": RaisingBlock}, clock=lambda: 0.0,
+        load=load_from({"capture-bullets": RaisingBlock}), clock=lambda: 0.0,
     )
     minutes = FakeMinutesFile([])
     bhw.feed_utterance(minutes, session_blocks, "hallo", "max", {"at": 1.0})

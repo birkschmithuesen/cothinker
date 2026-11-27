@@ -40,7 +40,7 @@ from shared.blocks import BLOCK_API_VERSION, BlockContext
 from shared.modules import CoreEvent
 from shared.surface import ViewIntent
 
-__all__ = ["MeetingChatBlock", "BLOCK_ID", "INTENT_ID", "CHAT_THREAD_MAX",
+__all__ = ["MeetingChatBlock", "make_block", "BLOCK_ID", "INTENT_ID", "CHAT_THREAD_MAX",
            "CHAT_ANSWER_MAX_CHARS", "AGENT_SPEAKER", "GUEST_NAME"]
 
 BLOCK_ID = "meeting-chat"
@@ -198,3 +198,7 @@ class MeetingChatBlock:
         self._ctx.emit(ViewIntent(
             id=INTENT_ID, block=self.id, kind="chat", audience="room",
             payload={"messages": [dict(m) for m in self._messages]}))
+
+
+def make_block() -> MeetingChatBlock:
+    return MeetingChatBlock()

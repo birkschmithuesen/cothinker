@@ -8,7 +8,7 @@
 """The deployment acceptance run that opened issue #178 found `queue`,
 `share` and `voice.speaking` staying `null` in a live `buehne.json`: the
 Reflect template named `timer`, `speaker-queue` and `speaking-share` but
-`gateway/block_host_wiring.py::REGISTRY` never carried them (fixed by the
+the old hand-kept block list in `gateway/block_host_wiring.py` never carried them (fixed by the
 two prior commits on this branch), and `voice-attribution` was never named
 by the template at all (also fixed).
 

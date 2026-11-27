@@ -40,7 +40,7 @@ def action_payload(action: UserAction) -> dict:
 
 
 def dispatcher_for(blocks) -> Callable[[UserAction], object]:
-    """The session host's dispatch path: `SessionBlocks.dispatch("action", ...)`."""
+    """The session host's dispatch path: `SessionRuntime.dispatch("action", ...)`."""
     return lambda action: blocks.dispatch("action", action_payload(action))
 
 

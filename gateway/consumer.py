@@ -102,10 +102,12 @@ from graph.seed_note import find_or_create_seed      # noqa: E402
 from graph.vault_notes import DEFAULT_EXCLUDE        # noqa: E402
 from gateway.actions_reader import ActionsReader, dispatcher_for  # noqa: E402
 from blocks.knowledge_link import KnowledgeLinkBlock  # noqa: E402
-from gateway.block_host_wiring import (SessionBlocks, build_session_blocks,  # noqa: E402
+from gateway.block_host_wiring import (build_session_blocks,  # noqa: E402
                                        coach_block_config, dispatch_call_window_state,
                                        feed_utterance, make_agent_for,
                                        wire_call_window, wire_meeting_chat)
+from shared.block_registry import load_from  # noqa: E402
+from shared.session_runtime import SessionRuntime  # noqa: E402
 from gateway.raw_transcript import MinutesFile  # noqa: E402
 from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
 from blocks.minutes_document import minutes as minutes_block  # noqa: E402
@@ -1228,7 +1230,7 @@ class MinutesPort:
     stays file.lock -> StageWriter._lock (via report).
     """
 
-    def __init__(self, file: MinutesFile, blocks: SessionBlocks, *,
+    def __init__(self, file: MinutesFile, blocks: SessionRuntime, *,
                  session_dir: Path, mode: str = DEFAULT_MODE,
                  block_id: str = "minutes-document", log=log):
         self.file = file
@@ -1362,7 +1364,7 @@ def open_minutes(path: Path, *, mode: str = DEFAULT_MODE,
     sdir = Path(session_dir) if session_dir is not None else path.parent
     blocks = build_session_blocks(
         session_dir=sdir, sink=lambda i: None, log=log,
-        registry={"minutes-document": MinutesDocumentBlock})
+        load=load_from({"minutes-document": MinutesDocumentBlock}))
     return MinutesPort(file, blocks, session_dir=sdir, mode=mode)
 
 
@@ -1645,7 +1647,7 @@ class TurnReply:
 DECISIONS_BLOCK_ID = "decisions-tasks-questions"
 
 
-def turn_opened(blocks: SessionBlocks, b, turn: int) -> dict:
+def turn_opened(blocks: SessionRuntime, b, turn: int) -> dict:
     """Tells the blocks a turn opens (`turn_open`) and returns what the
     decisions block answered (`turn_orders`): the order note, the spoken
     text and the id of level 2's open question. Without the block: the
@@ -1661,7 +1663,7 @@ def turn_opened(blocks: SessionBlocks, b, turn: int) -> dict:
     return {"note": "", "spoken": b.text, "open_ask_id": ""}
 
 
-def turn_closed(blocks: SessionBlocks, turn: int, *, ok: bool,
+def turn_closed(blocks: SessionRuntime, turn: int, *, ok: bool,
                 answered: bool) -> None:
     """Tells the blocks the turn is over (`turn_closed`)."""
     blocks.dispatch("block_output", {"turn_closed": {
@@ -1717,10 +1719,10 @@ def orders_turn_hook(orders_waiting: Callable[[], bool],
 class ReplyIntake:
     """Dispatches a reply and collects the capture block's outputs.
 
-    The answers come back through `SessionBlocks.collect`.
+    The answers come back through `SessionRuntime.collect`.
     """
 
-    def __init__(self, blocks: SessionBlocks) -> None:
+    def __init__(self, blocks: SessionRuntime) -> None:
         self.blocks = blocks
 
     def read(self, text: str, turn: int) -> TurnReply:

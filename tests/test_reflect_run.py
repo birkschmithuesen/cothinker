@@ -19,13 +19,13 @@ each line is one recorded utterance, and the few lines that close an
 agent turn carry a pre-written `agent_reply` (the capture-bullets JSON
 shape, see `tests/fake_worker.py`) instead of a live model call.
 
-`build_session_blocks`' default `REGISTRY` (`gateway/block_host_wiring.py`)
-registers all fourteen of the Reflect template's blocks (issues #178, #181); this
-test still keeps its own copy (`FULL_REGISTRY`) rather than importing
-`bhw.REGISTRY` directly -- ADR 0022 level 3 is about the TEMPLATE, not
-about which blocks `gateway/consumer.py` happens to be wired to, so this
-test must not go silently stale the next time a block is temporarily
-missing from `REGISTRY`.
+`build_session_blocks`' default `load` (`shared.block_registry.load_block`)
+finds all fifteen of the Reflect template's blocks by package name (issues
+#178, #181, #28); this test still keeps its own map (`FULL_REGISTRY`) of
+each package's `make_block` rather than relying on that default -- ADR 0022
+level 3 is about the TEMPLATE, not about which blocks `gateway/consumer.py`
+happens to be wired to, so this test must not go silently stale the next
+time a block is temporarily missing from the host.
 
 python3 -m pytest -q tests/test_reflect_run.py
 """
@@ -42,10 +42,12 @@ from gateway import consumer
 from gateway.raw_transcript import MinutesFile
 from gateway.stage_state import StageState
 from gateway.stage_surface import StageSurface
-from blocks.live_transcript import LiveTranscriptBlock
-from blocks.speaker_queue import SpeakerQueueBlock
-from blocks.speaking_share import SpeakingShareBlock
-from blocks.timer import TimerBlock
+import blocks.call_window, blocks.capture_bullets, blocks.condense  # noqa: E401
+import blocks.decisions_tasks_questions, blocks.graph, blocks.knowledge_link  # noqa: E401
+import blocks.live_transcript, blocks.minutes_document, blocks.mirroring_coach  # noqa: E401
+import blocks.speaker_queue, blocks.speaking_share, blocks.status_line  # noqa: E401
+import blocks.timer, blocks.topics, blocks.voice_attribution  # noqa: E401
+from shared.block_registry import load_from
 from shared.templates import load_template
 from surfaces.contract.models import StageStateSnapshot
 
@@ -53,14 +55,24 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = REPO_ROOT / "templates" / "reflect" / "template.toml"
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "reflect_meeting.jsonl"
 
-# All fourteen Reflect blocks, pinned to the real classes rather than read
-# off `bhw.REGISTRY` (see the module docstring above).
+# All fifteen Reflect blocks, pinned to each package's own make_block()
+# rather than to the host's default `load` (see the module docstring above).
 FULL_REGISTRY = {
-    **bhw.REGISTRY,
-    "timer": TimerBlock,
-    "speaker-queue": SpeakerQueueBlock,
-    "speaking-share": SpeakingShareBlock,
-    "live-transcript": LiveTranscriptBlock,
+    "capture-bullets": blocks.capture_bullets.make_block,
+    "topics": blocks.topics.make_block,
+    "decisions-tasks-questions": blocks.decisions_tasks_questions.make_block,
+    "condense": blocks.condense.make_block,
+    "minutes-document": blocks.minutes_document.make_block,
+    "mirroring-coach": blocks.mirroring_coach.make_block,
+    "knowledge-link": blocks.knowledge_link.make_block,
+    "timer": blocks.timer.make_block,
+    "speaker-queue": blocks.speaker_queue.make_block,
+    "speaking-share": blocks.speaking_share.make_block,
+    "status-line": blocks.status_line.make_block,
+    "graph": blocks.graph.make_block,
+    "voice-attribution": blocks.voice_attribution.make_block,
+    "call-window": blocks.call_window.make_block,
+    "live-transcript": blocks.live_transcript.make_block,
 }
 
 # Invented meeting, invented association (AGENTS.md rule 7: only example
@@ -164,7 +176,7 @@ def run_session(session_dir: Path, template_path: Path, registry: dict,
     logs: list[str] = []
     blocks = bhw.build_session_blocks(
         session_dir=session_dir, sink=sink, log=logs.append, clock=clock,
-        template_path=template_path, registry=registry)
+        template_path=template_path, load=load_from(registry))
     blocks_cell.append(blocks)
 
     def track_from(payload) -> None:

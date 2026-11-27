@@ -283,7 +283,7 @@ class CallLane:
     """One instance per meeting, only constructed when `--lanes` is set.
 
     `dispatch` (set by the constructor or `attach()`) is the block host's
-    `SessionBlocks.dispatch`: Robo's own lines and the confirmed topic go to
+    `SessionRuntime.dispatch`: Robo's own lines and the confirmed topic go to
     the blocks through it. Without it the lane runs alone (tests, no
     blocks).
     """

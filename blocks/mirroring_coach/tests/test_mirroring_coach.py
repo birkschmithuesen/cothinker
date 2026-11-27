@@ -44,6 +44,7 @@ from gateway import block_host_wiring as bhw  # noqa: E402
 from gateway.block_host_wiring import (  # noqa: E402
     LaneQueuePort, build_session_blocks, coach_block_config, make_agent_for)
 from gateway.stage_surface import StageSurface  # noqa: E402
+from shared.block_registry import load_block  # noqa: E402
 from shared.blocks import BLOCK_API_VERSION, BlockContext  # noqa: E402
 from shared.lane_port import LanePort  # noqa: E402
 from shared.modules import CoreEvent, StateStore  # noqa: E402
@@ -790,7 +791,7 @@ def test_make_agent_for_builds_a_port_only_for_the_coach():
 
 
 def test_the_block_is_registered_for_the_reflect_template():
-    assert bhw.REGISTRY["mirroring-coach"] is MirroringCoach
+    assert type(load_block("mirroring-coach")) is MirroringCoach
     block = MirroringCoach()
     assert block.id == "mirroring-coach" and block.api_version == BLOCK_API_VERSION
 

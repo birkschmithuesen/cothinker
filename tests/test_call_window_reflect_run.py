@@ -7,7 +7,7 @@
 """ADR 0022 level 3 for the call window (issue #180, ADR 0024): a recorded
 transcript runs through the REAL `gateway.segmenter.BlockBuilder`, the
 production Reflect template and the production block registry
-(`gateway.block_host_wiring.REGISTRY`, which already carries
+(`shared.block_registry.load_block`, which already finds
 `blocks.call_window.CallWindowBlock`) -- no fake of `wire_call_window`/
 `dispatch_call_window_state`, the exact functions `gateway/consumer.py`
 calls in a live session.
@@ -32,6 +32,7 @@ from pathlib import Path
 
 from gateway import block_host_wiring as bhw
 from gateway.segmenter import Block, BlockBuilder
+from shared.block_registry import load_block
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = REPO_ROOT / "templates" / "reflect" / "template.toml"
@@ -57,7 +58,7 @@ def test_call_window_reflect_run_sends_exactly_one_call_with_all_three_keywords(
     intents: list = []
     blocks = bhw.build_session_blocks(
         session_dir=tmp_path, sink=intents.append, log=lambda *a: None,
-        clock=clock, template_path=TEMPLATE_PATH, registry=bhw.REGISTRY)
+        clock=clock, template_path=TEMPLATE_PATH, load=load_block)
 
     bhw.wire_call_window(blocks, bb)
     bhw.dispatch_call_window_state(blocks, bb)   # idle, at the start
