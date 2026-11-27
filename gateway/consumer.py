@@ -902,8 +902,9 @@ def write_session_pointer(run_dir: Path) -> None:
 
 
 # ========================================================= agenda + timer
-def tick_agenda_item(path: Path, index: int) -> None:
-    """Flip the `index`-th checkbox (0-based, in file order) to `[x]`.
+def _set_agenda_checkbox(path: Path, index: int, done: bool) -> None:
+    """Flip the `index`-th checkbox (0-based, in file order) to `[x]`
+    (`done`) or `[ ]` (not `done`).
 
     Read-modify-write on the whole file: an agenda has at most a handful
     of items, so this is not a hot path, and it keeps every other line
@@ -918,10 +919,21 @@ def tick_agenda_item(path: Path, index: int) -> None:
             continue
         seen += 1
         if seen == index:
-            if m.group(1).lower() != "x":
-                lines[i] = line.replace("[ ]", "[x]", 1)
+            lines[i] = re.sub(r"\[[ xX]\]", "[x]" if done else "[ ]", line,
+                              count=1)
             break
     atomic_write_text(path, "".join(lines))
+
+
+def tick_agenda_item(path: Path, index: int) -> None:
+    """Marks the `index`-th checkbox (0-based, in file order) done."""
+    _set_agenda_checkbox(path, index, True)
+
+
+def untick_agenda_item(path: Path, index: int) -> None:
+    """Marks the `index`-th checkbox (0-based, in file order) not done
+    -- an item left behind by a "back"/"item N" command."""
+    _set_agenda_checkbox(path, index, False)
 
 
 class AgendaController:
@@ -976,14 +988,42 @@ class AgendaController:
 
     def observe(self, intent) -> bool:
         """Takes the view intents the agenda zone is built from; True when
-        `intent` was one of them."""
+        `intent` was one of them.
+
+        Ticks/unticks `agenda.md` here, not in `handle_utterance`: a
+        `timer:current` move can come from a voice command OR straight
+        from a stage tap (`gateway/actions_reader.py` dispatches a tap
+        to the block host directly, bypassing this controller's own
+        `_dispatch`) -- this is the one place both paths go through.
+        """
         if intent.id == "timer:current":
+            before = self._timer.get("current") if self._timer else None
             self._timer = dict(intent.payload)
+            after = self._timer.get("current")
+            if (isinstance(before, int) and isinstance(after, int)
+                    and before != after):
+                try:
+                    self._sync_ticks(before - 1, after - 1)
+                except Exception as e:     # noqa: BLE001
+                    self.log("agenda.md checkbox not updated:", repr(e))
             return True
         if intent.id == "queue:room":
             self._queue = dict(intent.payload)
             return True
         return False
+
+    def _sync_ticks(self, before: int, after: int) -> None:
+        """Ticks every item the current position passed moving forward
+        (`before` .. `after`), or unticks every item it passed moving
+        back (`after` .. `before`) -- a jump of more than one step ticks
+        or unticks all of them, not just the endpoints."""
+        n = len(self.doc.items)
+        if after > before:
+            for i in range(max(before, 0), min(after, n)):
+                tick_agenda_item(self.agenda_path, i)
+        elif after < before:
+            for i in range(max(after, 0), min(before, n)):
+                untick_agenda_item(self.agenda_path, i)
 
     def attach(self, blocks) -> None:
         """Starts the round-robin from the participants. Idempotent: the
@@ -1005,20 +1045,22 @@ class AgendaController:
     def handle_utterance(self, text: str) -> bool:
         """True when `text` is a recognized command -- it must then never
         reach the block builder or the agent. NEVER RAISES: a command
-        phrase must not turn into conversational text because ticking the
-        file failed."""
+        phrase must not turn into conversational text because dispatching
+        it failed. Checkbox ticking happens in `observe()`, not here --
+        see its docstring."""
         kind = detect_agenda_command(text)
         if kind is None:
             return False
         try:
-            before = self._current_index()
             if kind == "person":
                 self._dispatch("queue:room", {"op": "next_person"})
-            else:
+            elif kind == "item":
                 self._dispatch("timer:current", {"op": "next"})
-            after = self._current_index()
-            if after != before and before < len(self.doc.items):
-                tick_agenda_item(self.agenda_path, before)
+            elif kind == "back":
+                self._dispatch("timer:current", {"op": "back"})
+            else:   # ("jump", n)
+                self._dispatch("timer:current",
+                               {"op": "goto", "index": kind[1] - 1})
         except Exception as e:         # noqa: BLE001
             self.log("agenda command not applied:", repr(e))
         return True
