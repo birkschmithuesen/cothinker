@@ -42,7 +42,6 @@ import sys
 import wave
 from datetime import datetime
 from pathlib import Path
-from typing import Optional
 
 from fundusapps.bbb_tap.speaker_attribution import TrackEnergy, attribute_by_wall_clock
 
