@@ -199,6 +199,19 @@ def test_on_output_sees_block_output_with_from(tmp_path):
     assert rt.collect("tick", {"at": 5.0}, "zz") == []
 
 
+def test_a_raising_listener_does_not_stop_the_others(tmp_path):
+    logs, seen = [], []
+    rt, _ = runtime(tmp_path, logs=logs)
+
+    def broken(payload):
+        raise RuntimeError("boom")
+    rt.on_output(broken)
+    rt.on_output(seen.append)
+    rt.dispatch("tick", {"at": 5.0})
+    assert seen and seen[0]["from"] == "a"
+    assert "block host: output listener failed: RuntimeError: boom" in logs
+
+
 def test_dispatch_never_raises_on_unknown_kind(tmp_path):
     rt, _ = runtime(tmp_path)
     assert rt.dispatch("no-such-kind", {}) == 0
