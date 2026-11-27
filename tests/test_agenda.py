@@ -295,6 +295,22 @@ def test_the_speaker_queue_passes_through(stage_agenda_zone_scenario):
     assert stage_agenda_zone_scenario.speaker_queue_passes_through
 
 
+def test_drift_against_the_plan_passes_through(tmp_path, monkeypatch):
+    """issue #203: drift_s/projected_end are the signal that the item's own
+    local budget countdown does not carry -- how far the ORIGINAL plan
+    has slipped -- and must reach the stage page like every other
+    clock-bearing agenda field."""
+    monkeypatch.setattr(st, "PROJECT", tmp_path)
+    _set_stage(tmp_path, {"current": 1, "current_text": "Begruessung", "next": None,
+                          "next_text": None, "total": 1, "item_started_at": 1000.0,
+                          "item_budget_s": 600, "meeting_deadline": None,
+                          "people": [], "speaker": None, "next_speaker": None,
+                          "drift_s": 60.0, "projected_end": 9500.0})
+    a = st.stage_parts().get("agenda")
+    assert a["drift_s"] == 60.0
+    assert a["projected_end"] == 9500.0
+
+
 # Malformed/foreign input must never take the page down (same posture as
 # every other field: the agent is a language model, not a schema).
 @pytest.mark.parametrize("bad", [
