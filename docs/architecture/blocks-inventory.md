@@ -81,7 +81,8 @@ side panel) widens the same, already-named conflict to 14 by adding
 `live-transcript` the same way -- not silently papered over either time;
 the ADR's own text is unchanged (it is only ever superseded or amended,
 never rewritten), and a status-line amendment is the maintainer's call, not
-this pull request's.
+this pull request's. Issue #208 (the meeting chat) adds `meeting-chat` as
+the 16th, decided in its own ADR 0027.
 
 ## STT module, surfaces, core (not blocks)
 
@@ -141,6 +142,7 @@ block:speaker-queue          block — speaker queue (tap to request/leave the f
 block:voice-attribution      block — voice attribution (who is talking right now, by track/STT speaker label)
 block:call-window            block — call window (listen:room open/close by voice, tap, or timeout)
 block:live-transcript        block — live transcript (side panel: last 10 finished lines + the in-progress partial)
+block:meeting-chat           block — meeting chat (typed tasks for the agent, the agent's answers, chat:room)
 retire                       dropped by the target (decision 25 engines)
 ```
 
@@ -175,6 +177,7 @@ blocks/voice_attribution/voice.py                                               
 blocks/call_window/__init__.py                                                    block:call-window
 blocks/live_transcript/__init__.py                                                block:live-transcript
 blocks/live_transcript/transcript.py                                              block:live-transcript
+blocks/meeting_chat/__init__.py                                                   block:meeting-chat
 blocks/topics/__init__.py                                                         block:topics
 blocks/topics/detect.py                                                           block:topics
 blocks/topics/hysteresis.py                                                       block:topics

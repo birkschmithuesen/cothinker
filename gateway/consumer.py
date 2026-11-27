@@ -105,7 +105,7 @@ from blocks.knowledge_link import KnowledgeLinkBlock  # noqa: E402
 from gateway.block_host_wiring import (SessionBlocks, build_session_blocks,  # noqa: E402
                                        coach_block_config, dispatch_call_window_state,
                                        feed_utterance, make_agent_for,
-                                       wire_call_window)
+                                       wire_call_window, wire_meeting_chat)
 from gateway.raw_transcript import MinutesFile  # noqa: E402
 from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
 from blocks.minutes_document import minutes as minutes_block  # noqa: E402
@@ -3983,6 +3983,16 @@ def main() -> int:
                          changed=veraendert,
                          latency_s=round(time.monotonic() - b.end, 1))
         return bool(result["ok"])
+
+    # Meeting chat (issue #208, ADR 0027): a typed message is recorded in
+    # the raw transcript by its one writer and goes to the call lane, the
+    # lane a spoken wake order goes to. Without --lanes (or with
+    # --no-agent) the chat says "unavailable" instead of waiting. Wired
+    # before the ticker starts polling the action spool.
+    wire_meeting_chat(
+        session_blocks, record=minutes_doc.append_raw,
+        ask=(lanes.handle_chat if lanes is not None and not a.no_agent else None),
+        log=log)
 
     queue = RunQueue(run=run_turn, max_chars=a.max_batch)
     if lanes is not None and decisions.policy_on:
