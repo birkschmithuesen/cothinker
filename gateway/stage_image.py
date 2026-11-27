@@ -82,14 +82,34 @@ def validate(path: str, dirs: Iterable[Path]) -> Optional[Path]:
 
 
 def find_by_id(wanted: str, dirs: Iterable[Path]) -> Optional[Path]:
-    """Walk the allowed dirs (links not followed for directories) for the
-    image whose id matches. Re-validated before it is returned."""
+    """Walk the allowed dirs (directory symlinks followed and deduped by
+    resolved path, so a cycle cannot loop forever) for the image whose id
+    matches. Re-validated before it is returned.
+
+    An extra dir is "a folder of symlinks into the vault" (see above), so
+    not following directory symlinks left an image behind one of them
+    unreachable once `_image_cache` is empty -- issue #205's root cause,
+    found again here in a second reader of the same extra-dir shape.
+    """
     if not ID_RE.fullmatch(wanted or ""):
         return None
     dirs = list(dirs)
+    seen: set[str] = set()
     for root in dirs:
-        for cur, subdirs, files in os.walk(root):
-            subdirs[:] = [s for s in subdirs if not s.startswith(".")]
+        for cur, subdirs, files in os.walk(root, followlinks=True):
+            kept = []
+            for s in subdirs:
+                if s.startswith("."):
+                    continue
+                try:
+                    real = str((Path(cur) / s).resolve())
+                except OSError:
+                    continue
+                if real in seen:
+                    continue
+                seen.add(real)
+                kept.append(s)
+            subdirs[:] = kept
             for name in files:
                 if Path(name).suffix.lower() not in IMAGE_EXTS:
                     continue
