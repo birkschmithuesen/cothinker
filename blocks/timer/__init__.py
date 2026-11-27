@@ -6,7 +6,12 @@
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
 """The `timer` block (ADR 0010, ADR 0008): planned items with minutes, the
 current item, and (via `clock.py`) drift against the plan and the projected
-end. Config: `{"items": [{"label", "minutes"}], "deadline": epoch seconds | null}`.
+end. Config: `{"items": [{"label", "minutes"}], "deadline": epoch seconds |
+null, "start_at": epoch seconds | null}`. `start_at` (issue #203) is the
+meeting's PLANNED start -- e.g. from agenda.md's `Start:` header via
+gateway/consumer.py's `AgendaController` -- and is used as the anchor on a
+fresh start instead of the moment this block happens to start; absent or
+non-numeric falls back to `ctx.clock()`, today's behaviour.
 
 Consumes `action` with `intent_id` `timer:current` (`payload` `{"op":
 "next" | "back"}`, any kind, voice included) and `block_output` from
@@ -21,9 +26,15 @@ item); `item_budget_s` is None for an item without numeric minutes;
 The position (index, anchor, item starts) persists in block state
 (`timer.json`) and is restored on `start`.
 The payload carries only absolute times (`item_started_at`, `anchor_at`,
-`meeting_deadline`) and plan data (`item_budget_s`, `planned_cumulative_min`),
-never a ticking value — the stage turns those into a countdown itself, so
-nothing here depends on how long ago `now` was (ADR 0008 §9 fingerprint).
+`meeting_deadline`, `projected_end`) and plan data (`item_budget_s`,
+`planned_cumulative_min`, `drift_s`), never a ticking value — the stage
+turns those into a countdown itself, so nothing here depends on how long
+ago `now` was (ADR 0008 §9 fingerprint). `drift_s`/`projected_end` (issue
+#203) are `clock.py`'s pure `drift_s()`/`projected_end()`, evaluated with
+`now` pinned to the current item's own start -- the plan's slippage as of
+the moment this item began, not a value that grows while sitting on it (an
+item's own live overrun against its own budget is the stage/surface's
+existing `item_started_at`/`item_budget_s` countdown, unchanged).
 """
 from __future__ import annotations
 
@@ -33,7 +44,7 @@ from shared.blocks import BLOCK_API_VERSION, BlockContext
 from shared.modules import CoreEvent
 from shared.surface import ViewIntent
 
-from .clock import planned_cumulative
+from .clock import drift_s, planned_cumulative, projected_end
 
 __all__ = ["TimerBlock"]
 
@@ -72,7 +83,14 @@ class TimerBlock:
         self._deadline = config.get("deadline")
         self._cumulative_min = planned_cumulative([_minutes(i) for i in self._items])
         self._index = 0
-        self._anchor = ctx.clock()
+        start_at = config.get("start_at")
+        # `start_at` is the meeting's PLANNED start (issue #203, e.g. from
+        # agenda.md's `Start:` header via gateway/consumer.py's
+        # `AgendaController`) -- the moment the plan says the meeting
+        # begins, not the moment this block happens to start. Only used on
+        # a fresh start: a restored anchor below always wins, and a caller
+        # that does not supply it keeps today's behaviour.
+        self._anchor = float(start_at) if _is_number(start_at) else ctx.clock()
         self._item_started_at = {0: self._anchor}
         try:
             restored = self._restore(ctx.state.read(STATE_FILE))
@@ -144,6 +162,17 @@ class TimerBlock:
         total = len(self._items)
         current = self._index
         next_index = current + 1 if current + 1 < total else None
+        started_at = self._item_started_at.get(current, self._anchor)
+        # `now=started_at`, not a fresh clock read: the drift this carries
+        # is "how far the plan had already slipped by the time this item
+        # started" -- a fixed fact once the item has started, not a value
+        # that moves every second. That keeps it an absolute, non-ticking
+        # payload field like `anchor_at`/`meeting_deadline` (ADR 0008 §9):
+        # a live, ever-growing overrun stays the stage/surface's own job,
+        # off `item_started_at`/`item_budget_s`, exactly as today.
+        drift = drift_s(anchor=self._anchor, actual_start=started_at,
+                        index=current, cumulative_min=self._cumulative_min,
+                        now=started_at)
         self._ctx.emit(ViewIntent(
             id=f"{self.id}:current",
             block=self.id,
@@ -155,10 +184,14 @@ class TimerBlock:
                 "next": next_index + 1 if next_index is not None else None,
                 "next_text": _label(self._items[next_index]) if next_index is not None else None,
                 "total": total,
-                "item_started_at": self._item_started_at.get(current, self._anchor),
+                "item_started_at": started_at,
                 "item_budget_s": self._budget_s(current),
                 "meeting_deadline": self._deadline,
                 "anchor_at": self._anchor,
                 "planned_cumulative_min": self._cumulative_min,
+                "drift_s": drift,
+                "projected_end": projected_end(
+                    anchor=self._anchor, cumulative_min=self._cumulative_min,
+                    drift=drift),
             },
         ))
