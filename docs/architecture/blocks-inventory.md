@@ -62,6 +62,9 @@ tables below are built from.
 | voice attribution (who is talking right now, by track/STT speaker label) | Show + share | `blocks/voice_attribution/__init__.py` 104, `voice.py` 73 — 177 | Reflect | 1× |
 | call window (listen:room open/close by voice, tap, or timeout) | Capture | `blocks/call_window/__init__.py` 108 | Reflect | 1× |
 | live transcript (side panel: last 10 finished lines + the in-progress partial) | Show + share | `blocks/live_transcript/__init__.py` 114, `transcript.py` 86 — 200 | Reflect | 1× |
+| status line | Show + share | `blocks/status_line/__init__.py` 86, `line.py` 24 — 110 | Reflect | 1× |
+| graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
+| scene / operator-view translation | Localization | `blocks/translation/__init__.py` 106, `scene.py` 98, `ui.py` 36 — 240 | — | 1× |
 
 **Reflect check:** all 12 of the blocks Birk confirmed for Reflect now have
 code in this repository — topic change, capture bullets, condense,
@@ -141,6 +144,7 @@ block:speaker-queue          block — speaker queue (tap to request/leave the f
 block:voice-attribution      block — voice attribution (who is talking right now, by track/STT speaker label)
 block:call-window            block — call window (listen:room open/close by voice, tap, or timeout)
 block:live-transcript        block — live transcript (side panel: last 10 finished lines + the in-progress partial)
+block:translation            block — scene translation and the operator-view translation cache
 retire                       dropped by the target (decision 25 engines)
 ```
 
@@ -183,6 +187,9 @@ blocks/topics/title.py                                                          
 gateway/actions_reader.py                                                         core:session
 blocks/graph/__init__.py                                                          block:graph
 blocks/graph/session_graph.py                                                     block:graph
+blocks/translation/__init__.py                                                   block:translation
+blocks/translation/scene.py                                                      block:translation
+blocks/translation/ui.py                                                         block:translation
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
 gateway/conflict_triage.py                                                        core:session
@@ -234,8 +241,8 @@ shared/agent.py                                                                 
 shared/blocks.py                                                                  core:session
 shared/instance.py                                                                core:instance
 shared/lane_port.py                                                               core:agent
-shared/language_guard.py                                                          core:llm   
-shared/llm.py                                                                     core:llm   
+shared/language_guard.py                                                          core:llm
+shared/llm.py                                                                     core:llm
 shared/modules.py                                                                 core:module
 shared/phases.py                                                                  core:session
 shared/profiles.py                                                                core:instance
