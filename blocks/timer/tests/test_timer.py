@@ -149,7 +149,8 @@ def test_first_item_view_is_one_based(tmp_path):
     assert payload["current"] == 1 and payload["next"] == 2
     assert set(payload) == {"current", "current_text", "next", "next_text", "total",
                             "item_started_at", "item_budget_s", "meeting_deadline",
-                            "anchor_at", "planned_cumulative_min"}
+                            "anchor_at", "planned_cumulative_min",
+                            "drift_s", "projected_end"}
 
 
 def test_last_item_has_no_next(tmp_path):
@@ -254,6 +255,49 @@ def test_start_emits_the_initial_payload(tmp_path):
     assert payload["item_started_at"] == 7.0
     assert payload["item_budget_s"] == 300.0
     assert payload["anchor_at"] == 7.0
+
+
+def test_start_anchors_on_the_configured_start_at_not_service_start(tmp_path):
+    # issue #203: the service can start well after the meeting's planned
+    # start (an operator opens the stack late). `start_at` in the config
+    # is the PLANNED start (e.g. from agenda.md's `Start:` header, see
+    # gateway/consumer.py::AgendaController); the block must anchor on it
+    # instead of the moment it happens to be started.
+    ctx, emitted = _ctx(tmp_path, lambda: 900.0)
+    block = TimerBlock()
+    config = _config()
+    config["start_at"] = 100.0
+    block.start(ctx, config)
+    assert emitted[0].payload["anchor_at"] == 100.0
+    assert emitted[0].payload["item_started_at"] == 100.0
+
+
+def test_start_without_start_at_falls_back_to_the_clock(tmp_path):
+    ctx, emitted = _ctx(tmp_path, lambda: 42.0)
+    block = TimerBlock()
+    block.start(ctx, _config())
+    assert emitted[0].payload["anchor_at"] == 42.0
+
+
+def test_payload_carries_drift_against_the_original_plan(tmp_path):
+    # Plan: item 0 is 0-5min, item 1 is 5-15min. The service anchors at 0,
+    # but "next" only fires at 360s -- item 1 starts a minute late against
+    # its planned 300s start, so the plan has drifted by 60s.
+    clock_values = iter([0.0, 360.0])
+    ctx, emitted = _ctx(tmp_path, lambda: next(clock_values))
+    block = TimerBlock()
+    block.start(ctx, _config())
+    block.on_event(_act("next"))
+    payload = emitted[-1].payload
+    assert payload["drift_s"] == 60.0
+    assert payload["projected_end"] == 1860.0
+
+
+def test_payload_drift_is_zero_on_plan(tmp_path):
+    ctx, emitted = _ctx(tmp_path, lambda: 0.0)
+    block = TimerBlock()
+    block.start(ctx, _config())
+    assert emitted[0].payload["drift_s"] == 0.0
 
 
 def test_start_without_items_emits_nothing(tmp_path):
