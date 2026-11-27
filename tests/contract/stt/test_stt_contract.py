@@ -285,3 +285,32 @@ def broken_clock_subject(scenario):
 def test_the_broken_fake_fails_the_contract_for_the_clock_rule():
     with pytest.raises(AssertionError, match=r"^STT-CLOCK:"):
         test_a_stream_keeps_the_event_contract(broken_clock_subject, "utterance")
+
+
+class _BrokenOrderSource:
+    """Breaks exactly STT-ORDER: a partial for turn t1 arrives after t1's
+    final."""
+
+    def __init__(self):
+        self._events = [
+            TranscriptEvent(type="final", recognizer_id="broken", timestamp=1.0,
+                            text="eins", turn_id="t1", t_start=0.0, t_end=1.0, speaker="S1"),
+            TranscriptEvent(type="partial", recognizer_id="broken", timestamp=2.0,
+                            text="eins zwei", turn_id="t1"),
+        ]
+
+    def events(self):
+        return iter(self._events)
+
+    def close(self) -> None:
+        pass
+
+
+@contextlib.contextmanager
+def broken_order_subject(scenario):
+    yield _BrokenOrderSource()
+
+
+def test_the_broken_fake_fails_the_contract_for_the_order_rule():
+    with pytest.raises(AssertionError, match=r"^STT-ORDER:"):
+        test_a_stream_keeps_the_event_contract(broken_order_subject, "utterance")
