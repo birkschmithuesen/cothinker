@@ -1,0 +1,24 @@
+* { box-sizing: border-box; }
+body { margin: 0 auto; max-width: 48rem; padding: var(--ct-space-16); background: var(--ct-surface);
+       color: var(--ct-ink); font-family: var(--ct-font-sans); font-size: var(--ct-size-md); }
+h1, p, ol { margin: 0; }
+.top { display: flex; align-items: baseline; gap: var(--ct-space-16); margin-bottom: var(--ct-space-16); }
+.brand { color: var(--ct-accent); font-weight: 600; font-size: var(--ct-size-lg); }
+h1 { font-size: var(--ct-size-lg); font-weight: 400; }
+form { display: flex; gap: var(--ct-space-8); align-items: center; margin-bottom: var(--ct-space-16); }
+input, textarea { flex: 1; font: inherit; color: var(--ct-ink); background: var(--ct-sheet);
+                  border: 1px solid var(--ct-rule); border-radius: var(--ct-radius-4); padding: var(--ct-space-8); }
+button { font: inherit; color: var(--ct-sheet); background: var(--ct-accent); border: 0;
+         border-radius: var(--ct-radius-4); padding: var(--ct-space-8) var(--ct-space-16); cursor: pointer; }
+.hidden-label { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+#thread { list-style: none; padding: 0; display: flex; flex-direction: column; gap: var(--ct-space-8);
+          margin-bottom: var(--ct-space-16); }
+#thread li { background: var(--ct-sheet); border: 1px solid var(--ct-rule); border-radius: var(--ct-radius-8);
+             padding: var(--ct-space-8) var(--ct-space-12); }
+#thread li[data-role="agent"] { border-color: var(--ct-accent); background: var(--ct-accent-tint); }
+#thread .who { font-weight: 600; font-size: var(--ct-size-sm); color: var(--ct-muted); }
+#thread .text { white-space: pre-wrap; }
+#thread .status { font-size: var(--ct-size-sm); font-style: italic; color: var(--ct-muted); }
+#thread .status[data-status="failed"], #thread .status[data-status="unavailable"] { color: var(--ct-danger); }
+.empty { color: var(--ct-muted); font-style: italic; margin-bottom: var(--ct-space-16); }
+#notice { color: var(--ct-warn); font-size: var(--ct-size-sm); min-height: 1.2em; }

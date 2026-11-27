@@ -34,7 +34,7 @@ HEX_COLOR = re.compile(r"#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})\b")
 
 # Every surface that carries its own generated copy of tokens.css (ADR 0023,
 # issue #172): `python -m surfaces.design.build --out-dir surfaces/<name>`.
-GENERATED_SURFACE_COPIES = ("room_display", "operator_console")
+GENERATED_SURFACE_COPIES = ("room_display", "operator_console", "meeting_chat")
 
 
 def _is_generated(css_text: str) -> bool:

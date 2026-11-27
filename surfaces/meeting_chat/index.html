@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<!--
+  CoThinker meeting chat (issue #208, ADR 0027; ADR 0019 surface contract):
+  participants type tasks for the agent and read its answers. Uses only
+  GET /snapshot, GET /events (SSE) and POST /actions from the `?api=` base.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>CoThinker – Chat</title>
+  <link rel="icon" href="favicon.ico">
+  <link rel="stylesheet" href="tokens.css">
+  <link rel="stylesheet" href="style.css">
+  <script type="module" src="app.js"></script>
+</head>
+<body>
+  <header class="top"><span class="brand"></span><h1></h1></header>
+  <form id="name-form" class="name">
+    <label for="name"></label>
+    <input id="name" maxlength="40" autocomplete="name">
+    <button type="submit" id="name-button"></button>
+  </form>
+  <ol id="thread" aria-live="polite"></ol>
+  <p class="empty" id="empty"></p>
+  <form id="send-form" class="send">
+    <label for="message" class="hidden-label"></label>
+    <textarea id="message" rows="2" maxlength="1000"></textarea>
+    <button type="submit" id="send-button"></button>
+  </form>
+  <p id="notice" role="status"></p>
+</body>
+</html>
