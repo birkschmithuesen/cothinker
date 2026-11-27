@@ -1466,19 +1466,58 @@ AGENDA_RX_ITEM = re.compile(
     r"n(ä|ae|a)chste[rn]?\s+(punkt|frage)", re.I)
 AGENDA_RX_PERSON = re.compile(
     r"n(ä|ae|a)chste[rn]?\s+(person|sprecher|runde)|du bist dran", re.I)
+AGENDA_RX_BACK = re.compile(
+    r"(eine?n?\s+punkt\s+)?zur(ü|ue|u)ck|vorherige[rn]?\s+(punkt|frage)",
+    re.I)
+AGENDA_RX_JUMP = re.compile(
+    r"(?:gehe?\s+zu\s+|zur(?:ü|ue|u)ck\s+zu\s+|spring[et]?\s+zu\s+)?"
+    r"punkt\s+(\d+)", re.I)
+
+# Issue #201 (live trial): "naechster Punkt" fired mid-sentence ("der
+# naechste Punkt ist dann ganz kurz") because the old code used
+# `.search()`, matching the phrase anywhere. An explicit command is now
+# only recognized when it IS the utterance -- a leading address (the wake
+# name, with or without a greeting) or politeness word, and a trailing
+# "bitte"/"danke", are stripped first; whatever survives must fullmatch
+# one command, never just contain it.
+_LEADING_FILLER_RE = re.compile(
+    r"^(?:(?:okay|ok|also|gut|hey|hallo|robo|bobo|hobo|probo|rubo|grobo)\b"
+    r"[,.\-\s]*)+", re.I)
+_TRAILING_FILLER_RE = re.compile(r"[,.\-\s]+(?:bitte|danke)\.?$", re.I)
 
 
-def detect_agenda_command(text: str) -> str | None:
+def _explicit_command_text(text: str) -> str:
+    """`text` with one leading address/politeness word and a trailing
+    "bitte"/"danke" stripped -- everything else must be the command
+    itself, see the module-level note on issue #201 above."""
+    core = _LEADING_FILLER_RE.sub("", text)
+    core = _TRAILING_FILLER_RE.sub("", core)
+    return core.strip()
+
+
+def detect_agenda_command(text: str) -> str | tuple[str, int] | None:
     """"item" for "naechster Punkt"/"naechste Frage", "person" for
-    "naechste Person"/"naechster Sprecher"/"du bist dran", else None.
+    "naechste Person"/"naechster Sprecher"/"du bist dran", "back" for
+    "zurueck"/"vorheriger Punkt", `("jump", n)` for "Punkt n"/"gehe zu
+    Punkt n"/"zurueck zu Punkt n", else None.
 
-    `.search()`, not `.match()`: the phrase can sit anywhere in the
-    utterance ("Okay, naechster Punkt"), with or without the wake word.
+    `fullmatch()`, not `.search()`: the command must BE the utterance
+    (modulo a leading address/politeness word and a trailing "bitte"),
+    never just a phrase that happens to occur somewhere inside a longer
+    sentence -- see the module-level note on issue #201 above.
     """
-    if AGENDA_RX_ITEM.search(text):
+    core = _explicit_command_text(text)
+    if not core:
+        return None
+    m = AGENDA_RX_JUMP.fullmatch(core)
+    if m:
+        return ("jump", int(m.group(1)))
+    if AGENDA_RX_ITEM.fullmatch(core):
         return "item"
-    if AGENDA_RX_PERSON.search(text):
+    if AGENDA_RX_PERSON.fullmatch(core):
         return "person"
+    if AGENDA_RX_BACK.fullmatch(core):
+        return "back"
     return None
 
 

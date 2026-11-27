@@ -98,14 +98,35 @@ def test_item_command(text):
 
 
 @pytest.mark.parametrize("text", [
-    "nächste Person", "naechste person bitte", "du bist dran",
-    "wer ist als naechstes dran, naechster Sprecher"])
+    "nächste Person", "naechste person bitte", "du bist dran"])
 def test_person_command(text):
     assert ss.detect_agenda_command(text) == "person"
 
 
 @pytest.mark.parametrize("text", [
-    "Ich finde das Budget zu klein.", "", "Lasst uns weitermachen"])
+    "zurück", "zurueck", "ein Punkt zurück", "einen Punkt zurück",
+    "vorheriger Punkt", "vorherige Frage", "Okay, zurück", "zurück bitte"])
+def test_back_command(text):
+    assert ss.detect_agenda_command(text) == "back"
+
+
+@pytest.mark.parametrize("text,n", [
+    ("Punkt 2", 2), ("Punkt 3", 3), ("gehe zu Punkt 1", 1),
+    ("zurück zu Punkt 2", 2), ("Okay, Punkt 2", 2)])
+def test_jump_command(text, n):
+    assert ss.detect_agenda_command(text) == ("jump", n)
+
+
+@pytest.mark.parametrize("text", [
+    "Ich finde das Budget zu klein.", "", "Lasst uns weitermachen",
+    # issue #201: the live-trial bug -- a command phrase mentioned inside
+    # a longer sentence must not advance the agenda.
+    "der nächste Punkt ist dann ganz kurz",
+    "ja total, und der nächste Punkt kommt dann gleich danach",
+    # issue #201: the command phrase only at the very end of an otherwise
+    # unrelated utterance is still not a whole/short explicit command
+    # (this used to be test_person_command's "person" case, pre-fix).
+    "wer ist als naechstes dran, naechster Sprecher"])
 def test_not_a_command(text):
     assert ss.detect_agenda_command(text) is None
 
