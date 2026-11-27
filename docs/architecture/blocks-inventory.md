@@ -234,6 +234,7 @@ modules/example_echo/module.py                                                  
 shared/__init__.py                                                               core:session
 shared/actions_spool.py                                                           core:surface-api
 shared/agent.py                                                                   core:agent
+shared/block_registry.py                                                          core:session
 shared/blocks.py                                                                  core:session
 shared/instance.py                                                                core:instance
 shared/lane_port.py                                                               core:agent
