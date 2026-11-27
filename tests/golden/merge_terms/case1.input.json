@@ -1,0 +1,16 @@
+{
+  "_comment": "Synthetic input for tests/test_merge_terms.py::test_merge_matches_golden. 'embeddings' is a fake embedding table keyed by term form, standing in for a real embedding client -- no network call, no real meeting content.",
+  "terms": [
+    {"form": "milestone", "mentions": 1},
+    {"form": "milestones", "mentions": 2},
+    {"form": "feedback loop", "mentions": 2},
+    {"form": "feedback cycle", "mentions": 1},
+    {"form": "deadline", "mentions": 3}
+  ],
+  "embeddings": {
+    "milestone": [1.0, 0.0, 0.0],
+    "feedback loop": [0.0, 1.0, 0.0],
+    "feedback cycle": [0.0, 0.95, 0.05],
+    "deadline": [0.0, 0.0, 1.0]
+  }
+}
