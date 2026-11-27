@@ -4,7 +4,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""Written BEFORE ADR 0024's change and green on the commit before it:
+"""Written BEFORE ADR 0026's change and green on the commit before it:
 what the change must leave as it is.
 
 - The serial path (no `--lanes`): every level-2 pending a turn settles is

@@ -6,7 +6,7 @@ turns over, the meeting takes a pause and tasks are named at the close.
 One of the pushed view intents (`transcript:recent`) is a field the core
 cannot fill yet (issue #129); this fixture populates it anyway so a surface
 can design against its shape, per ADR 0019 point 3. `tasks` is filled by
-the core since ADR 0024.
+the core since ADR 0026.
 
 `transcript:partial` (issue #181) plays Mira's opening contribution as a
 growing partial -- two tentative updates, then the final that clears it

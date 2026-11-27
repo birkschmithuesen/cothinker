@@ -8,7 +8,7 @@
 recognises and queues a finished order for the language agent. Under
 `--lanes` no turn ever took those orders, so every pending ended
 `discarded` after `PENDING_TIMEOUT_S` and `buehne.json` kept `decisions`
-empty and never got `tasks` (issue #178; ADR 0024).
+empty and never got `tasks` (issue #178; ADR 0026).
 
 Drives the REAL `gateway/consumer.py` (tests/consumer_harness.py) with the
 two-speaker fixture. Faked is only the outside world (ADR 0022): the STT
@@ -138,7 +138,7 @@ VERLAUF_ITEM = "Die Runde plant die Werkstatt im Detail."
 
 
 def test_an_orders_turn_files_no_minutes_items(tmp_path):
-    """Under --lanes no agent writes the Verlauf (ADR 0024): minutes items
+    """Under --lanes no agent writes the Verlauf (ADR 0026): minutes items
     an orders turn's reply carries besides its answers are not filed."""
     run = _run_lanes(tmp_path, verlauf=[VERLAUF_ITEM])
 

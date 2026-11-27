@@ -4,7 +4,7 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""Level 1 (ADR 0022) for ADR 0024's pieces in gateway/consumer.py: the
+"""Level 1 (ADR 0022) for ADR 0026's pieces in gateway/consumer.py: the
 decider result hook that enqueues an orders turn, the filter of an orders
 turn's reply, and the writer's hand-off of a filed task to level 2.
 

@@ -1626,10 +1626,10 @@ def turn_closed(blocks: SessionBlocks, turn: int, *, ok: bool,
         "turn": turn, "ok": ok, "answered": answered}})
 
 
-# --lanes --policy (ADR 0024): the reason of a block that exists only to
+# --lanes --policy (ADR 0026): the reason of a block that exists only to
 # carry level 2's finished orders into a turn of the serial worker.
 ORDERS_REASON = "orders"
-# --lanes (ADR 0024): what an orders turn may put on the stage. The topic
+# --lanes (ADR 0026): what an orders turn may put on the stage. The topic
 # and the answer to a call have their own owners under --lanes (the topics
 # block with the call lane, and the call lane), so a `topic` or `main`
 # proposal of an orders turn is not applied; its order settles
@@ -1640,7 +1640,7 @@ LANE_ORDER_ACTIONS = frozenset({"decision", "tag_entry"})
 def order_answers(actions: list) -> list:
     """The proposals of an orders turn under --lanes that answer a level-2
     order: a `decision` or `tag_entry` carrying an `order` id. Everything
-    else the agent proposed in that turn is dropped (ADR 0024)."""
+    else the agent proposed in that turn is dropped (ADR 0026)."""
     return [a for a in actions if isinstance(a, dict)
             and a.get("action") in LANE_ORDER_ACTIONS
             and is_token(a.get("order"))]
@@ -1649,7 +1649,7 @@ def order_answers(actions: list) -> list:
 def orders_turn_hook(orders_waiting: Callable[[], bool],
                      enqueue: Callable[[Block], int],
                      log: Callable[..., None] = log) -> Callable:
-    """The decider result hook `--lanes --policy` installs (ADR 0024).
+    """The decider result hook `--lanes --policy` installs (ADR 0026).
 
     Under `--lanes` no ordinary block reaches `RunQueue`, so nothing would
     ever open a turn for level 2's orders. The hook runs on the decider
@@ -3701,7 +3701,7 @@ def main() -> int:
         addressed the agent, otherwise the cutting reason."""
         return "order" if b.wake_word else (b.reason or "unknown")
 
-    # --lanes: every turn of the serial worker is an orders turn (ADR 0024,
+    # --lanes: every turn of the serial worker is an orders turn (ADR 0026,
     # `orders_turn_hook` is the only producer of its blocks). False on the
     # serial path, where run_turn is unchanged.
     orders_only = bool(a.lanes)
@@ -3828,7 +3828,7 @@ def main() -> int:
                 # the protocol an appearance. They stop riding along.
                 state.mark_recorded(unrecorded)
             if orders_only:
-                # --lanes (ADR 0024): this turn exists for level 2's
+                # --lanes (ADR 0026): this turn exists for level 2's
                 # orders. Only their answers are applied; the minutes items
                 # stay unfiled (under --lanes no agent writes the Verlauf).
                 kept = order_answers(reply.proposals)
@@ -3930,7 +3930,7 @@ def main() -> int:
 
     queue = RunQueue(run=run_turn, max_chars=a.max_batch)
     if lanes is not None and decisions.policy_on:
-        # ADR 0024: under --lanes level 2's orders get their own turns on
+        # ADR 0026: under --lanes level 2's orders get their own turns on
         # the serial worker -- enqueued by the decider result hook, only
         # when a result queued an order.
         decisions.add_result_hook(
