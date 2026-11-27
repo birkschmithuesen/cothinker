@@ -1010,7 +1010,7 @@ def test_a_dropped_call_job_settles_its_pending(i):
 # block host's dispatch, and sees the coach only through its view intents.
 
 class Recorder:
-    """Stands in for `SessionBlocks.dispatch`."""
+    """Stands in for `SessionRuntime.dispatch`."""
     def __init__(self, fail: bool = False) -> None:
         self.events: list = []
         self.fail = fail

@@ -125,7 +125,7 @@ def test_final_for_a_different_turn_does_not_clear_the_open_partial(tmp_path):
 
 def test_block_is_registered_in_the_block_host_registry():
     """issue #181: same registration pattern as every other block
-    (gateway/block_host_wiring.py)."""
-    from gateway import block_host_wiring as bhw
+    (shared/block_registry.py)."""
+    from shared.block_registry import load_block
 
-    assert bhw.REGISTRY["live-transcript"] is LiveTranscriptBlock
+    assert type(load_block("live-transcript")) is LiveTranscriptBlock

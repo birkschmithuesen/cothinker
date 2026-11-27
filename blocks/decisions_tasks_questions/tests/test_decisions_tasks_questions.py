@@ -30,6 +30,7 @@ import blocks.decisions_tasks_questions.policy_runner as pr  # noqa: E402
 from blocks.decisions_tasks_questions import (BLOCK_ID, DecisionsBlock,  # noqa: E402
                                               IntentWriter)
 from gateway import block_host_wiring as bhw  # noqa: E402
+from shared.block_registry import load_block, load_from  # noqa: E402
 from gateway.stage_surface import StageSurface  # noqa: E402
 from shared.events import EventLog  # noqa: E402
 
@@ -81,7 +82,7 @@ class Rig:
 
         self.blocks = bhw.build_session_blocks(
             session_dir=self.tmp, sink=tee, log=self.logs.append,
-            registry={BLOCK_ID: DecisionsBlock}, clock=time.time)
+            load=load_from({BLOCK_ID: DecisionsBlock}), clock=time.time)
         self.blocks.on_output(self.outputs.append)
         self.block = self.blocks.get(BLOCK_ID)
         self.block.attach(
@@ -137,7 +138,7 @@ def test_block_implements_the_contract():
     block = DecisionsBlock()
     assert block.id == "decisions-tasks-questions"
     assert block.api_version == 1
-    assert bhw.REGISTRY["decisions-tasks-questions"] is DecisionsBlock
+    assert type(load_block("decisions-tasks-questions")) is DecisionsBlock
 
 
 def test_consumer_constructs_none_of_the_decider_or_policy_objects():

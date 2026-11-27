@@ -1,12 +1,12 @@
 # CoThinker — every shipped template's block ids must resolve in the
-# block host's REGISTRY (issue #178)
+# block registry, shared/block_registry.py (issue #178)
 # Copyright (C) 2026 Birk Schmithuesen
 #
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
 """A live session silently skips a block the template names but
-`gateway/block_host_wiring.py::REGISTRY` never registers -- one log line,
+`shared.block_registry.load_block` cannot load -- one log line,
 no crash (by design, see that module's docstring), which is exactly how
 `timer`, `speaker-queue` and `speaking-share` went live as permanent
 "null" surface fields (#178) without a single test turning red.
@@ -26,10 +26,21 @@ from pathlib import Path
 
 import pytest
 
-from gateway import block_host_wiring as bhw
+from shared.block_registry import load_block
+from shared.blocks import BlockError
 from shared.templates import TemplateError, load_template
 
 REPO = Path(__file__).resolve().parents[1]
+
+
+def _loads(block_id: str) -> bool:
+    try:
+        load_block(block_id)
+    except BlockError:
+        return False
+    return True
+
+
 TEMPLATES_DIR = REPO / "templates"
 
 
@@ -57,5 +68,5 @@ def test_at_least_one_format_free_template_is_checked():
                          ids=[p.relative_to(REPO).as_posix() for p in FORMAT_FREE_TEMPLATES])
 def test_every_block_id_resolves_in_the_registry(template_path):
     template = load_template(template_path)
-    missing = sorted({b.id for b in template.blocks} - set(bhw.REGISTRY))
+    missing = sorted(b.id for b in template.blocks if not _loads(b.id))
     assert missing == []

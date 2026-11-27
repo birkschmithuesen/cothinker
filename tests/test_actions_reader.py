@@ -13,6 +13,7 @@ from datetime import datetime, timezone
 from gateway.actions_reader import ActionsReader, dispatcher_for
 from gateway import block_host_wiring as bhw
 from gateway.block_host_wiring import build_session_blocks
+from shared.block_registry import load_from
 from shared.blocks import BLOCK_API_VERSION
 from shared.surface import UserAction
 from shared.templates import load_template
@@ -118,8 +119,8 @@ def test_names_not_in_trace(tmp_path):
     blocks = build_session_blocks(
         session_dir=tmp_path, sink=lambda i: None, log=logs.append,
         trace=lambda e, f: traced.append((e, dict(f))),
-        registry={ref.id: (lambda: echo)
-                  for ref in load_template(bhw.REFLECT_TEMPLATE).blocks[:1]})
+        load=load_from({ref.id: (lambda: echo)
+                  for ref in load_template(bhw.REFLECT_TEMPLATE).blocks[:1]}))
     path = tmp_path / "actions.jsonl"
     path.write_text(line("participant:name", "edit", {"name": "Testperson Eins"}))
     r = ActionsReader(path, dispatcher_for(blocks), logs.append)

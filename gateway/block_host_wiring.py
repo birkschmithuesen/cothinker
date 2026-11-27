@@ -5,80 +5,36 @@
 # This program is free software: you can redistribute it and/or modify it
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
-"""Builds the block host the session host (`gateway/consumer.py`) feeds
-every session event to (issue #38, Wave B.1).
+"""Builds the session runtime the session host (`gateway/consumer.py`)
+feeds every session event to (issue #38, Wave B.1; issue #28).
 
 Reflect is the first template (ADR 0010) and every building block plugs
 into the block host (ADR 0008, `docs/architecture/target.md` §5). There is
 no template flag and no off switch (migration rule, ADR 0018): the
-session host always builds its block host from `REFLECT_TEMPLATE`. The
-template already names all fourteen Reflect blocks (issue #178 added
-`voice-attribution` as a 13th and issue #181 `live-transcript` as a 14th,
-against ADR 0010's fixed 12 -- see `docs/architecture/blocks-inventory.md`);
-`REGISTRY` only grows
-one line per block as each one's own pull request lands, so a block id
-the template lists but nobody has registered yet is skipped, with one log
-line, rather than failing the whole session.
+session host always builds its runtime from `REFLECT_TEMPLATE`. Block id
+`x-y` is built by package `blocks.x_y`'s `make_block()`
+(`shared.block_registry`); a block id the template lists but no package
+provides is skipped, with one log line, rather than failing the whole
+session.
 """
 from __future__ import annotations
 
-import functools
 import re
 import sys
-import threading
 import time
 from pathlib import Path
 from typing import Callable, Mapping, Optional
 
-from blocks.call_window import CallWindowBlock
-from blocks.capture_bullets import CaptureBulletsBlock
-from blocks.decisions_tasks_questions import DecisionsBlock
-from blocks.knowledge_link import KnowledgeLinkBlock
-import blocks.status_line as status_line_block
-from blocks.condense import CondenseBlock
-from blocks.graph import GraphBlock
-from blocks.live_transcript import LiveTranscriptBlock
-from blocks.mirroring_coach.coach import MirroringCoach, resolve_config
-from blocks.topics import TopicsBlock
+from blocks.mirroring_coach.coach import resolve_config
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
-from blocks.minutes_document import MinutesDocumentBlock
-from blocks.speaker_queue import SpeakerQueueBlock
-from blocks.speaking_share import SpeakingShareBlock
-from blocks.timer import TimerBlock
-from blocks.voice_attribution import VoiceAttributionBlock
 from gateway.sync_safe import atomic_write_text
-from gateway.worker import FAILURE_MARKERS
-from shared.blocks import BLOCK_API_VERSION, Block, BlockContext, BlockHost
-from shared.modules import CoreEvent, StateStore
-from shared.surface import IntentBoard, ViewIntent
+from shared.block_registry import load_block
+from shared.blocks import Block
+from shared.session_runtime import RuntimeConfig, SessionRuntime
+from shared.surface import ViewIntent
 from shared.templates import load_template, merged_block_config
 
 REFLECT_TEMPLATE = Path(__file__).resolve().parents[1] / "templates" / "reflect" / "template.toml"
-
-# One line per block, added by the pull request that builds it.
-REGISTRY: dict[str, Callable[[], Block]] = {
-    # The block must not import gateway, so the worker's failure markers
-    # are injected here.
-    "capture-bullets": functools.partial(
-        CaptureBulletsBlock, failure_markers=FAILURE_MARKERS),
-    "decisions-tasks-questions": DecisionsBlock,
-    "knowledge-link": KnowledgeLinkBlock,
-    "status-line": status_line_block.StatusLineBlock,
-    "minutes-document": MinutesDocumentBlock,
-    "topics": TopicsBlock,
-    "mirroring-coach": MirroringCoach,
-    "graph": GraphBlock,
-    "voice-attribution": VoiceAttributionBlock,
-    "timer": TimerBlock,
-    "speaker-queue": SpeakerQueueBlock,
-    "speaking-share": SpeakingShareBlock,
-    "call-window": CallWindowBlock,
-    "live-transcript": LiveTranscriptBlock,
-}
-
-REGISTRY["condense"] = CondenseBlock
-
-HOST_LISTENER_ID = "session-host"
 
 # Moves to the instance's text-model configuration (target.md §9).
 CONDENSE_MODEL = "google/gemma-4-31B-it"
@@ -131,94 +87,6 @@ def default_llm_for(block_id: str) -> Optional[object]:
 _ARTEFACT_NAME_RE = re.compile(r"^[a-z0-9-]+\.md$")
 
 
-class _OutputListenerBlock:
-    """Forwards every `block_output` to this session's `on_output` listeners.
-
-    Not named in any template -- it is the host's own ear, not a block a
-    template author places.
-    """
-    id = HOST_LISTENER_ID
-    api_version = BLOCK_API_VERSION
-
-    def __init__(self) -> None:
-        self._listeners: list[Callable[[Mapping], None]] = []
-
-    def start(self, ctx: BlockContext, config: Mapping[str, object]) -> None:
-        pass
-
-    def on_event(self, ev: CoreEvent):
-        if ev.kind == "block_output":
-            for fn in list(self._listeners):
-                fn(ev.payload)
-        return ()
-
-    def stop(self) -> None:
-        pass
-
-    def add_listener(self, fn: Callable[[Mapping], None]) -> None:
-        self._listeners.append(fn)
-
-
-class SessionBlocks:
-    """The session's block host plus the pieces `gateway/consumer.py` and
-    the legacy stage sink need around it."""
-
-    def __init__(self, *, host: BlockHost, intents: IntentBoard,
-                by_id: Mapping[str, object], log: Callable[[str], None]) -> None:
-        self.host = host
-        self.intents = intents
-        self.log = log
-        self._by_id = dict(by_id)
-        self._listener = self._by_id[HOST_LISTENER_ID]
-        self._collect_tl = threading.local()
-        self._listener.add_listener(self._on_collect)
-
-    def get(self, block_id: str) -> Optional[object]:
-        return self._by_id.get(block_id)
-
-    def dispatch(self, kind: str, payload: Mapping[str, object]) -> int:
-        """Never raises: an unknown kind or a host-level failure is logged
-        and counted as zero block calls."""
-        try:
-            return self.host.dispatch(CoreEvent(kind, payload))
-        except Exception as e:  # noqa: BLE001 -- see the docstring above
-            self.log(f"block host: dispatch of {kind!r} failed: {type(e).__name__}: {e}")
-            return 0
-
-    def _on_collect(self, payload) -> None:
-        seen = getattr(self._collect_tl, "seen", None)
-        if seen is not None and hasattr(payload, "get") and payload.get("from"):
-            seen.append(dict(payload))
-
-    def collect(self, kind: str, payload: Mapping[str, object],
-                from_id: str) -> list[dict]:
-        """Dispatches one event and returns what block `from_id` answered
-        with, in order. Dispatch is synchronous, so the answers reach the
-        host listener on this very thread before `dispatch` returns; each
-        thread collects only its own."""
-        outer = getattr(self._collect_tl, "seen", None)
-        self._collect_tl.seen = []
-        try:
-            self.dispatch(kind, payload)
-            got = self._collect_tl.seen
-        finally:
-            self._collect_tl.seen = outer
-        return [o for o in got if o.get("from") == from_id]
-
-    def on_output(self, fn: Callable[[Mapping], None]) -> None:
-        self._listener.add_listener(fn)
-
-    def stop(self) -> None:
-        self.host.stop()
-
-
-def _make_emit(intents: IntentBoard, sink: Callable[[ViewIntent], None]) -> Callable[[ViewIntent], None]:
-    def emit(intent: ViewIntent) -> None:
-        intents.put(intent)
-        sink(intent)
-    return emit
-
-
 def _make_artefact(session_dir: Path, block_id: str) -> Callable[[str, str], None]:
     def artefact(name: str, text: str) -> None:
         if not _ARTEFACT_NAME_RE.match(name):
@@ -240,51 +108,22 @@ def build_session_blocks(
     llm_for: Optional[Callable[[str], object]] = None,
     clock: Callable[[], float] = time.time,
     template_path: Path = REFLECT_TEMPLATE,
-    registry: Mapping[str, Callable[[], Block]] = REGISTRY,
+    load: Callable[[str], Block] = load_block,
     block_configs: Optional[Mapping[str, Mapping[str, object]]] = None,
-) -> SessionBlocks:
+) -> SessionRuntime:
     session_dir = Path(session_dir)
     if llm_for is None:
         llm_for = default_llm_for
-    template = load_template(template_path)
-
-    listener = _OutputListenerBlock()
-    by_id: dict[str, object] = {HOST_LISTENER_ID: listener}
-    block_list: list = [listener]
-    for ref in template.blocks:
-        factory = registry.get(ref.id)
-        if factory is None:
-            log(f"block host: no block registered for '{ref.id}'")
-            continue
-        block = factory()
-        by_id[block.id] = block
-        block_list.append(block)
-
-    intents = IntentBoard(clock=clock)
-
-    def ctx_for(block_id: str) -> BlockContext:
-        return BlockContext(
-            instance=None,
-            session_dir=session_dir,
-            state=StateStore(session_dir / ".blocks" / block_id),
-            agent=agent_for(block_id) if agent_for is not None else None,
-            llm=llm_for(block_id) if llm_for is not None else None,
-            language="de",
-            clock=clock,
-            emit=_make_emit(intents, sink),
-            artefact=_make_artefact(session_dir, block_id),
-            trace=trace,
-        )
-
-    host = BlockHost(block_list, ctx_for=ctx_for, log=log)
-    configs = merged_block_config(template, None)
-    for block_id, extra in (block_configs or {}).items():
-        configs[block_id] = {**configs.get(block_id, {}), **extra}
-    host.start(configs)
-    return SessionBlocks(host=host, intents=intents, by_id=by_id, log=log)
+    runtime = SessionRuntime(RuntimeConfig(
+        template=load_template(template_path), session_dir=session_dir,
+        language="de", agent_for=agent_for, llm_for=llm_for, sink=sink,
+        artefact_for=lambda block_id: _make_artefact(session_dir, block_id),
+        trace=trace, clock=clock, log=log, block_configs=block_configs), load=load)
+    runtime.start()
+    return runtime
 
 
-def feed_utterance(minutes, blocks: SessionBlocks, text: str,
+def feed_utterance(minutes, blocks: SessionRuntime, text: str,
                    speaker: Optional[str], meta: Mapping[str, object]) -> None:
     """Feeds one STT final into the session: the raw transcript first,
     then the block host.
@@ -312,7 +151,7 @@ def feed_utterance(minutes, blocks: SessionBlocks, text: str,
 
 
 # -------------------------------------------------------- call window
-def wire_call_window(blocks: SessionBlocks, bb) -> None:
+def wire_call_window(blocks: SessionRuntime, bb) -> None:
     """Gives the `call-window` block its host handle onto the session's
     real `gateway.segmenter.BlockBuilder` (issue #180, ADR 0024) --
     interim host handle, same pattern as `knowledge-link`'s
@@ -325,7 +164,7 @@ def wire_call_window(blocks: SessionBlocks, bb) -> None:
     block.bind_host(open_call=bb.open_call, close_call=bb.close_call, state=bb.state)
 
 
-def dispatch_call_window_state(blocks: SessionBlocks, bb) -> None:
+def dispatch_call_window_state(blocks: SessionRuntime, bb) -> None:
     """Call after every `bb.sentence()`/`bb.tick()` (and once after
     `wire_call_window`) so a voice-triggered transition reaches the
     `listen:room` view intent exactly like a tap-triggered one does --

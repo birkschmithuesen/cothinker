@@ -68,8 +68,8 @@ code in this repository — topic change, capture bullets, condense,
 decisions / tasks / open questions, minutes document, mirroring / coach
 question, knowledge link, status line, session graph, speaking share, timer,
 speaker queue. Voice attribution (issue #164) is a 13th block and live
-transcript (issue #181) a 14th, both registered in
-`gateway/block_host_wiring.py`'s `REGISTRY`; voice attribution was
+transcript (issue #181) a 14th, both built by their package's `make_block()` (`shared/block_registry.py`);
+voice attribution was
 deliberately left out of `templates/reflect/template.toml` at first, since
 ADR 0010 fixes Reflect at exactly 12 blocks and wiring a 13th into the live
 template was a template/ADR decision for the maintainer, not one this

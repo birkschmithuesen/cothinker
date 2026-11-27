@@ -8,7 +8,7 @@ L2: a `TapAction` posted to a live-mode app lands in the session's action
 spool, and `gateway/actions_reader.py` parses it into the same `UserAction`
 the stage's own line would produce (byte-compatible lines).
 L3: the same tap, read back by `ActionsReader` and dispatched through the
-REAL block host (`gateway.block_host_wiring.REGISTRY`, no stub), reaches
+REAL block host (`shared.block_registry.load_block`, no stub), reaches
 the real `speaker-queue` block and changes who holds the floor.
 """
 from __future__ import annotations
@@ -22,7 +22,7 @@ from pathlib import Path
 import pytest
 from fastapi.testclient import TestClient
 
-from gateway import block_host_wiring as bhw
+from shared.block_registry import load_block
 from gateway.actions_reader import ActionsReader, dispatcher_for
 from gateway.block_host_wiring import build_session_blocks
 from shared.actions_spool import ACTIONS_FILE
@@ -226,7 +226,7 @@ def test_a_queue_tap_through_the_contract_reaches_the_real_speaker_queue_block(s
     logs = []
     blocks = build_session_blocks(
         session_dir=tmp_path / "blocks-state", sink=sink.append, log=logs.append)
-    assert "speaker-queue" in bhw.REGISTRY, "the production registry must register speaker-queue"
+    assert load_block("speaker-queue").id == "speaker-queue", "the production registry must register speaker-queue"
 
     path = spool_dir / session_dir.name / ACTIONS_FILE
     reader = ActionsReader(path, dispatcher_for(blocks), logs.append)

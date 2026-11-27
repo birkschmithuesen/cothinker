@@ -11,6 +11,7 @@ from __future__ import annotations
 import pytest
 
 from gateway import block_host_wiring as bhw
+from shared.block_registry import load_block, load_from
 from shared.blocks import BLOCK_API_VERSION
 from shared.modules import CoreEvent
 from shared.surface import ViewIntent
@@ -51,7 +52,7 @@ def make_blocks(tmp_path, *, registry=None, sink=None, log=None):
         session_dir=tmp_path,
         sink=sink or (lambda intent: None),
         log=log or logs.append,
-        registry=registry if registry is not None else {},
+        load=load_from(registry if registry is not None else {}),
         clock=lambda: 0.0,
     ), logs
 
@@ -107,7 +108,7 @@ def test_stop_reaches_blocks(tmp_path):
 
 def test_reflect_template_loads_with_empty_registry(tmp_path):
     blocks, logs = make_blocks(tmp_path, registry={})
-    assert blocks.dispatch("tick", {"at": 0.0, "components": {}}) == 1  # the listener only
+    assert blocks.dispatch("tick", {"at": 0.0, "components": {}}) == 0  # no block is registered; the host's listener is no block
     assert len(logs) == 15  # every Reflect block id is unregistered today
 
 
@@ -153,7 +154,7 @@ def test_collect_returns_only_the_named_blocks_answers(tmp_path):
     from blocks.minutes_document import MinutesDocumentBlock
     blocks = bhw.build_session_blocks(
         session_dir=tmp_path, sink=lambda i: None, log=lambda *a: None,
-        registry={"minutes-document": MinutesDocumentBlock})
+        load=load_from({"minutes-document": MinutesDocumentBlock}))
     got = blocks.collect("block_output", {"minutes_query": {}}, "minutes-document")
     assert [o["kind"] for o in got] == ["minutes_state"]
     assert blocks.collect("block_output", {"minutes_query": {}}, "other") == []
@@ -230,7 +231,7 @@ def test_dispatch_call_window_state_emits_the_listen_room_intent(tmp_path):
 
 
 def test_registry_has_timer_queue_and_share_blocks():
-    assert {"timer", "speaker-queue", "speaking-share"} <= set(bhw.REGISTRY)
+    assert all(load_block(i).id == i for i in ("timer", "speaker-queue", "speaking-share"))
 
 
 def test_round_actions_reach_speaker_queue_through_the_host(tmp_path):
