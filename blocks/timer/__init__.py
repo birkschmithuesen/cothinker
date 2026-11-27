@@ -11,8 +11,14 @@ end. Config: `{"items": [{"label", "minutes"}], "deadline": epoch seconds | null
 Consumes `action` with `intent_id` `timer:current` (`payload` `{"op":
 "next" | "back" | "goto", "index": 0-based int}` for `"goto"`, any kind,
 voice and tap included) and `block_output` from `speaker-queue` carrying
-`round_wrapped` (moves to the next item), and `tick`; emits the view
-intent `timer:current` (kind `timer`) once on `start`
+`round_wrapped` (moves to the next item), and `tick`; with config
+`follow_phases: true` (default `false`), also consumes `phase` CoreEvents
+(payload `{"to", "at", ...}`, see `shared/phases.py`): when an item's
+`"phase"` key matches the event's `to`, that item becomes current and its
+start is set to the event's `at` (falling back to `ctx.clock()`); a `to`
+matching no item's `"phase"` is a no-op. With `follow_phases` unset or
+false, `phase` events are ignored exactly as before. Emits the view intent
+`timer:current` (kind `timer`) once on `start`
 (when there are items, so the stage shows the agenda before the first move,
 and the fresh position is persisted so the anchor survives a restart) and
 then only when the current item changes. `next` always restarts the new current item's clock, also on the last
@@ -63,6 +69,7 @@ class TimerBlock:
         self._items: list[Mapping[str, object]] = []
         self._deadline: Optional[float] = None
         self._cumulative_min: tuple[float, ...] = ()
+        self._follow_phases = False
         self._index = 0
         self._anchor: Optional[float] = None
         self._item_started_at: dict[int, float] = {}
@@ -72,6 +79,7 @@ class TimerBlock:
         self._items = list(config.get("items", []))
         self._deadline = config.get("deadline")
         self._cumulative_min = planned_cumulative([_minutes(i) for i in self._items])
+        self._follow_phases = bool(config.get("follow_phases", False))
         self._index = 0
         self._anchor = ctx.clock()
         self._item_started_at = {0: self._anchor}
@@ -85,6 +93,11 @@ class TimerBlock:
             self._emit_current()
 
     def on_event(self, ev: CoreEvent) -> Sequence[CoreEvent]:
+        if ev.kind == "phase":
+            if self._follow_phases and self._follow_phase(ev.payload):
+                self._save()
+                self._emit_current()
+            return ()
         op = None
         index = None
         if ev.kind == "action" and ev.payload.get("intent_id") == "timer:current":
@@ -146,6 +159,28 @@ class TimerBlock:
         if self._index not in self._item_started_at:
             self._item_started_at[self._index] = self._ctx.clock()
         return True
+
+    def _follow_phase(self, payload: Mapping[str, object]) -> bool:
+        """Move to the item whose `"phase"` matches `payload["to"]`.
+
+        No match (a phase outside the cue list) or a match on the current
+        item is a no-op: no index change, no emit.
+        """
+        index = self._phase_index(payload.get("to"))
+        if index is None or index == self._index:
+            return False
+        self._index = index
+        at = payload.get("at")
+        self._item_started_at[index] = float(at) if _is_number(at) else self._ctx.clock()
+        return True
+
+    def _phase_index(self, phase_id: object) -> Optional[int]:
+        if phase_id is None:
+            return None
+        for i, item in enumerate(self._items):
+            if item.get("phase") == phase_id:
+                return i
+        return None
 
     def _budget_s(self, index: int) -> Optional[float]:
         if not _is_number(_minutes(self._items[index])):
