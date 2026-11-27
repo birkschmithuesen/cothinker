@@ -48,6 +48,30 @@ def test_pressing_p_twice_hides_it_again(contract, surface_url, page):
     assert page.locator('[data-view="live"] [data-partial]').count() == 0
 
 
+def test_transcript_partial_intent_marks_a_hidden_attribute_while_toggle_is_off(contract, surface_url, page):
+    """Surface conformance (ADR 0019 point 4): a `transcript_partial` intent
+    is stored, not dropped, even while the P toggle is off -- the DOM must
+    show that honestly, not via a false "dropped transcript_partial" log."""
+    api = contract([
+        Frame(delay_s=0.0, snapshot=empty_snapshot(), view_intents=[]),
+        Frame(delay_s=2.0, snapshot=empty_snapshot().model_copy(update={
+            "transcript_partial": TranscriptPartialSnapshot(
+                turn_id="t1", speaker="Mira", text="Let's", started_at="2026-11-27T09:01:00+00:00",
+            ),
+        }), view_intents=[
+            TranscriptPartialIntent(id="transcript:partial", turn_id="t1", speaker="Mira", text="Let's",
+                                     started_at="2026-11-27T09:01:00+00:00"),
+        ]),
+    ])
+    page.goto(f"{surface_url}?api={api}/")
+    page.wait_for_selector('html[data-state="idle"]')
+    live = page.locator('[data-view="live"]')
+    page.wait_for_function(
+        "el => el.dataset.partialPending.endsWith(\":Let's\")", arg=live.element_handle(), timeout=10000,
+    )
+    assert live.locator("[data-partial]").count() == 0
+
+
 def test_transcript_partial_intent_updates_the_shown_partial(contract, surface_url, page):
     api = contract([
         Frame(delay_s=0.0, snapshot=empty_snapshot(), view_intents=[]),
@@ -65,6 +89,50 @@ def test_transcript_partial_intent_updates_the_shown_partial(contract, surface_u
     page.keyboard.press("p")
     page.wait_for_selector('[data-view="live"] [data-partial]', timeout=10000)
     assert "Let's" in page.locator('[data-view="live"] [data-partial]').inner_text()
+
+
+def test_clearing_partial_still_marks_a_new_hidden_value_after_same_frame_recent(contract, surface_url, page):
+    """Regression (ADR 0019 point 4 conformance run): the "meeting" fixture
+    sends a growing partial, then a frame with `transcript:recent` FIRST and
+    the matching empty-text `transcript_partial` SECOND -- the `recent`
+    intent already clears the stored partial, so the later empty-text
+    partial intent must still produce its own distinguishable DOM change,
+    not silently repeat the value `recent` already set."""
+    grown = empty_snapshot().model_copy(update={
+        "transcript_partial": TranscriptPartialSnapshot(
+            turn_id="t1", speaker="Mira", text="I'd like us to leave with one clear owner",
+            started_at="2026-11-27T09:01:00+00:00",
+        ),
+    })
+    committed = empty_snapshot().model_copy(update={
+        "transcript_recent": [TranscriptLine(speaker="Mira", started_at="2026-11-27T09:01:05+00:00", text="I'd like us to leave with one clear owner per risk.")],
+    })
+    api = contract([
+        Frame(delay_s=0.0, snapshot=empty_snapshot(), view_intents=[]),
+        Frame(delay_s=0.5, snapshot=grown, view_intents=[
+            TranscriptPartialIntent(id="transcript:partial", turn_id="t1", speaker="Mira",
+                                     text="I'd like us to leave with one clear owner",
+                                     started_at="2026-11-27T09:01:00+00:00"),
+        ]),
+        Frame(delay_s=0.5, snapshot=committed, view_intents=[
+            TranscriptRecentIntent(id="transcript:recent", lines=committed.transcript_recent),
+            TranscriptPartialIntent(id="transcript:partial", turn_id="t1", speaker="Mira", text="",
+                                     started_at="2026-11-27T09:01:00+00:00"),
+        ]),
+    ])
+    page.goto(f"{surface_url}?api={api}/")
+    page.wait_for_selector('html[data-state="idle"]')
+    live = page.locator('[data-view="live"]')
+    page.wait_for_function(
+        "el => el.dataset.partialPending.endsWith(':I\\'d like us to leave with one clear owner')",
+        arg=live.element_handle(), timeout=10000,
+    )
+    before = live.get_attribute("data-partial-pending")
+    page.wait_for_function(
+        "([el, before]) => el.dataset.partialPending !== before",
+        arg=[live.element_handle(), before], timeout=10000,
+    )
+    assert live.get_attribute("data-partial-pending").endswith(":")
 
 
 def test_committed_transcript_recent_clears_the_partial_even_while_shown(contract, surface_url, page):

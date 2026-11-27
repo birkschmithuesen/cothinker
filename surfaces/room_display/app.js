@@ -22,6 +22,7 @@ let snapshotOk = false;
 let lastStatus = null;
 let callAnswer = null;
 let showPartials = false;
+let partialSeq = 0;
 let timer = null;
 const events = new EventSource(api + "events");
 
@@ -63,6 +64,7 @@ function renderAll() {
   views.renderSpeaker(snapshot.voice);
   views.renderQueue(snapshot);
   views.renderLive(snapshot.transcript_recent, snapshot.mirror, showPartials ? snapshot.transcript_partial : null);
+  views.markPartialPending(snapshot.transcript_partial, partialSeq);
   views.renderTopics(snapshot.agenda, snapshot.history);
   views.renderResults(snapshot);
   views.renderShare(snapshot.share);
@@ -106,6 +108,7 @@ function onIntent(intent) {
     snapshot.transcript_recent = intent.lines;
     snapshot.transcript_partial = null;
   } else if (intent.kind === "transcript_partial") {
+    partialSeq += 1;
     snapshot.transcript_partial = {
       turn_id: intent.turn_id, speaker: intent.speaker, text: intent.text, started_at: intent.started_at,
     };

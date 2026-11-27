@@ -149,6 +149,20 @@ export function renderLive(lines, mirror, partial) {
   fill('[data-view="live"]', "live", rows);
 }
 
+// A transcript_partial intent is stored even while the P toggle is off (so
+// turning it on shows the latest one immediately), which means it does not
+// change what renderLive puts on screen -- mark the (hidden) container
+// attribute instead, so the intent is honestly "rendered" rather than
+// falsely reported as "dropped" by the surface conformance check. `seq`
+// (bumped once per transcript_partial intent, by the caller) guarantees a
+// visible change even for the clearing intent, whose empty text would
+// otherwise repeat whatever a same-frame transcript:recent already cleared
+// it to.
+export function markPartialPending(partial, seq) {
+  const text = partial && partial.text ? partial.text : "";
+  document.querySelector('[data-view="live"]').dataset.partialPending = `${seq}:${text}`;
+}
+
 export function renderTopics(agenda, history) {
   const items = agenda && agenda.items && agenda.items.length
     ? agenda.items.map((item) => ({ title: item.title, status: item.status }))
