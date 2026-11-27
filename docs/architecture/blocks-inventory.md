@@ -239,6 +239,7 @@ shared/language_guard.py                                                        
 shared/llm.py                                                                     core:llm   
 shared/modules.py                                                                 core:module
 shared/phases.py                                                                  core:session
+shared/session_runtime.py                                                         core:session
 shared/profiles.py                                                                core:instance
 shared/templates.py                                                               core:instance
 shared/profiles/skel/main/skills/prolog/scripts/collect_answers.py               block:write-text
