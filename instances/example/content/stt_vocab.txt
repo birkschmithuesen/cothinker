@@ -1,0 +1,6 @@
+# STT instance vocabulary (docs/instance-format.md, "Instance vocabulary"
+# in stt/fundusapps/stt_server/README.md). One word[:sounds_like,...] entry
+# per line; blank lines and comments are ignored. Placeholder content only,
+# same invented-data rule as the rest of instances/example/.
+ExampleWiki:Example Wiki
+Stoffentwickler:Stoff Entwickler
