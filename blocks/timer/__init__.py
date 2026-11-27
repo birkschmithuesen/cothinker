@@ -36,7 +36,7 @@ from shared.surface import ViewIntent
 
 from .clock import planned_cumulative
 
-__all__ = ["TimerBlock"]
+__all__ = ["TimerBlock", "make_block"]
 
 STATE_FILE = "timer.json"
 
@@ -175,3 +175,7 @@ class TimerBlock:
                 "planned_cumulative_min": self._cumulative_min,
             },
         ))
+
+
+def make_block() -> TimerBlock:
+    return TimerBlock()

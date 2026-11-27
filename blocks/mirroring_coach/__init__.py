@@ -6,4 +6,8 @@
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
 from blocks.mirroring_coach.coach import MirroringCoach
 
-__all__ = ["MirroringCoach"]
+__all__ = ["MirroringCoach", "make_block"]
+
+
+def make_block() -> MirroringCoach:
+    return MirroringCoach()

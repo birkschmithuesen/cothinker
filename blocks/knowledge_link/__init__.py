@@ -132,3 +132,7 @@ class KnowledgeLinkBlock:
         return _wiki.create_topic_page(
             session_dir, project_dir, title, links, mark, created, protocol_rel,
             taken=self.taken, report=report)
+
+
+def make_block() -> KnowledgeLinkBlock:
+    return KnowledgeLinkBlock()

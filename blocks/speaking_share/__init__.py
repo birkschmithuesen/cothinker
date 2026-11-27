@@ -84,3 +84,7 @@ class SpeakingShareBlock:
             audience="room",
             payload={"shares": event["shares"], "total_words": event["total_words"]},
         ))
+
+
+def make_block() -> SpeakingShareBlock:
+    return SpeakingShareBlock()

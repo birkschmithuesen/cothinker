@@ -147,3 +147,7 @@ class SpeakerQueueBlock:
                 "round": self._round.view() if self._round is not None else None,
             },
         ))
+
+
+def make_block() -> SpeakerQueueBlock:
+    return SpeakerQueueBlock()

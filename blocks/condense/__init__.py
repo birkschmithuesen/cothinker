@@ -207,3 +207,7 @@ class CondenseBlock:
         return (CoreEvent("block_output", {"from": self.id, "condensed": {
             "topic_id": topic["id"], "text": res.text, "quotes": res.quotes,
             "not_condensed": res.not_condensed}}),)
+
+
+def make_block() -> CondenseBlock:
+    return CondenseBlock()

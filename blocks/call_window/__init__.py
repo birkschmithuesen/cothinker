@@ -33,7 +33,7 @@ from shared.blocks import BLOCK_API_VERSION, BlockContext
 from shared.modules import CoreEvent
 from shared.surface import ViewIntent
 
-__all__ = ["CallWindowBlock", "BLOCK_ID", "INTENT_ID", "LISTEN_OPS"]
+__all__ = ["CallWindowBlock", "BLOCK_ID", "INTENT_ID", "LISTEN_OPS", "make_block"]
 
 BLOCK_ID = "call-window"
 INTENT_ID = "listen:room"
@@ -106,3 +106,7 @@ class CallWindowBlock:
         self._ctx.emit(ViewIntent(
             id=INTENT_ID, block=self.id, kind="listen", audience="room",
             payload=payload))
+
+
+def make_block() -> CallWindowBlock:
+    return CallWindowBlock()

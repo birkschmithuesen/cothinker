@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from typing import Mapping, Sequence
 
+from shared.agent import FAILURE_MARKERS
 from shared.blocks import BLOCK_API_VERSION, BlockContext
 from shared.modules import CoreEvent
 
@@ -35,7 +36,7 @@ from .parse import MINUTES_SECTIONS, CapturedTurn, ParseFailure, parse_reply
 BLOCK_ID = "capture-bullets"
 
 __all__ = ["BLOCK_ID", "CaptureBulletsBlock", "CapturedTurn", "ParseFailure",
-           "parse_reply"]
+           "make_block", "parse_reply"]
 
 
 def _out(**payload: object) -> CoreEvent:
@@ -73,3 +74,9 @@ class CaptureBulletsBlock:
         for action in got.buehne:
             out.append(_out(kind="stage_proposal", turn=turn, action=action))
         return out
+
+
+def make_block() -> CaptureBulletsBlock:
+    # The worker's failure markers (shared.agent), injected exactly as the
+    # session host's former block list did.
+    return CaptureBulletsBlock(failure_markers=FAILURE_MARKERS)

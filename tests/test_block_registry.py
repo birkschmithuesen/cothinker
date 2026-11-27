@@ -50,3 +50,18 @@ def test_id_mismatch_raises(monkeypatch):
     fake_package(monkeypatch, "blocks.fake_three", make_block=lambda: B("other"))
     with pytest.raises(BlockError, match="other"):
         block_registry.load_block("fake-three")
+
+
+def test_every_reflect_block_package_has_make_block():
+    """Every block the Reflect template names loads by id through its
+    package's make_block() (issue #28). Strict: a package without
+    make_block() must turn this red, not be skipped."""
+    from pathlib import Path
+
+    from shared.templates import load_template
+    root = Path(__file__).resolve().parents[1]
+    t = load_template(root / "templates" / "reflect" / "template.toml")
+    ids = [ref.id for ref in t.blocks]
+    assert ids
+    for block_id in ids:
+        assert block_registry.load_block(block_id).id == block_id
