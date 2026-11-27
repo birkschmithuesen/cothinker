@@ -3503,10 +3503,24 @@ def main() -> int:
         # once (IntentWriter.settle, blocks/decisions_tasks_questions), so
         # by the time `current()` runs it may already be gone from the
         # board -- the row that applies it must still see it this once.
-        if session_blocks_cell:
-            current = {i.id: i for i in session_blocks_cell[0].intents.current()}
-            current.setdefault(intent.id, intent)
-            stage_surface.render(list(current.values()))
+        #
+        # Blocks emit from more than one thread (a decider's `on_result`,
+        # an agent turn's take_turn/end_turn, the SSE reader, the ticker):
+        # reading the snapshot and rendering it must be ONE step under the
+        # surface's own lock (an RLock; render() re-enters it on the same
+        # thread harmlessly). Without this, a slower thread's snapshot --
+        # taken before a pending that a faster thread already announced
+        # AND rendered -- can still apply after it, and render()'s
+        # `_clear_gone` then reads "that pending left the board" from a
+        # snapshot that never had it, forgets it was ever seen, and the
+        # next occurrence announces a SECOND real pending for the same
+        # order. The first one never settles and freezes into the final
+        # stage file (issue #184).
+        with stage_surface._lock:                       # noqa: SLF001 -- lock order
+            if session_blocks_cell:
+                current = {i.id: i for i in session_blocks_cell[0].intents.current()}
+                current.setdefault(intent.id, intent)
+                stage_surface.render(list(current.values()))
         if lanes is not None:
             lanes.observe_intent(intent)
 
