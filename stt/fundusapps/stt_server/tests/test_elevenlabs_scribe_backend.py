@@ -1,5 +1,7 @@
 import pytest
 
+pytest.importorskip("fundusapps.stt_server.backends.elevenlabs_scribe_backend")
+
 from fundusapps.stt_server.backends.elevenlabs_scribe_backend import (
     _common_word_prefix,
 )
