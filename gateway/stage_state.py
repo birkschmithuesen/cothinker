@@ -1536,6 +1536,7 @@ AGENDA_CHECKBOX_RE = re.compile(r"^-\s*\[([ xX])\]\s*(.+)$")
 AGENDA_BUDGET_RE = re.compile(r"\((\d+)\s*min\)\s*$")
 AGENDA_DAUER_RE = re.compile(r"^Dauer:\s*(\d+)\s*min", re.I)
 AGENDA_ENDE_RE = re.compile(r"^Ende:\s*(\d{1,2}):(\d{2})", re.I)
+AGENDA_START_RE = re.compile(r"^Start:\s*(\d{1,2}):(\d{2})", re.I)
 
 
 @dataclass
@@ -1550,15 +1551,21 @@ class AgendaDoc:
     items: list[AgendaItem]
     duration_min: int | None = None
     end_time: tuple[int, int] | None = None
+    # The meeting's PLANNED start (issue #203), parallel to `end_time`:
+    # the operator's `Start: HH:MM`, so the timer can anchor on the plan
+    # instead of the moment the service happens to come up.
+    start_time: tuple[int, int] | None = None
 
 
 def parse_agenda(markdown: str) -> AgendaDoc:
     """`agenda.md`: a checkbox list, an optional `(N min)` budget per item
-    and an optional `Dauer: N min` / `Ende: HH:MM` header for the whole
-    meeting. Never raises -- an unreadable line is simply not an item."""
+    and optional `Dauer: N min` / `Ende: HH:MM` / `Start: HH:MM` headers for
+    the whole meeting. Never raises -- an unreadable line is simply not an
+    item."""
     items: list[AgendaItem] = []
     duration_min: int | None = None
     end_time: tuple[int, int] | None = None
+    start_time: tuple[int, int] | None = None
     for raw in markdown.splitlines():
         line = raw.strip()
         if not line:
@@ -1581,7 +1588,12 @@ def parse_agenda(markdown: str) -> AgendaDoc:
         em = AGENDA_ENDE_RE.match(line)
         if em:
             end_time = (int(em.group(1)), int(em.group(2)))
-    return AgendaDoc(items=items, duration_min=duration_min, end_time=end_time)
+            continue
+        sm = AGENDA_START_RE.match(line)
+        if sm:
+            start_time = (int(sm.group(1)), int(sm.group(2)))
+    return AgendaDoc(items=items, duration_min=duration_min, end_time=end_time,
+                     start_time=start_time)
 
 
 def meeting_deadline(doc: AgendaDoc, started_at: float) -> float | None:
@@ -1600,3 +1612,18 @@ def meeting_deadline(doc: AgendaDoc, started_at: float) -> float | None:
         return base.replace(hour=hour, minute=minute, second=0,
                             microsecond=0).timestamp()
     return None
+
+
+def planned_start(doc: AgendaDoc, fallback: float) -> float:
+    """The epoch second the meeting is PLANNED to start (issue #203), or
+    `fallback` when `agenda.md` carries no `Start:` header.
+
+    `fallback` is also the date `Start`'s HH:MM is read against -- the
+    caller decides what "now" means, same as `meeting_deadline()`.
+    """
+    if doc.start_time is None:
+        return fallback
+    hour, minute = doc.start_time
+    base = datetime.fromtimestamp(fallback).astimezone()
+    return base.replace(hour=hour, minute=minute, second=0,
+                        microsecond=0).timestamp()

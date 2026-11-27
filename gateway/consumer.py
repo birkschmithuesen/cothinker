@@ -72,7 +72,7 @@ from shared.minutes_format import is_v2 as is_v2_text  # noqa: E402
 from shared.minutes_format import _ROH_LINE_RE  # noqa: E402
 from stage_state import PARKED, StageState, scrub  # noqa: E402
 from stage_state import (detect_agenda_command,  # noqa: E402
-                         meeting_deadline, parse_agenda)
+                         meeting_deadline, parse_agenda, planned_start)
 from stage_texts import status as render_status  # noqa: E402
 from stage_texts import trouble as trouble_text  # noqa: E402
 from stage_texts import warning as warning_text  # noqa: E402
@@ -972,20 +972,28 @@ class AgendaController:
         except (OSError, ValueError, AttributeError) as e:
             self.log("timer state unreadable, starting a fresh anchor:", repr(e))
             anchor = None
+        # On a FRESH meeting (no restored anchor) the start is the PLANNED
+        # one from agenda.md's `Start:` header (issue #203), not the moment
+        # this process happens to come up -- an operator who opens the
+        # stack minutes after the planned start must not have the timer
+        # anchor on that delay. Absent `Start:`, this is `now()`, exactly
+        # today's behaviour.
         self.meeting_started_at = (anchor if isinstance(anchor, (int, float))
-                                   else now())
+                                   else planned_start(self.doc, now()))
         self.deadline = meeting_deadline(self.doc, self.meeting_started_at)
         self._timer: dict | None = None
         self._queue: dict | None = None
 
     def block_configs(self) -> dict:
-        """The timer block's items (label + minutes) and deadline."""
+        """The timer block's items (label + minutes), deadline and the
+        meeting's (planned or restored) start."""
         return {"timer": {
             "items": [{"label": i.text,
                        "minutes": (i.budget_s / 60 if i.budget_s is not None
                                    else None)}
                       for i in self.doc.items],
             "deadline": self.deadline,
+            "start_at": self.meeting_started_at,
         }}
 
     def observe(self, intent) -> bool:

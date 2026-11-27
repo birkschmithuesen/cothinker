@@ -19,7 +19,7 @@ import sys
 import tempfile
 import threading
 import time as _zeit
-from datetime import date
+from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from types import SimpleNamespace
@@ -44,6 +44,8 @@ def parse_agenda_scenario():
         "Dauer: 90 min\n")
     doc2 = ss.parse_agenda("- [ ] Eins\nEnde: 21:30\n")
     doc3 = ss.parse_agenda("")
+    doc4 = ss.parse_agenda("- [ ] Eins\nStart: 09:00\n")
+    doc5 = ss.parse_agenda("- [ ] Eins\nStart: nicht lesbar\n")
     return SimpleNamespace(**locals())
 
 
@@ -87,6 +89,18 @@ def test_ende_header_parsed(parse_agenda_scenario):
 
 def test_empty_text_no_items_never_raises(parse_agenda_scenario):
     assert parse_agenda_scenario.doc3.items == []
+
+
+def test_no_start_header_given(parse_agenda_scenario):
+    assert parse_agenda_scenario.doc.start_time is None
+
+
+def test_start_header_parsed(parse_agenda_scenario):
+    assert parse_agenda_scenario.doc4.start_time == (9, 0)
+
+
+def test_malformed_start_header_never_raises(parse_agenda_scenario):
+    assert parse_agenda_scenario.doc5.start_time is None
 
 
 # ======================================================== detect_agenda_command
@@ -146,6 +160,46 @@ def test_deadline_from_dauer():
 def test_no_header_no_deadline():
     doc_none = ss.parse_agenda("- [ ] A\n")
     assert ss.meeting_deadline(doc_none, 1000.0) is None
+
+
+# ==================================================================== planned_start
+def test_planned_start_from_header():
+    doc = ss.parse_agenda("- [ ] A\nStart: 09:00\n")
+    base = datetime.fromtimestamp(1700.0).astimezone()
+    expected = base.replace(hour=9, minute=0, second=0, microsecond=0).timestamp()
+    assert ss.planned_start(doc, 1700.0) == expected
+
+
+def test_planned_start_without_header_is_the_fallback():
+    doc = ss.parse_agenda("- [ ] A\n")
+    assert ss.planned_start(doc, 1700.0) == 1700.0
+
+
+# ======================================== AgendaController.meeting_started_at
+def test_meeting_started_at_uses_the_planned_start_not_service_start(tmp_path):
+    """issue #203: the service can start well after the meeting's planned
+    start (an operator opens the stack late). The anchor the timer block
+    gets must be the PLANNED start declared in agenda.md, not the moment
+    the service happened to come up."""
+    session = tmp_path / "s"
+    session.mkdir()
+    agenda_path = session / "agenda.md"
+    agenda_path.write_text("- [ ] Eins\nStart: 09:00\n", encoding="utf-8")
+    planned = (datetime.fromtimestamp(1_800_000_000.0).astimezone()
+              .replace(hour=9, minute=0, second=0, microsecond=0).timestamp())
+    service_started_late = planned + 600.0   # ten minutes late
+    ctrl = k.AgendaController(agenda_path, session,
+                              now=lambda: service_started_late)
+    assert ctrl.meeting_started_at == planned
+
+
+def test_meeting_started_at_without_start_header_falls_back_to_service_start(tmp_path):
+    session = tmp_path / "s"
+    session.mkdir()
+    agenda_path = session / "agenda.md"
+    agenda_path.write_text("- [ ] Eins\n", encoding="utf-8")
+    ctrl = k.AgendaController(agenda_path, session, now=lambda: 12345.0)
+    assert ctrl.meeting_started_at == 12345.0
 
 
 # ====================================================== StageState.agenda
