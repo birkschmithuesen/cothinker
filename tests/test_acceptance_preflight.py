@@ -695,3 +695,10 @@ def test_main_out_writes_report_with_fingerprint(pf, tmp_path, monkeypatch, caps
     assert "SECRET_VALUE_123" not in text
     assert any(c["id"] == "preflight.fingerprint" and c["status"] == "PASS"
                for c in data["checks"])
+
+
+def test_fingerprint_check_fails_without_lane_profiles(pf, tmp_path, monkeypatch):
+    monkeypatch.setattr(pf, "_repo_of_unit", lambda unit: tmp_path)
+    chk, fp = pf.fingerprint_check(unit="u.service", profiles={}, home=tmp_path)
+    assert chk.id == "preflight.fingerprint" and chk.status == "FAIL"
+    assert "no lane profiles" in chk.evidence and fp is None
