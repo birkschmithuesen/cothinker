@@ -156,6 +156,92 @@ rendered or printed.
    status (`PASS`/`FAIL`/`SKIPPED`) and evidence; exit code 0 only if no
    check is `FAIL`.
 
+## Scenarios
+
+`demo/acceptance/scenarios.py --catalogue <dir>` runs the scenario catalogue
+in `demo/acceptance/scenarios/` (one YAML file per scenario). Each scenario is
+a short scripted meeting: speakers with placeholder names, a timeline of
+spoken lines, pauses and overlaps, and an `expect` block. Invented speakers
+and invented sentences only.
+
+| id | request class | regression only | check groups |
+|----|---------------|-----------------|--------------|
+| a | order-with-pause | no | lane_calls, judge |
+| b | answer-from-files | no | answer, judge |
+| c | natural-segmentation | no | transcript (needs a recorded clip) |
+| d | wake-never-topic | no | topic |
+| e | structure-a-list | no | lane_calls, answer, judge |
+| f | interruption | no | lane_calls, transcript, judge |
+| g | overlap | no | lane_calls, transcript, judge |
+| h | order-one-breath | yes | lane_calls |
+
+Check ids are `scenario.<id>.<group>`. Scenario h is a regression guard for a
+bug that was fixed; it has no judge question.
+
+### The oracle: mechanical first, the judge can only fail
+
+The oracle (`oracle.py`) decides every check mechanically from one
+observation record: the number and text of lane calls, the answer, the
+transcript, the topic titles. A group that cannot be observed is `SKIPPED`
+with a reason, never `PASS`. Notably:
+
+- `answer` is `SKIPPED` in transcript mode (no answer exists offline);
+- `topic` is `SKIPPED` ("no topic observed") when no topic was seen. Topic
+  detection needs a decider model, so an offline replay normally yields no
+  topics; an empty list never passes silently.
+
+The judge (`judge.py`) runs only on a scenario whose mechanical checks
+passed and which carries a `judge.question`. It can turn that PASS into a
+FAIL; it never produces a PASS on its own and never rescues a mechanical
+FAIL. Its flags are all-or-none (giving some but not all is an argument
+error):
+
+- `--judge-model`, `--judge-endpoint`, `--judge-key-env` (the name of the
+  environment variable holding the key; the value is never printed),
+  `--judge-api` (`anthropic-messages` or `openai-chat`),
+  `--judge-max-calls`, `--judge-max-tokens`.
+
+The judge is pinned to the configured model. It refuses to run when that
+model equals the lane model (`--lane-model`, or read from the preflight
+report), so the system does not grade itself, and it stops at
+`--judge-max-calls`. It only sees the invented spoken text of a catalogue
+scenario and the answer to it: the judge never sees a real meeting.
+
+### Thresholds
+
+A numeric threshold (for example the share of segments allowed to end
+mid-sentence in scenario c, `baseline:scenario.share_no_sentence_end`) is
+never a default in code. It comes from `demo/acceptance/baseline.yaml`, where
+every entry carries a `measured_by` string, or from `--threshold KEY=VALUE`.
+If a selected scenario needs a threshold that neither provides, the run
+prints `missing threshold(s): <keys> -- pass --threshold or run the part-4
+baseline` to stderr and exits 2 before anything runs.
+
+### Two drivers
+
+`--via transcript` replays the scenario text offline through the real
+consumer, with a recording worker standing in for the lane agents. It costs
+nothing, needs no network, and proves the consumer logic: segmentation,
+wake-phrase handling, how many lane calls an order produces. It cannot prove
+the speech path or an answer's content. Clip scenarios such as c cannot be
+replayed offline and are `SKIPPED` in this mode. `--speed` scales the replay
+clock.
+
+`--via call` runs the whole path: Piper renders each speaker, headless
+Chrome joins the real call (`--base-url`, `--token-file`, `--chrome`,
+`--piper-voice-alex`, `--piper-voice-sam`), and the run observes the
+deployment. It costs real lane calls. Observation sources: lane calls are
+counted from the `ORDER` lines of the consumer log (`--consumer-log`), and the
+transcript and topics come from the session's `protokoll.md`
+(`--session-dir`). Live order text is not visible, so keyword checks on a
+lane call are made on the answer in this mode.
+
+Other flags: `--only a,b` selects scenarios, `--baseline` points at another
+baseline file, `--preflight-report` binds the run to a preflight, and
+`--out` is required and receives `report.json` and `report.md` (tool
+`scenarios`). Exit code 0 without FAIL, 1 with a FAIL, 2 for a missing
+threshold or unknown scenario id; `SKIPPED` does not change the exit code.
+
 ## Before and after a run: preflight, fingerprint, go/no-go, acceptances
 
 The run above has two halves. The outside half (`e2e.py`, the scenario

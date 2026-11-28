@@ -13,3 +13,11 @@ playwright
 # espeak-ng (already a system package, see make_tts.py) is needed for
 # the explicit --tts espeak fallback.
 piper-tts
+
+# demo/acceptance/catalogue.py and baseline loading: reads the scenario
+# YAML files and baseline.yaml.
+PyYAML
+
+# Word-error-rate measurement for the segmentation and speech-to-text
+# baseline work (writes the measured_by entries in baseline.yaml).
+jiwer
