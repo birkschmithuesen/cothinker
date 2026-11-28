@@ -23,7 +23,7 @@ from blocks.translation.ui import translate_operator_text
 from shared.blocks import BlockContext
 from shared.modules import StateStore
 
-GOLDEN = Path(__file__).parent / "golden" / "translation" / "scene_de_en.txt"
+GOLDEN = Path(__file__).resolve().parents[3] / "tests" / "golden" / "translation" / "scene_de_en.txt"
 
 WORDS = {"Hallo": "Hello", "Welt": "World", "sie": "she", "sagte": "said",
          "und": "and", "ging": "went"}
