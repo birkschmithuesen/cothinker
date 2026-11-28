@@ -32,7 +32,7 @@ def run_sh(argv: list[str]) -> str:
 @dataclass(frozen=True)
 class Fingerprint:
     digest: str
-    parts: dict
+    parts: dict[str, str]
 
     def to_dict(self) -> dict:
         return {"digest": self.digest, "parts": dict(self.parts)}
@@ -52,6 +52,26 @@ def filter_environ(raw: bytes) -> bytes:
     return b"\n".join(sorted(keep))
 
 
+def _read_proc(path: Path, transform=lambda b: b) -> bytes:
+    try:
+        return transform(path.read_bytes())
+    except OSError:  # process exited meanwhile, or not permitted
+        return b"<unreadable>"
+
+
+def _untracked(repo: Path, sh) -> bytes:
+    names = sorted(n for n in sh(["git", "-C", str(repo), "ls-files", "--others",
+                                  "--exclude-standard"]).splitlines() if n)
+    out = []
+    for n in names:
+        try:
+            body = _h((repo / n).read_bytes())
+        except OSError:
+            body = "<unreadable>"
+        out.append(f"{n}\0{body}")
+    return "\n".join(out).encode()
+
+
 def collect(units, *, repo: Path, demo_env: Path, profiles: dict, sh=run_sh,
             proc: Path = Path("/proc")) -> dict:
     inputs: dict = {}
@@ -60,8 +80,8 @@ def collect(units, *, repo: Path, demo_env: Path, profiles: dict, sh=run_sh,
         inputs[f"unit:{u}:cat"] = sh(["systemctl", "--user", "cat", name]).encode()
         pid = sh(["systemctl", "--user", "show", "-p", "MainPID", "--value", name]).strip()
         if pid and pid != "0" and (proc / pid).exists():
-            inputs[f"unit:{u}:argv"] = (proc / pid / "cmdline").read_bytes()
-            inputs[f"unit:{u}:env"] = filter_environ((proc / pid / "environ").read_bytes())
+            inputs[f"unit:{u}:argv"] = _read_proc(proc / pid / "cmdline")
+            inputs[f"unit:{u}:env"] = _read_proc(proc / pid / "environ", filter_environ)
         else:
             inputs[f"unit:{u}:argv"] = b"<not running>"
             inputs[f"unit:{u}:env"] = b"<not running>"
@@ -69,7 +89,14 @@ def collect(units, *, repo: Path, demo_env: Path, profiles: dict, sh=run_sh,
         for f in PROFILE_FILES:
             p = Path(d) / f
             inputs[f"profile:{lane}:{f}"] = p.read_bytes() if p.exists() else b"<missing>"
+        skills = Path(d) / "skills"
+        if skills.is_dir():
+            for f in sorted(x for x in skills.rglob("*") if x.is_file()):
+                inputs[f"profile:{lane}:skills/{f.relative_to(skills).as_posix()}"] = f.read_bytes()
+        else:
+            inputs[f"profile:{lane}:skills"] = b"<missing>"
     inputs["repo:head"] = sh(["git", "-C", str(repo), "rev-parse", "HEAD"]).encode()
     inputs["repo:diff"] = sh(["git", "-C", str(repo), "diff", "HEAD"]).encode()
+    inputs["repo:untracked"] = _untracked(repo, sh)
     inputs["demo.env"] = demo_env.read_bytes() if demo_env.exists() else b"<missing>"
     return inputs
