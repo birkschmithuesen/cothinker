@@ -1,0 +1,89 @@
+import subprocess
+
+from demo.acceptance import acceptances as acc
+
+ENTRY = '[[accept]]\ncheck_id = "scenario.d.topic"\nfingerprint = "d1"\naccepted_by = "Alex Example"\nreason = "known, F2"\n'
+
+
+def _git(repo, *args, name="Alex Example", email="alex@example.invalid"):
+    env = {"GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email, "GIT_COMMITTER_NAME": name,
+           "GIT_COMMITTER_EMAIL": email, "PATH": "/usr/bin:/bin", "HOME": str(repo)}
+    subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
+
+
+def _repo(tmp_path, author=("Alex Example", "alex@example.invalid")):
+    _git(tmp_path, "init", "-q")
+    (tmp_path / "acceptances.toml").write_text(ENTRY)
+    _git(tmp_path, "add", "acceptances.toml")
+    _git(tmp_path, "commit", "-qm", "accept", name=author[0], email=author[1])
+    return tmp_path / "acceptances.toml"
+
+
+AGENTS = {("Robo", "robo@example.invalid")}
+
+
+def test_human_entry_counts(tmp_path):
+    ok, rejected = acc.load_verified(_repo(tmp_path), agent_ids=AGENTS)
+    assert [a.check_id for a in ok] == ["scenario.d.topic"] and rejected == []
+    assert ok[0].verification == "author-checked"
+
+
+def test_agent_entry_rejected(tmp_path):
+    ok, rejected = acc.load_verified(_repo(tmp_path, ("Robo", "robo@example.invalid")), agent_ids=AGENTS)
+    assert ok == [] and "agent identity" in rejected[0]
+
+
+def test_agent_edit_of_human_entry_rejected(tmp_path):
+    f = _repo(tmp_path)
+    f.write_text(ENTRY.replace('"d1"', '"d2"'))
+    _git(tmp_path, "commit", "-qam", "bump", name="Robo", email="robo@example.invalid")
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS)
+    assert ok == []
+
+
+def test_uncommitted_entry_ignored(tmp_path):
+    f = _repo(tmp_path)
+    f.write_text(ENTRY + ENTRY.replace("scenario.d.topic", "scenario.a"))
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS)
+    assert ok == [] and "uncommitted" in rejected[0]
+
+
+def test_signature_rule_rejects_unsigned_commit(tmp_path):
+    f = _repo(tmp_path)
+
+    def sh(argv, cwd):
+        if "verify-commit" in argv:
+            return 1, ""
+        return acc.run_sh_in(argv, cwd)
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS, allowed_signers=tmp_path / "signers", sh=sh)
+    assert ok == [] and "no valid allowed signature" in rejected[0]
+
+    def sh_ok(argv, cwd):
+        return (0, "") if "verify-commit" in argv else acc.run_sh_in(argv, cwd)
+    ok, _ = acc.load_verified(f, agent_ids=AGENTS, allowed_signers=tmp_path / "signers", sh=sh_ok)
+    assert ok[0].verification == "signature-checked"
+
+
+def test_file_outside_git_counts_nothing(tmp_path):
+    f = tmp_path / "acceptances.toml"
+    f.write_text(ENTRY)
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS)
+    assert ok == [] and "not in a git repository" in rejected[0]
+
+
+def test_blame_failure_counts_nothing(tmp_path):
+    f = _repo(tmp_path)
+
+    def sh(argv, cwd):
+        if "blame" in argv:
+            return 1, ""
+        return acc.run_sh_in(argv, cwd)
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS, sh=sh)
+    assert ok == [] and "blame" in rejected[0]
+
+
+def test_agent_identities_from_factory(tmp_path):
+    fy = tmp_path / "FACTORY.yaml"
+    fy.write_text('commit_identity:\n  name: "Robo"\n  email: "1+x@users.noreply.github.com"\n')
+    ids = acc.agent_identities(fy, ["Example Agent <agent@example.invalid>"])
+    assert ids == {("Robo", "1+x@users.noreply.github.com"), ("Example Agent", "agent@example.invalid")}
