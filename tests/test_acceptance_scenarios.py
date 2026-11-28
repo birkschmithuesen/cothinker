@@ -362,3 +362,85 @@ def test_main_binds_to_preflight_report(sc, tmp_path, monkeypatch, capsys):
     data = json.loads((tmp_path / "run" / "report.json").read_text())
     assert data["preflight_run_id"] == "pre9"
     assert data["tool"] == "scenarios"
+
+
+# ------------------------------------------------------- catalogue runner (2.6)
+
+CATALOGUE = ACC / "scenarios"
+
+
+def test_catalogue_missing_threshold_exits_2_before_any_run(sc, tmp_path, capsys, monkeypatch):
+    from demo.acceptance import replay
+    monkeypatch.setattr(replay, "run", lambda *a, **k: pytest.fail("must not run"))
+    rc = sc.main(["--catalogue", str(CATALOGUE), "--via", "transcript",
+                  "--only", "c", "--out", str(tmp_path / "run")])
+    assert rc == 2
+    err = capsys.readouterr().err
+    assert "missing threshold(s)" in err
+    assert "scenario.share_no_sentence_end" in err
+
+
+def test_catalogue_transcript_threshold_override_skips_clip_scenario(sc, tmp_path, capsys):
+    rc = sc.main(["--catalogue", str(CATALOGUE), "--via", "transcript", "--only", "c",
+                  "--threshold", "scenario.share_no_sentence_end=0.5",
+                  "--out", str(tmp_path / "run")])
+    assert rc == 0
+    out = capsys.readouterr().out
+    assert "SKIPPED scenario.c.transcript: scenario uses an audio clip" in out
+
+
+def test_catalogue_transcript_run_of_h_without_judge(sc, tmp_path, capsys, monkeypatch):
+    from demo.acceptance import replay
+    from demo.acceptance.oracle import Observation
+    seen = {}
+
+    def fake_run(s, *, repo, workdir, speed, timeout_s):
+        seen.update(id=s.id, speed=speed)
+        return Observation(lane_calls=["Hey Robo, fass bitte kurz zusammen."],
+                           mode="transcript")
+    monkeypatch.setattr(replay, "run", fake_run)
+    rc = sc.main(["--catalogue", str(CATALOGUE), "--via", "transcript", "--only", "h",
+                  "--out", str(tmp_path / "run")])
+    assert rc == 0
+    assert seen == {"id": "h", "speed": 1.0}
+    data = json.loads((tmp_path / "run" / "report.json").read_text())
+    by_id = {c["id"]: c for c in data["checks"]}
+    assert by_id["scenario.h.lane_calls"]["status"] == "PASS"
+    assert "scenario.h.regression" in by_id
+    assert data["judge"] is None
+    assert data["tool"] == "scenarios"
+    assert "PASS scenario.h.lane_calls:" in capsys.readouterr().out
+
+
+def test_catalogue_judge_flags_are_all_or_none(sc, tmp_path, capsys):
+    with pytest.raises(SystemExit) as e:
+        sc.parse_args(["--catalogue", str(CATALOGUE), "--via", "transcript",
+                       "--out", str(tmp_path), "--judge-model", "m"])
+    assert e.value.code == 2
+    err = capsys.readouterr().err
+    assert "--judge-endpoint" in err and "--judge-max-tokens" in err
+
+
+def test_catalogue_unknown_only_id_exits_2(sc, tmp_path, capsys):
+    rc = sc.main(["--catalogue", str(CATALOGUE), "--via", "transcript",
+                  "--only", "zz", "--out", str(tmp_path / "run")])
+    assert rc == 2
+    assert "zz" in capsys.readouterr().err
+
+
+def test_legacy_flags_still_required_without_catalogue(sc):
+    with pytest.raises(SystemExit) as e:
+        sc.parse_args(["--scenarios", "a"])
+    assert e.value.code == 2
+
+
+def test_step_starts_places_steps_by_duration_and_overlap(sc):
+    timeline = (
+        {"speaker": "Alex", "say": "x"},
+        {"pause": 2.0},
+        {"speaker": "Sam", "say": "y", "overlap_prev_s": 0.5},
+    )
+    # durations are keyed by timeline index of each spoken step
+    starts, total = sc.step_starts(timeline, {0: 3.0, 2: 1.0})
+    assert starts == {0: 0.0, 2: 4.5}
+    assert total == pytest.approx(5.5)

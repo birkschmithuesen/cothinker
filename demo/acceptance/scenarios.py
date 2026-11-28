@@ -39,6 +39,10 @@ Evidence sources, and why:
   (`### HH:MM <title>`, filed by `gateway/consumer.py`'s topic-page
   machinery) may start with the wake phrase.
 
+Catalogue mode (`--catalogue DIR --via call|transcript`) runs the YAML
+scenarios of `demo/acceptance/scenarios/` through the mechanical oracle
+(`oracle.py`) and an optional capped judge (`judge.py`); see `main_catalogue`.
+
 usage: scenarios.py --audio-dir DIR --url-file F --cdp-port N
          --snapshot-url U --token-file T --consumer-log P --session-dir D
          [--scenarios a,b,c,d] [--wake-phrase "Hey Robo"]
@@ -308,6 +312,217 @@ def run_scenario(name: str, args) -> Check:
         titles=topic_titles(protocol_text), wake_phrase=args.wake_phrase)
 
 
+# ----------------------------------------------------------- catalogue runner
+
+CLIP_SKIP_EVIDENCE = "scenario uses an audio clip; transcript replay cannot render it"
+DEFAULT_BASELINE = _ACC_DIR / "baseline.yaml"
+JUDGE_FLAGS = ("model", "endpoint", "key_env", "api", "max_calls", "max_tokens")
+_LANE_MODEL_RE = re.compile(r"LANE_MODEL\s*[=:]\s*(\S+)")
+
+
+def step_starts(timeline, durations: dict):
+    """Pure placement of spoken steps on one scenario clock.
+
+    `durations` maps the timeline index of each say/clip step to its audio
+    length in seconds. Same rule as `replay.render_finals`: a step starts at
+    the running cursor minus its `overlap_prev_s`; the cursor only moves
+    forward. -> ({index: start_s}, total_s)."""
+    starts: dict = {}
+    cursor = 0.0
+    for i, step in enumerate(timeline):
+        if "pause" in step:
+            cursor += float(step["pause"])
+            continue
+        start = max(0.0, cursor - float(step.get("overlap_prev_s", 0.0)))
+        starts[i] = start
+        cursor = max(cursor, start + durations[i])
+    return starts, cursor
+
+
+def _parse_threshold(raw: str):
+    key, sep, val = raw.partition("=")
+    if not sep or not key:
+        raise argparse.ArgumentTypeError(f"--threshold wants key=value, got {raw!r}")
+    try:
+        return key, float(val)
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"--threshold {key}: {val!r} is not a number")
+
+
+def lane_model_from_preflight(path) -> Optional[str]:
+    """`LANE_MODEL=<x>` in any check evidence of the bound preflight report."""
+    if not path:
+        return None
+    from demo.acceptance.report import load
+    for c in load(path).get("checks", []):
+        m = _LANE_MODEL_RE.search(str(c.get("evidence", "")))
+        if m:
+            return m.group(1)
+    return None
+
+
+def _scenario_wavs(s, args, workdir: Path) -> dict:
+    """Per-speaker WAV files for a call run: every say step rendered by piper,
+    clip steps read verbatim from `<audio-dir>/<x>.wav`, each placed at its
+    scenario time with silence padding. -> {speaker: path}."""
+    import tempfile
+    from demo.acceptance import e2e
+    from demo.acceptance import make_tts
+    pcm: dict = {}
+    with tempfile.TemporaryDirectory() as td:
+        for i, step in enumerate(s.timeline):
+            if "say" in step:
+                voice = args.piper_voice_alex if step["speaker"] == "Alex" else args.piper_voice_sam
+                pcm[i] = e2e.render_piper(args.piper_cmd, Path(voice), args.ffmpeg,
+                                          step["say"], Path(td))
+            elif "clip" in step:
+                with wave.open(str(Path(args.audio_dir) / f"{step['clip']}.wav"), "rb") as w:
+                    pcm[i] = w.readframes(w.getnframes())
+    durations = {i: len(b) / 2 / make_tts.RATE for i, b in pcm.items()}
+    starts, total = step_starts(s.timeline, durations)
+    items: dict = {}
+    for i, b in pcm.items():
+        items.setdefault(s.timeline[i]["speaker"], []).append((starts[i], b))
+    workdir.mkdir(parents=True, exist_ok=True)
+    paths = {}
+    for who, its in items.items():
+        path = workdir / f"{who.lower()}.wav"
+        make_tts.write_wav(path, make_tts.place(total, its))
+        paths[who] = path
+    return paths, total
+
+
+def run_call(s, args, workdir: Path):
+    """Live call driver. -> Observation, or a Check when it cannot run."""
+    from demo.acceptance import e2e
+    from demo.acceptance.oracle import Observation
+    odd = sorted({sp["name"] for sp in s.speakers} - {"Alex", "Sam"})
+    if odd:
+        return Check(f"scenario.{s.id}", "FAIL",
+                     f"call mode supports only speakers Alex and Sam, got {odd}")
+    token = Path(args.token_file).read_text(encoding="utf-8").strip()
+    paths, total = _scenario_wavs(s, args, workdir)
+    for who in ("Alex", "Sam"):  # start_participants is hard-wired to both
+        if who not in paths:
+            from demo.acceptance import make_tts
+            make_tts.write_wav(workdir / f"{who.lower()}.wav",
+                               make_tts.place(total, []))
+    log_path = Path(args.consumer_log) if args.consumer_log else None
+
+    def order_lines():
+        if not log_path or not log_path.is_file():
+            return []
+        text = log_path.read_text(encoding="utf-8", errors="replace")
+        return [ln for ln in text.splitlines() if "— ORDER" in ln]
+
+    before = len(order_lines())
+    seconds = total + float(s.timeouts["answer_s"])
+    procs = e2e.start_participants(args.base_url, token, workdir, args.chrome, seconds)
+    answers: list = []
+    snap: dict = {}
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        time.sleep(2.0)
+        try:
+            snap = e2e.fetch_snapshot(args.base_url, token)
+        except OSError:
+            continue
+        ans = str(snap.get("call_answer") or "").strip()
+        if ans and (not answers or answers[-1] != ans):
+            answers.append(ans)
+    e2e.collect_participants(procs, token, seconds)
+    topics = [h.get("title", "") for h in snap.get("history") or [] if h.get("title")]
+    lines: list = []
+    if args.session_dir:
+        protocol = (Path(args.session_dir) / "protokoll.md").read_text(
+            encoding="utf-8", errors="replace")
+        topics += topic_titles(protocol)
+        lines = [p for p in (_score.parse_line(ln)
+                             for ln in _score.raw_transcript_lines(protocol)) if p]
+    agenda = []
+    if args.agenda_file:
+        agenda = agenda_lines(Path(args.agenda_file).read_text(encoding="utf-8"))
+    # live order text is invisible: one placeholder entry per ORDER log line
+    return Observation(lane_calls=order_lines()[before:], answers=answers, topics=topics,
+                       transcript_lines=lines, agenda_lines=agenda, mode="call")
+
+
+def _spoken(s) -> str:
+    return " ".join(str(st["say"]) for st in s.timeline if "say" in st)
+
+
+def grade_scenario(s, args, baseline, overrides, judge, workdir: Path) -> list:
+    """All check rows of one catalogue scenario (oracle, judge, combined)."""
+    from demo.acceptance import judge as judge_mod, oracle, replay
+    if args.via == "transcript":
+        if any("clip" in st for st in s.timeline):
+            mech = [Check(f"scenario.{s.id}.{g}", "SKIPPED", CLIP_SKIP_EVIDENCE)
+                    for g in s.expect]
+            obs = None
+        else:
+            obs = replay.run(s, repo=Path(args.consumer_repo), workdir=workdir,
+                             speed=args.speed, timeout_s=float(s.timeouts["scenario_s"]))
+    else:
+        obs = run_call(s, args, workdir)
+        if isinstance(obs, Check):
+            return [obs]
+    if obs is not None:
+        mech = oracle.grade(s, obs, baseline, overrides)
+    jrow = None
+    if s.judge and judge.cfg is not None:
+        if args.via == "transcript":
+            jrow = Check(f"scenario.{s.id}.judge", "SKIPPED", "judge needs a live answer")
+        else:
+            jrow = judge.grade(s.id, s.judge["question"], _spoken(s),
+                               obs.answers[-1] if obs.answers else "")
+    combined = judge_mod.combine(mech, jrow, s.id)
+    if s.regression_only:
+        combined = Check(f"scenario.{s.id}.regression", combined.status, combined.evidence)
+    return [*mech, *([jrow] if jrow else []), combined]
+
+
+def main_catalogue(args) -> int:
+    from demo.acceptance import catalogue, judge as judge_mod
+    scenarios = catalogue.load_all(Path(args.catalogue))
+    if args.only:
+        unknown = [i for i in args.only if i not in scenarios]
+        if unknown:
+            print(f"unknown scenario id(s) {unknown}; known: {sorted(scenarios)}",
+                  file=sys.stderr)
+            return 2
+        scenarios = {i: scenarios[i] for i in args.only}
+    baseline = catalogue.load_baseline(Path(args.baseline))
+    overrides = dict(args.threshold or [])
+    missing = []
+    for key in sorted(catalogue.required_thresholds(scenarios.values())):
+        try:
+            catalogue.resolve(key, baseline, overrides)
+        except catalogue.MissingThreshold as exc:
+            missing.append(exc.key)
+    if missing:
+        print(f"missing threshold(s): {', '.join(missing)} -- pass --threshold "
+              f"or run the part-4 baseline", file=sys.stderr)
+        return 2
+    cfg = None
+    if args.judge_model:
+        cfg = judge_mod.JudgeConfig(
+            model=args.judge_model, endpoint=args.judge_endpoint,
+            key_env=args.judge_key_env, api=args.judge_api,
+            max_calls=args.judge_max_calls, max_tokens=args.judge_max_tokens)
+    lane_model = args.lane_model or lane_model_from_preflight(args.preflight_report)
+    judge = judge_mod.Judge(cfg, lane_model)
+    rep = Report(tool="scenarios")
+    bind_preflight(rep, args.preflight_report)
+    out = Path(args.out)
+    for s in scenarios.values():
+        rep.extend(grade_scenario(s, args, baseline, overrides, judge, out / "work" / s.id))
+    rep.judge = judge.summary()
+    for c in rep.checks:
+        print(f"{c.status} {c.id}: {c.evidence}")
+    rep.write(out)
+    return 0 if rep.passed else 1
+
+
 # ------------------------------------------------------------------------ CLI
 
 def _scenario_list(raw: str) -> list:
@@ -319,15 +534,24 @@ def _scenario_list(raw: str) -> list:
     return names
 
 
+_LEGACY_REQUIRED = ("audio_dir", "url_file", "cdp_port", "snapshot_url",
+                    "token_file", "consumer_log", "session_dir")
+
+
+def _id_list(raw: str) -> list:
+    return [x.strip() for x in raw.split(",") if x.strip()]
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    ap.add_argument("--audio-dir", required=True)
-    ap.add_argument("--url-file", required=True)
-    ap.add_argument("--cdp-port", type=int, required=True)
-    ap.add_argument("--snapshot-url", required=True)
-    ap.add_argument("--token-file", required=True)
-    ap.add_argument("--consumer-log", required=True)
-    ap.add_argument("--session-dir", required=True)
+    # required only in the legacy a-d mode (checked after parsing)
+    ap.add_argument("--audio-dir")
+    ap.add_argument("--url-file")
+    ap.add_argument("--cdp-port", type=int)
+    ap.add_argument("--snapshot-url")
+    ap.add_argument("--token-file")
+    ap.add_argument("--consumer-log")
+    ap.add_argument("--session-dir")
     ap.add_argument("--scenarios", type=_scenario_list, default=list(ALL_SCENARIOS))
     ap.add_argument("--wake-phrase", default=DEFAULT_WAKE_PHRASE)
     ap.add_argument("--mid-sentence-max", type=float, default=DEFAULT_MID_SENTENCE_MAX)
@@ -337,11 +561,56 @@ def parse_args(argv=None):
                     help="report.json of the preflight run to bind this run to")
     ap.add_argument("--out",
                     help="also write report.json/report.md of this run here")
-    return ap.parse_args(argv)
+    cat = ap.add_argument_group("catalogue mode (--catalogue switches it on)")
+    cat.add_argument("--catalogue", help="directory of scenario YAML files")
+    cat.add_argument("--via", choices=("call", "transcript"))
+    cat.add_argument("--only", type=_id_list)
+    cat.add_argument("--baseline", default=str(DEFAULT_BASELINE))
+    cat.add_argument("--threshold", action="append", type=_parse_threshold,
+                     metavar="KEY=VALUE")
+    cat.add_argument("--lane-model")
+    cat.add_argument("--speed", type=float, default=1.0,
+                     help="transcript driver only")
+    cat.add_argument("--consumer-repo", default=str(_REPO_ROOT))
+    cat.add_argument("--base-url", help="call driver: deployment base URL")
+    cat.add_argument("--chrome", default="chromium")
+    cat.add_argument("--piper-cmd", default="piper")
+    cat.add_argument("--ffmpeg", default="ffmpeg")
+    cat.add_argument("--piper-voice-alex")
+    cat.add_argument("--piper-voice-sam")
+    jg = ap.add_argument_group("judge (all six or none)")
+    jg.add_argument("--judge-model")
+    jg.add_argument("--judge-endpoint")
+    jg.add_argument("--judge-key-env")
+    jg.add_argument("--judge-api", choices=("anthropic-messages", "openai-chat"))
+    jg.add_argument("--judge-max-calls", type=int)
+    jg.add_argument("--judge-max-tokens", type=int)
+    args = ap.parse_args(argv)
+    given = [f for f in JUDGE_FLAGS if getattr(args, "judge_" + f) is not None]
+    if given and len(given) != len(JUDGE_FLAGS):
+        absent = ["--judge-" + f.replace("_", "-") for f in JUDGE_FLAGS if f not in given]
+        ap.error("judge flags are all-or-none; missing: " + ", ".join(absent))
+    if args.catalogue:
+        if not args.via:
+            ap.error("--catalogue needs --via call|transcript")
+        if not args.out:
+            ap.error("--catalogue needs --out")
+        if args.via == "call":
+            need = ("base_url", "token_file", "chrome", "piper_voice_alex", "piper_voice_sam")
+            gone = [f"--{n.replace('_', '-')}" for n in need if not getattr(args, n)]
+            if gone:
+                ap.error("--via call needs " + ", ".join(gone))
+    else:
+        gone = [f"--{n.replace('_', '-')}" for n in _LEGACY_REQUIRED if getattr(args, n) is None]
+        if gone:
+            ap.error("the following arguments are required: " + ", ".join(gone))
+    return args
 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    if args.catalogue:
+        return main_catalogue(args)
     rep = Report(tool="scenarios")
     bind_preflight(rep, args.preflight_report)
     checks = [run_scenario(name, args) for name in args.scenarios]
