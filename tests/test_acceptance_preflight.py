@@ -30,20 +30,38 @@ def _write_environ(proc_root: Path, pid: int, env: dict) -> None:
     (pid_dir / "environ").write_bytes(entry.encode("utf-8"))
 
 
-def _write_profile(profiles_dir: Path, name: str, toolsets: list) -> Path:
+def _write_profile(profiles_dir: Path, name: str, disabled: list) -> Path:
     profile = profiles_dir / name
     profile.mkdir(parents=True, exist_ok=True)
     (profile / "config.yaml").write_text(
-        "agent:\n  enabled_toolsets: [%s]\n" % ", ".join(toolsets),
+        "agent:\n  disabled_toolsets: [%s]\n" % ", ".join(disabled),
         encoding="utf-8")
     return profile
 
 
+def _write_lanes(tmp_path: Path, proc_root: Path, pid: int) -> list:
+    """A consumer command line whose three lanes satisfy the shipped
+    invariants; the coach lane resolves to the dedicated profile under a
+    fake home. Returns the extra CLI args pointing at that home."""
+    home = tmp_path / "home"
+    main = _write_profile(tmp_path, "lane-main", ["file"])
+    call = _write_profile(tmp_path, "lane-call", [])
+    _write_profile(home / ".hermes" / "profiles", "cothinker-coach", ["file"])
+    argv = ["python3", "consumer.py",
+            "--worker-command", f"py worker.py --hermes-home {main}",
+            "--lane-call-worker-command", f"py worker.py --hermes-home {call}"]
+    (proc_root / str(pid)).mkdir(parents=True, exist_ok=True)
+    (proc_root / str(pid) / "cmdline").write_bytes(
+        "".join(a + "\0" for a in argv).encode("utf-8"))
+    return ["--home", str(home)]
+
+
 def test_lane_profile_pass(pf, tmp_path):
     proc_root = tmp_path / "proc"
-    profile = _write_profile(tmp_path, "call", ["file"])
+    profile = _write_profile(tmp_path, "call", [])
     _write_environ(proc_root, 123, {"HERMES_PROFILE_DIR_CALL": str(profile)})
-    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"])
+    extra = _write_lanes(tmp_path, proc_root, 123)
+    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"] + extra)
     assert rc == 0
 
 
@@ -59,19 +77,19 @@ def test_lane_profile_fails_without_env_var(pf, tmp_path, capsys):
 
 def test_lane_profile_fails_without_toolset(pf, tmp_path, capsys):
     proc_root = tmp_path / "proc"
-    profile = _write_profile(tmp_path, "call", ["web"])
+    profile = _write_profile(tmp_path, "call", ["file"])
     _write_environ(proc_root, 123, {"HERMES_PROFILE_DIR_CALL": str(profile)})
     rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"])
     out = capsys.readouterr().out
     assert rc == 1
     assert "FAIL lane_profile:" in out
     assert str(profile) in out
-    assert "web" in out
+    assert "toolset file disabled" in out
 
 
 def test_lane_profile_fails_on_forbidden_glob(pf, tmp_path, capsys):
     proc_root = tmp_path / "proc"
-    profile = _write_profile(tmp_path, "call-coach", ["file"])
+    profile = _write_profile(tmp_path, "call-coach", [])
     _write_environ(proc_root, 123, {"HERMES_PROFILE_DIR_CALL": str(profile)})
     rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"])
     out = capsys.readouterr().out
@@ -381,8 +399,9 @@ def test_load_snapshot_from_url_never_prints_token(pf, tmp_path, capsys):
 
 def test_end_to_end_all_pass(pf, tmp_path, capsys):
     proc_root = tmp_path / "proc"
-    profile = _write_profile(tmp_path, "call", ["file"])
+    profile = _write_profile(tmp_path, "call", [])
     _write_environ(proc_root, 1, {"HERMES_PROFILE_DIR_CALL": str(profile)})
+    extra = _write_lanes(tmp_path, proc_root, 1)
 
     stt_log = tmp_path / "stt.log"
     stt_log.write_text("[sm-rt] eou_silence=1.8\n", encoding="utf-8")
@@ -399,17 +418,19 @@ def test_end_to_end_all_pass(pf, tmp_path, capsys):
         "--stt-log", str(stt_log), "--expect-eou", "1.8",
         "--consumer-log", str(consumer_log),
         "--snapshot-file", str(snapshot_file),
-    ])
+    ] + extra)
     out = capsys.readouterr().out
     assert rc == 0
-    for check_name in ("lane_profile", "eou_silence", "blocks_registered",
+    for check_name in ("lane_profile", "preflight.lane-profile.main",
+                       "preflight.lane-profile.coach",
+                       "preflight.lane-profile.call", "eou_silence", "blocks_registered",
                        "contract_fields"):
         assert f"PASS {check_name}:" in out
 
 
 def test_end_to_end_one_fail_exits_1(pf, tmp_path, capsys):
     proc_root = tmp_path / "proc"
-    profile = _write_profile(tmp_path, "call", ["file"])
+    profile = _write_profile(tmp_path, "call", [])
     _write_environ(proc_root, 1, {"HERMES_PROFILE_DIR_CALL": str(profile)})
 
     snapshot_file = tmp_path / "snapshot.json"
@@ -428,3 +449,128 @@ def test_requires_pid_or_unit(pf):
     with pytest.raises(SystemExit) as e:
         pf.main(["--proc-root", "/proc"])
     assert e.value.code == 2
+
+
+# ----------------------------------------------------- lane-profile invariants
+
+from demo.acceptance import preflight as lane_pf  # noqa: E402
+
+FIX = Path(__file__).parent / "fixtures" / "acceptance" / "profiles"
+INV = Path(__file__).resolve().parents[1] / "demo" / "acceptance" / "invariants.yaml"
+RULES = lane_pf.load_invariants(INV)["lanes"]
+ASSISTANT = "You are the assistant the room calls by name."
+
+
+def _profile(root, name, disabled, soul):
+    """A profile that breaks exactly one rule, built per test (rule isolation)."""
+    p = root / name
+    p.mkdir()
+    (p / "config.yaml").write_text("agent: {disabled_toolsets: %s}\n" % disabled)
+    (p / "SOUL.md").write_text(soul)
+    return p
+
+
+def test_rule_call_needs_file_toolset(tmp_path):
+    p = _profile(tmp_path, "call-x", "[file]", ASSISTANT)
+    c = lane_pf.check_lane("call", p, RULES["call"], {"call": p, "coach": FIX / "coach"})
+    assert (c.id, c.status) == ("preflight.lane-profile.call", "FAIL")
+    assert c.evidence.endswith(": toolset file disabled")
+
+
+def test_rule_coach_must_not_have_file_toolset(tmp_path):
+    p = _profile(tmp_path, "lane-x", "[]", "x")
+    c = lane_pf.check_lane("coach", p, RULES["coach"], {"coach": p})
+    assert (c.id, c.status) == ("preflight.lane-profile.coach", "FAIL") and "toolset file enabled" in c.evidence
+
+
+def test_rule_main_must_not_have_file_toolset(tmp_path):
+    p = _profile(tmp_path, "lane-y", "[]", "x")
+    c = lane_pf.check_lane("main", p, RULES["main"], {"main": p})
+    assert (c.id, c.status) == ("preflight.lane-profile.main", "FAIL") and "toolset file enabled" in c.evidence
+
+
+def test_rule_call_soul_must_not_be_coach(tmp_path):
+    p = _profile(tmp_path, "call-x", "[]", "You are the Coach lane.")
+    c = lane_pf.check_lane("call", p, RULES["call"], {"call": p, "coach": FIX / "coach"})
+    assert c.status == "FAIL" and c.evidence.endswith(r": SOUL matches (?i)\bcoach\b")
+
+
+def test_rule_call_path_must_not_be_coach(tmp_path):
+    p = _profile(tmp_path, "coach-named", "[]", ASSISTANT)
+    c = lane_pf.check_lane("call", p, RULES["call"], {"call": p, "coach": FIX / "coach"})
+    assert c.status == "FAIL" and c.evidence.endswith(": path matches *coach*")
+
+
+def test_rule_call_distinct_from_coach(tmp_path):
+    p = _profile(tmp_path, "call-x", "[]", ASSISTANT)
+    c = lane_pf.check_lane("call", p, RULES["call"], {"call": p, "coach": p})
+    assert c.status == "FAIL" and c.evidence.endswith(": same profile as coach")
+
+
+def test_missing_profile_config_fails(tmp_path):
+    c = lane_pf.check_lane("call", tmp_path, RULES["call"], {})
+    assert c.status == "FAIL" and "no profile config found" in c.evidence
+
+
+def test_profile_without_toolset_keys_counts_as_nothing_disabled(tmp_path):
+    p = tmp_path / "bare"
+    p.mkdir()
+    (p / "config.yaml").write_text("agent: {enabled_toolsets: [file]}\n")
+    c = lane_pf.check_lane("main", p, RULES["main"], {"main": p})
+    assert c.status == "FAIL" and c.evidence.endswith(": toolset file enabled")
+
+
+def _argv(main, call):
+    return ["python3", "consumer.py", "--worker-command", f"env X=1 py worker.py --hermes-home {main} --model m",
+            "--lane-call-worker-command", f"env X=1 py worker.py --hermes-home {call} --no-history"]
+
+
+def test_lane_profiles_explicit_coach_command(tmp_path):
+    lp = lane_pf.lane_profiles(_argv(FIX / "main", FIX / "call-ok"),
+                               coach_command=f"py worker.py --hermes-home {FIX / 'coach'}",
+                               home=tmp_path)
+    assert lp["coach"] == FIX / "coach"
+
+
+def test_lane_profiles_call_falls_back_to_dedicated_profile(tmp_path):
+    argv = ["consumer.py", "--worker-command", f"py worker.py --hermes-home {FIX / 'main'}"]
+    lp = lane_pf.lane_profiles(argv, coach_command="", home=tmp_path)
+    assert lp["call"] == tmp_path / ".hermes" / "profiles" / "cothinker"
+    assert lp["main"] == FIX / "main"
+
+
+def test_lane_profiles_coach_falls_back_to_dedicated_profile(tmp_path):
+    lp = lane_pf.lane_profiles(_argv(FIX / "main", FIX / "call-ok"), coach_command="", home=tmp_path)
+    assert lp == {"main": FIX / "main", "call": FIX / "call-ok",
+                  "coach": tmp_path / ".hermes" / "profiles" / "cothinker-coach"}
+
+
+def test_call_lane_on_coach_profile_fails_with_found_path():      # failure 1, red
+    lp = {"main": FIX / "main", "coach": FIX / "coach", "call": FIX / "call-coach"}
+    c = lane_pf.check_lane("call", lp["call"], RULES["call"], lp)
+    assert c.status == "FAIL" and "call-coach" in c.evidence and "file" in c.evidence
+
+
+def test_lanes_ok():
+    lp = {"main": FIX / "main", "coach": FIX / "coach", "call": FIX / "call-ok"}
+    for lane in ("main", "call", "coach"):
+        assert lane_pf.check_lane(lane, lp[lane], RULES[lane], lp).status == "PASS"
+
+
+def test_call_equal_to_coach_path_fails():
+    lp = {"main": FIX / "call-ok", "coach": FIX / "call-ok", "call": FIX / "call-ok"}
+    c = lane_pf.check_lane("call", lp["call"], RULES["call"], lp)
+    assert c.status == "FAIL" and "same profile as coach" in c.evidence
+
+
+def test_main_reports_every_lane_and_fails_on_bad_call_lane(pf, tmp_path, capsys):
+    proc_root = tmp_path / "proc"
+    extra = _write_lanes(tmp_path, proc_root, 7)
+    _write_profile(tmp_path, "lane-call", ["file"])   # call lane loses its file toolset
+    _write_environ(proc_root, 7, {"HERMES_PROFILE_DIR_CALL": str(tmp_path / "lane-call")})
+    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "7"] + extra)
+    out = capsys.readouterr().out
+    assert rc == 1
+    assert "PASS preflight.lane-profile.main:" in out
+    assert "PASS preflight.lane-profile.coach:" in out
+    assert "FAIL preflight.lane-profile.call:" in out and "toolset file disabled" in out

@@ -8,11 +8,12 @@ Checks:
 - `lane_profile`: the consumer's `--profile-env` environment variable
   (`<proc-root>/<consumer-pid>/environ`, NUL-separated; the PID is either
   given directly or looked up from a systemd user unit) names a profile
-  directory whose `config.yaml` lists `--call-toolset` under
-  `agent.enabled_toolsets` (`gateway/worker.py`'s own reading of a
-  profile's `config.yaml`, `shared/profiles/skel/main/config.yaml`'s
-  schema -- there is no literal top-level `toolsets:` key in this repo)
-  and whose basename does not match `--forbidden-profile-glob`.
+  directory whose `config.yaml` does not list `--call-toolset` under
+  `agent.disabled_toolsets` (the key `gateway/worker.py` applies) and
+  whose path does not match `--forbidden-profile-glob`.
+- `preflight.lane-profile.<main|coach|call>`: every lane's profile (the
+  `--hermes-home` of the consumer's command line, see `lane_profiles`) is
+  checked against the rules in `--invariants` (`invariants.yaml`).
 - `eou_silence`: the last `[sm-rt]` line of `--stt-log` carries
   `eou_silence=<float>` equal to `--expect-eou`; `max_delay=` is printed
   for information only.
@@ -41,6 +42,7 @@ Checks:
 usage: preflight.py --consumer-pid N [--proc-root /proc]
          [--profile-env HERMES_PROFILE_DIR_CALL] [--call-toolset file]
          [--forbidden-profile-glob '*coach*']
+         [--invariants PATH] [--home DIR]
          [--stt-log PATH] [--expect-eou 1.8]
          [--consumer-log PATH] [--template PATH] [--start-marker REGEX]
          [--snapshot-url URL --token-file PATH | --snapshot-file PATH]
@@ -53,6 +55,7 @@ import argparse
 import fnmatch
 import json
 import re
+import shlex
 import subprocess
 import sys
 import urllib.request
@@ -68,6 +71,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 from demo.acceptance.report import Check  # noqa: E402
 
+DEFAULT_INVARIANTS = Path(__file__).resolve().parent / "invariants.yaml"
 DEFAULT_PROFILE_ENV = "HERMES_PROFILE_DIR_CALL"
 DEFAULT_CALL_TOOLSET = "file"
 DEFAULT_FORBIDDEN_PROFILE_GLOB = "*coach*"
@@ -119,6 +123,84 @@ def resolve_consumer_pid(*, consumer_pid: Optional[int],
     return pid, None
 
 
+def _hermes_home(command: str) -> Optional[Path]:
+    parts = shlex.split(command or "")
+    if "--hermes-home" in parts:
+        i = parts.index("--hermes-home")
+        if i + 1 < len(parts):
+            return Path(parts[i + 1])
+    return None
+
+
+def _flag(argv, name: str) -> str:
+    return argv[argv.index(name) + 1] if name in argv[:-1] else ""
+
+
+def lane_profiles(consumer_argv, coach_command: str, *,
+                  home: Path = Path.home()) -> dict:
+    """Profile directory of each lane worker, as `gateway/consumer.py` picks
+    it: main is the `--hermes-home` of `--worker-command`; call is that of
+    `--lane-call-worker-command`, else the dedicated call profile under
+    `home`; coach is that of the template's `lane_coach_worker_command`,
+    else the dedicated coach profile under `home`."""
+    home = Path(home)
+    call_home = _hermes_home(_flag(consumer_argv, "--lane-call-worker-command"))
+    coach_home = _hermes_home(coach_command)
+    return {
+        "main": _hermes_home(_flag(consumer_argv, "--worker-command")),
+        "call": call_home or home / ".hermes" / "profiles" / "cothinker",
+        "coach": coach_home or home / ".hermes" / "profiles" / "cothinker-coach",
+    }
+
+
+def load_invariants(path: Path) -> dict:
+    return yaml.safe_load(Path(path).read_text(encoding="utf-8"))
+
+
+def _disabled(profile: Path) -> list:
+    # The key the runtime applies (gateway/worker.py): agent.disabled_toolsets.
+    cfg = yaml.safe_load((profile / "config.yaml").read_text(encoding="utf-8")) or {}
+    return list((cfg.get("agent") or {}).get("disabled_toolsets") or [])
+
+
+def check_lane(lane: str, profile, rules: dict, all_profiles: dict) -> Check:
+    cid = f"preflight.lane-profile.{lane}"
+    if profile is None or not (Path(profile) / "config.yaml").exists():
+        return Check(cid, "FAIL", f"no profile config found (profile={profile})")
+    profile = Path(profile)
+    try:
+        disabled = _disabled(profile)
+    except (OSError, yaml.YAMLError) as e:
+        return Check(cid, "FAIL", f"profile={profile} config.yaml unreadable: {e}")
+    problems = []
+    for t in rules.get("toolsets_enabled", []):
+        if t in disabled:
+            problems.append(f"toolset {t} disabled")
+    for t in rules.get("toolsets_disabled", []):
+        if t not in disabled:
+            problems.append(f"toolset {t} enabled")
+    soul_path = profile / "SOUL.md"
+    soul = soul_path.read_text(encoding="utf-8") if soul_path.exists() else ""
+    for pat in rules.get("soul_must_not_match", []):
+        if re.search(pat, soul):
+            problems.append(f"SOUL matches {pat}")
+    for glob in rules.get("path_must_not_match", []):
+        if fnmatch.fnmatch(str(profile), glob):
+            problems.append(f"path matches {glob}")
+    for other in rules.get("distinct_from", []):
+        if all_profiles.get(other) == profile:
+            problems.append(f"same profile as {other}")
+    return Check(cid, "FAIL" if problems else "PASS",
+                 f"profile={profile} disabled_toolsets={disabled}" +
+                 (": " + "; ".join(problems) if problems else ""))
+
+
+def read_cmdline(path: Path) -> list:
+    """`<proc-root>/<pid>/cmdline`: NUL-separated argv."""
+    return [p.decode("utf-8", errors="replace")
+            for p in Path(path).read_bytes().split(b"\0") if p]
+
+
 def check_lane_profile(*, proc_root: Path, pid: int, profile_env: str,
                        call_toolset: str, forbidden_profile_glob: str) -> Check:
     name = "lane_profile"
@@ -131,26 +213,11 @@ def check_lane_profile(*, proc_root: Path, pid: int, profile_env: str,
         return Check(name, "FAIL",
                       f"{profile_env} not set (environ={environ_path})")
     profile_dir = Path(profile_dir_raw)
-    config_path = profile_dir / "config.yaml"
-    if not config_path.is_file():
-        return Check(name, "FAIL",
-                      f"dir={profile_dir} toolsets=[] (no config.yaml)")
-    try:
-        cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
-    except yaml.YAMLError as e:
-        return Check(name, "FAIL", f"{config_path} is not valid YAML: {e}")
-    toolsets = list((cfg.get("agent") or {}).get("enabled_toolsets") or [])
-    problems = []
-    if call_toolset not in toolsets:
-        problems.append(f"toolset {call_toolset!r} not in {toolsets}")
-    if fnmatch.fnmatch(profile_dir.name, forbidden_profile_glob):
-        problems.append(
-            f"basename matches forbidden glob {forbidden_profile_glob!r}")
-    if problems:
-        return Check(name, "FAIL",
-                      f"dir={profile_dir} toolsets={toolsets} "
-                      f"({'; '.join(problems)})")
-    return Check(name, "PASS", f"dir={profile_dir} toolsets={toolsets}")
+    lane = check_lane(
+        "call", profile_dir,
+        {"toolsets_enabled": [call_toolset],
+         "path_must_not_match": [forbidden_profile_glob]}, {})
+    return Check(name, lane.status, lane.evidence)
 
 
 # ----------------------------------------------------------------- eou_silence
@@ -289,6 +356,27 @@ def check_contract_fields(*, snapshot: dict, expect_fields: list,
 
 # ------------------------------------------------------------------------ main
 
+def _coach_command(template) -> str:
+    """The coach block's `lane_coach_worker_command` ('' = not configured)."""
+    from gateway.block_host_wiring import coach_block_config
+    cfg = (coach_block_config(Path(template)) if template
+           else coach_block_config())
+    return cfg.get("lane_coach_worker_command") or ""
+
+
+def _lane_checks(*, cmdline: Path, invariants: Path, template, home: Path) -> list:
+    rules = load_invariants(invariants)["lanes"]
+    try:
+        argv = read_cmdline(cmdline)
+    except OSError as e:
+        return [Check(f"preflight.lane-profile.{lane}", "FAIL",
+                      f"consumer command line not readable at {cmdline}: "
+                      f"{type(e).__name__}") for lane in rules]
+    profiles = lane_profiles(argv, _coach_command(template), home=home)
+    return [check_lane(lane, profiles.get(lane), lane_rules, profiles)
+            for lane, lane_rules in rules.items()]
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--proc-root", default="/proc")
@@ -298,6 +386,10 @@ def main(argv=None) -> int:
     ap.add_argument("--call-toolset", default=DEFAULT_CALL_TOOLSET)
     ap.add_argument("--forbidden-profile-glob",
                     default=DEFAULT_FORBIDDEN_PROFILE_GLOB)
+    ap.add_argument("--invariants", default=str(DEFAULT_INVARIANTS))
+    ap.add_argument("--home", default=str(Path.home()),
+                    help="home directory the consumer resolves its default "
+                         "lane profiles under")
     ap.add_argument("--stt-log")
     ap.add_argument("--expect-eou", type=float, default=DEFAULT_EXPECT_EOU)
     ap.add_argument("--consumer-log")
@@ -324,6 +416,10 @@ def main(argv=None) -> int:
             proc_root=Path(a.proc_root), pid=pid, profile_env=a.profile_env,
             call_toolset=a.call_toolset,
             forbidden_profile_glob=a.forbidden_profile_glob))
+        checks.extend(_lane_checks(
+            cmdline=Path(a.proc_root) / str(pid) / "cmdline",
+            invariants=Path(a.invariants), template=a.template,
+            home=Path(a.home)))
 
     if a.stt_log:
         checks.append(check_eou_silence(stt_log=Path(a.stt_log),
