@@ -38,68 +38,12 @@ import time
 import urllib.error
 import urllib.request
 import wave
-from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Callable
 from urllib.parse import urlsplit
 
 from demo.acceptance import make_tts, score
-
-# --------------------------------------------------------------------------
-# Report / Check / redaction (point 9: PASS/FAIL/SKIPPED with evidence; the
-# token never appears in a report or on stdout).
-# --------------------------------------------------------------------------
-
-STATUSES = ("PASS", "FAIL", "SKIPPED")
-
-
-def redact(text: str, token: str) -> str:
-    if not token:
-        return text
-    return text.replace(token, "<redacted>")
-
-
-@dataclass
-class Check:
-    name: str
-    status: str
-    detail: str = ""
-
-    def to_dict(self) -> dict:
-        return {"name": self.name, "status": self.status, "detail": self.detail}
-
-
-@dataclass
-class Report:
-    base_url: str
-    token: str
-    checks: list[Check] = field(default_factory=list)
-
-    def add(self, name: str, status: str, detail: str = "") -> Check:
-        assert status in STATUSES, status
-        check = Check(name, status, redact(detail, self.token))
-        self.checks.append(check)
-        return check
-
-    @property
-    def passed(self) -> bool:
-        return not any(c.status == "FAIL" for c in self.checks)
-
-    def to_dict(self) -> dict:
-        return {
-            "base_url": self.base_url,
-            "pass": self.passed,
-            "checks": [c.to_dict() for c in self.checks],
-        }
-
-    def to_markdown(self) -> str:
-        lines = ["# Acceptance report", "", "Base URL: %s" % self.base_url, "",
-                 "| Status | Check | Detail |", "|---|---|---|"]
-        for c in self.checks:
-            lines.append("| %s | %s | %s |" % (c.status, c.name, c.detail))
-        lines.append("")
-        lines.append("Overall: %s" % ("PASS" if self.passed else "FAIL"))
-        return "\n".join(lines)
+from demo.acceptance.report import Check, Report, new_run_id, redact
 
 
 # --------------------------------------------------------------------------
@@ -643,7 +587,7 @@ def main(argv: list[str]) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    report = Report(base_url=args.base_url, token=token)
+    report = Report(new_run_id(), base_url=args.base_url, token=token)
     session_title = "e2e-" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
 
     # 1. Preflight.
@@ -735,9 +679,7 @@ def main(argv: list[str]) -> int:
     print(cleanup_command(session_title))
 
     # 9. Output.
-    (out_dir / "report.json").write_text(
-        json.dumps(report.to_dict(), indent=2) + "\n", encoding="utf-8")
-    (out_dir / "report.md").write_text(report.to_markdown() + "\n", encoding="utf-8")
+    report.write(out_dir)
     print(report.to_markdown())
     if not args.keep_artifacts:
         for name in ("alex.wav", "sam.wav"):
