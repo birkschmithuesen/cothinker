@@ -361,10 +361,41 @@ def lane_model_from_preflight(path) -> Optional[str]:
     return None
 
 
+CLIPS_DIR = Path(__file__).resolve().parent / "clips"
+
+
+def committed_clip(clip_id: str) -> Optional[Path]:
+    """The committed `clips/<id>.opus`, or None."""
+    p = CLIPS_DIR / f"{clip_id}.opus"
+    return p if p.is_file() else None
+
+
+def clip_pcm(clip_id: str, audio_dir, ffmpeg: str, tmp: Path, decode=None) -> bytes:
+    """16 kHz mono s16 PCM of one `clip:` step.
+
+    A private `<audio-dir>/<id>.wav` wins (that is how clips that must never
+    be committed plug in); otherwise the committed `clips/<id>.opus` is decoded
+    with ffmpeg. `decode(raw, ffmpeg, norm) -> bytes` is injectable for tests."""
+    if audio_dir:
+        private = Path(audio_dir) / f"{clip_id}.wav"
+        if private.is_file():
+            with wave.open(str(private), "rb") as w:
+                return w.readframes(w.getnframes())
+    opus = committed_clip(clip_id)
+    if opus is None:
+        raise FileNotFoundError(f"clip {clip_id!r}: no <audio-dir>/{clip_id}.wav "
+                                f"and no committed clips/{clip_id}.opus")
+    if decode is None:
+        from demo.acceptance import e2e
+        decode = e2e._normalize_wav
+    return decode(opus, ffmpeg, Path(tmp) / f"{clip_id}.wav")
+
+
 def _scenario_wavs(s, args, workdir: Path) -> tuple:
     """Per-speaker WAV files for a call run: every say step rendered by piper,
-    clip steps read verbatim from `<audio-dir>/<x>.wav`, each placed at its
-    scenario time with silence padding. -> ({speaker: path}, total_seconds)."""
+    clip steps taken from `<audio-dir>/<x>.wav` or the committed
+    `clips/<x>.opus` (decoded to 16 kHz), each placed at its scenario time
+    with silence padding. -> ({speaker: path}, total_seconds)."""
     import tempfile
     from demo.acceptance import e2e
     from demo.acceptance import make_tts
@@ -376,8 +407,7 @@ def _scenario_wavs(s, args, workdir: Path) -> tuple:
                 pcm[i] = e2e.render_piper(args.piper_cmd, Path(voice), args.ffmpeg,
                                           step["say"], Path(td))
             elif "clip" in step:
-                with wave.open(str(Path(args.audio_dir) / f"{step['clip']}.wav"), "rb") as w:
-                    pcm[i] = w.readframes(w.getnframes())
+                pcm[i] = clip_pcm(step["clip"], args.audio_dir, args.ffmpeg, Path(td))
     durations = {i: len(b) / 2 / make_tts.RATE for i, b in pcm.items()}
     starts, total = step_starts(s.timeline, durations)
     items: dict = {}
@@ -655,7 +685,8 @@ def _require_observation_sources(ap, args) -> None:
     if not args.session_dir and any("transcript" in s.expect for s in chosen):
         need.append("--session-dir (a selected scenario expects transcript)")
     if not args.audio_dir and any(
-            "clip" in st or str(sp.get("voice", "")).startswith("audio-dir:")
+            ("clip" in st and committed_clip(st["clip"]) is None)
+            or str(sp.get("voice", "")).startswith("audio-dir:")
             for s in chosen for st in s.timeline for sp in s.speakers):
         need.append("--audio-dir (a selected scenario uses an audio clip)")
     if need:

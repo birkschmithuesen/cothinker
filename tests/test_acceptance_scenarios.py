@@ -580,7 +580,14 @@ def test_call_exception_becomes_fail_row_and_report_is_written(sc, tmp_path, cap
     assert (tmp_path / "run" / "report.json").is_file()
 
 
-def test_call_mode_requires_audio_dir_for_clip_scenarios(sc, tmp_path, capsys):
+def test_call_mode_committed_clip_needs_no_audio_dir(sc, tmp_path):
+    args = sc.parse_args([*_CALL_BASE, "--only", "c", "--consumer-log", "l",
+                          "--session-dir", "d", "--out", str(tmp_path)])
+    assert args.audio_dir is None
+
+
+def test_call_mode_requires_audio_dir_for_private_clip_scenarios(sc, tmp_path, capsys, monkeypatch):
+    monkeypatch.setattr(sc, "committed_clip", lambda clip_id: None)
     with pytest.raises(SystemExit) as e:
         sc.parse_args([*_CALL_BASE, "--only", "c", "--consumer-log", "l",
                        "--session-dir", "d", "--out", str(tmp_path)])

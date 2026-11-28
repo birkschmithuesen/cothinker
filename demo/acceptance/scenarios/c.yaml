@@ -3,9 +3,9 @@ title: Natural speech is segmented at sentence ends
 request_class: natural-segmentation
 regression_only: false
 speakers:
-  - {name: Alex, voice: "audio-dir:c"}
+  - {name: Alex, voice: "clip:de-parl-01"}
 timeline:
-  - {speaker: Alex, clip: c}
+  - {speaker: Alex, clip: de-parl-01}
 gaps: null
 expect:
   transcript:

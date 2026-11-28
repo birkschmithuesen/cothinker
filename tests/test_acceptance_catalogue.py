@@ -84,9 +84,9 @@ def test_catalogue_uses_only_placeholder_speakers_and_f_g_name_both():
     assert any("overlap_prev_s" in st for st in scen["g"].timeline)
 
 
-def test_scenario_c_placeholder_and_threshold():
+def test_scenario_c_committed_clip_and_threshold():
     c = load_all(SCEN_DIR)["c"]
-    assert any(sp["voice"] == "audio-dir:c" for sp in c.speakers)
+    assert any(sp["voice"] == "clip:de-parl-01" for sp in c.speakers)
     assert c.expect["transcript"]["mid_sentence_max"] == "baseline:scenario.share_no_sentence_end"
     assert required_thresholds(load_all(SCEN_DIR).values()) == {
         "baseline:scenario.share_no_sentence_end"

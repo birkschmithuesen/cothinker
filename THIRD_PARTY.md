@@ -23,3 +23,12 @@ the vendor READMEs next to the bundles.
 
 Each licence file above travels with its material and is the
 authoritative text; this table is an index, not a copy.
+
+## Speech clips for the acceptance run
+
+| Path | What | Licence | Upstream |
+|---|---|---|---|
+| `demo/acceptance/clips/` | German speech clips (`de-parl-01` to `de-parl-03`) with reference text, from the VoxPopuli German transcribed split (European Parliament speech, Meta AI) | CC0 1.0, https://creativecommons.org/publicdomain/zero/1.0/ | https://huggingface.co/datasets/facebook/voxpopuli |
+
+Source, licence URL, attribution and measured pauses per clip are in
+`demo/acceptance/clips/SOURCES.md`.
