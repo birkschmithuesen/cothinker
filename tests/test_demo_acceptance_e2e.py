@@ -431,3 +431,10 @@ def test_arg_parser_rejects_an_unknown_tts_engine():
         e2e.build_arg_parser().parse_args(
             ["--base-url", "https://example.org", "--token-file", "t",
              "--out", "o", "--tts", "siri"])
+
+
+def test_e2e_accepts_preflight_report_flag():
+    args = e2e.build_arg_parser().parse_args(
+        ["--base-url", "u", "--token-file", "t", "--out", "o",
+         "--preflight-report", "p.json"])
+    assert args.preflight_report == "p.json"

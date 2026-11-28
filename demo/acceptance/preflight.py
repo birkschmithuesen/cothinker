@@ -61,6 +61,7 @@ from __future__ import annotations
 import argparse
 import fnmatch
 import json
+import os
 import re
 import shlex
 import subprocess
@@ -77,7 +78,9 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 from demo.acceptance.report import Check  # noqa: E402
+from demo.acceptance import fingerprint  # noqa: E402
 from demo.acceptance.fingerprint import run_sh  # noqa: E402
+from demo.acceptance.report import Report  # noqa: E402
 
 DEFAULT_INVARIANTS = Path(__file__).resolve().parent / "invariants.yaml"
 DEFAULT_PROFILE_ENV = "HERMES_PROFILE_DIR_CALL"
@@ -445,17 +448,46 @@ def _coach_command(template) -> str:
     return cfg.get("lane_coach_worker_command") or ""
 
 
-def _lane_checks(*, cmdline: Path, invariants: Path, template, home: Path) -> list:
+def _lane_checks(*, cmdline: Path, invariants: Path, template, home: Path) -> tuple:
+    """-> (checks, lane -> profile dir; empty when the command line is unreadable)."""
     rules = load_invariants(invariants)["lanes"]
     try:
         argv = read_cmdline(cmdline)
     except OSError as e:
         return [Check(f"preflight.lane-profile.{lane}", "FAIL",
                       f"consumer command line not readable at {cmdline}: "
-                      f"{type(e).__name__}") for lane in rules]
+                      f"{type(e).__name__}") for lane in rules], {}
     profiles = lane_profiles(argv, _coach_command(template), home=home)
     return [check_lane(lane, profiles.get(lane), lane_rules, profiles)
-            for lane, lane_rules in rules.items()]
+            for lane, lane_rules in rules.items()], profiles
+
+
+def _repo_of_unit(unit: Optional[str]) -> Optional[Path]:
+    """WorkingDirectory of a systemd user unit, or None."""
+    if not unit:
+        return None
+    out = run_sh(["systemctl", "--user", "show", "-p", "WorkingDirectory",
+                  "--value", unit]).strip()
+    return Path(out) if out else None
+
+
+def _demo_env_path(home: Path) -> Path:
+    """Same rule as demo.sh: $DEMO_ENV, else the demo.env in the config dir."""
+    return Path(os.environ.get("DEMO_ENV")
+                or home / ".config" / "cothinker-demo" / "demo.env")
+
+
+def fingerprint_check(*, unit: Optional[str], profiles: dict, home: Path):
+    """-> (Check, fingerprint dict or None). Only digests are recorded."""
+    repo = _repo_of_unit(unit)
+    if repo is None:
+        return (Check("preflight.fingerprint", "FAIL",
+                      "repo (consumer unit WorkingDirectory) not determinable; "
+                      "give --consumer-unit"), None)
+    fp = fingerprint.from_inputs(fingerprint.collect(
+        fingerprint.DEFAULT_UNITS, repo=repo, demo_env=_demo_env_path(home),
+        profiles=profiles))
+    return Check("preflight.fingerprint", "PASS", fp.digest), fp.to_dict()
 
 
 def main(argv=None) -> int:
@@ -471,6 +503,8 @@ def main(argv=None) -> int:
     ap.add_argument("--home", default=str(Path.home()),
                     help="home directory the consumer resolves its default "
                          "lane profiles under")
+    ap.add_argument("--out", help="write preflight-<run_id>/report.json (with "
+                                  "the deployment fingerprint) under this directory")
     ap.add_argument("--stt-log")
     ap.add_argument("--expect-eou", type=float, required=True)
     ap.add_argument("--expect-max-delay", type=float, required=True)
@@ -491,6 +525,7 @@ def main(argv=None) -> int:
         ap.error("one of --consumer-pid or --consumer-unit is required")
 
     checks = []
+    profiles = {}
 
     pid, pid_err = resolve_consumer_pid(consumer_pid=a.consumer_pid,
                                         consumer_unit=a.consumer_unit)
@@ -501,10 +536,11 @@ def main(argv=None) -> int:
             proc_root=Path(a.proc_root), pid=pid, profile_env=a.profile_env,
             call_toolset=a.call_toolset,
             forbidden_profile_glob=a.forbidden_profile_glob))
-        checks.extend(_lane_checks(
+        lane_results, profiles = _lane_checks(
             cmdline=Path(a.proc_root) / str(pid) / "cmdline",
             invariants=Path(a.invariants), template=a.template,
-            home=Path(a.home)))
+            home=Path(a.home))
+        checks.extend(lane_results)
 
     if a.stt_log:
         try:
@@ -547,6 +583,14 @@ def main(argv=None) -> int:
             checks.extend(check_contract_fields(
                 snapshot=snapshot, expect_fields=expect_fields,
                 optional_fields=optional_fields))
+
+    if a.out:
+        fp_check, fp = fingerprint_check(unit=a.consumer_unit, profiles=profiles,
+                                         home=Path(a.home))
+        checks.append(fp_check)
+        rep = Report(fingerprint=fp)
+        rep.extend(checks)
+        rep.write(Path(a.out) / f"preflight-{rep.run_id}")
 
     for c in checks:
         print(f"{c.status} {c.id}: {c.evidence}")

@@ -665,3 +665,33 @@ def test_main_registry_check_fails_for_unresolvable_block(pf, tmp_path, capsys):
             + ["--consumer-log", str(log), "--template", str(tpl)])
     out = capsys.readouterr().out
     assert "FAIL preflight.blocks.registry:" in out and "no-such-block-zz" in out
+
+
+def test_main_out_writes_report_with_fingerprint(pf, tmp_path, monkeypatch, capsys):
+    proc_root = tmp_path / "proc"
+    profile = _write_profile(tmp_path, "call", [])
+    _write_environ(proc_root, 9, {"HERMES_PROFILE_DIR_CALL": str(profile)})
+    extra = _write_lanes(tmp_path, proc_root, 9)
+    seen = {}
+
+    def fake_collect(units, **kw):
+        seen.update(kw)
+        return {"unit:x:env": b"SECRET_VALUE_123"}
+
+    monkeypatch.setattr(pf.fingerprint, "collect", fake_collect)
+    monkeypatch.setattr(pf, "_repo_of_unit", lambda unit: tmp_path)
+    monkeypatch.setenv("DEMO_ENV", str(tmp_path / "demo.env"))
+    out = tmp_path / "out"
+    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "9",
+                  "--consumer-unit", "u.service", "--out", str(out)] + THR + extra)
+    assert rc == 0
+    assert seen["repo"] == tmp_path and seen["demo_env"] == tmp_path / "demo.env"
+    assert set(seen["profiles"]) == {"main", "call", "coach"}
+    (d,) = list(out.glob("preflight-*"))
+    text = (d / "report.json").read_text(encoding="utf-8")
+    data = json.loads(text)
+    assert d.name == "preflight-" + data["run_id"]
+    assert data["fingerprint"]["digest"]
+    assert "SECRET_VALUE_123" not in text
+    assert any(c["id"] == "preflight.fingerprint" and c["status"] == "PASS"
+               for c in data["checks"])

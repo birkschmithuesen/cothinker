@@ -62,7 +62,7 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 if str(_ACC_DIR) not in sys.path:
     sys.path.insert(0, str(_ACC_DIR))
-from demo.acceptance.report import Check  # noqa: E402
+from demo.acceptance.report import Check, Report, bind_preflight  # noqa: E402
 import score as _score  # noqa: E402
 from preflight import load_snapshot  # noqa: E402
 
@@ -333,15 +333,24 @@ def parse_args(argv=None):
     ap.add_argument("--mid-sentence-max", type=float, default=DEFAULT_MID_SENTENCE_MAX)
     ap.add_argument("--agenda-file")
     ap.add_argument("--timeout", type=float, default=DEFAULT_TIMEOUT)
+    ap.add_argument("--preflight-report",
+                    help="report.json of the preflight run to bind this run to")
+    ap.add_argument("--out",
+                    help="also write report.json/report.md of this run here")
     return ap.parse_args(argv)
 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
+    rep = Report()
+    bind_preflight(rep, args.preflight_report)
     checks = [run_scenario(name, args) for name in args.scenarios]
-    for c in checks:
+    rep.extend(checks)
+    for c in rep.checks:
         print(f"{c.status} {c.id}: {c.evidence}")
-    return 1 if any(c.status == "FAIL" for c in checks) else 0
+    if args.out:
+        rep.write(Path(args.out))
+    return 0 if rep.passed else 1
 
 
 if __name__ == "__main__":

@@ -43,7 +43,7 @@ from typing import Callable
 from urllib.parse import urlsplit
 
 from demo.acceptance import make_tts, score
-from demo.acceptance.report import Check, Report, new_run_id, redact
+from demo.acceptance.report import Check, Report, bind_preflight, new_run_id, redact
 
 
 # --------------------------------------------------------------------------
@@ -563,6 +563,8 @@ def build_arg_parser() -> argparse.ArgumentParser:
     ap.add_argument("--chrome", default="google-chrome")
     ap.add_argument("--min-score-ratio", type=float, default=0.9)
     ap.add_argument("--wiki-dir")
+    ap.add_argument("--preflight-report",
+                    help="report.json of the preflight run to bind this run to")
     return ap
 
 
@@ -589,6 +591,8 @@ def main(argv: list[str]) -> int:
 
     report = Report(new_run_id(), base_url=args.base_url, token=token)
     session_title = "e2e-" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
+
+    bind_preflight(report, args.preflight_report)
 
     # 1. Preflight.
     report.checks.extend(preflight(args.base_url, token))

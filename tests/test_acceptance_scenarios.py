@@ -344,3 +344,20 @@ def test_run_scenario_b_skipped_without_agenda_file(sc, tmp_path):
     check = sc.run_scenario("b", a)
     assert check.status == "SKIPPED"
     assert "agenda-file" in check.evidence
+
+
+def test_main_binds_to_preflight_report(sc, tmp_path, monkeypatch, capsys):
+    from demo.acceptance import report
+    pre = report.Report("pre9", fingerprint={"digest": "abcdef0123456789", "parts": {}})
+    pre.write(tmp_path / "pre")
+    monkeypatch.setattr(sc, "run_scenario",
+                        lambda name, args: report.Check(name, "PASS", "ok"))
+    rc = sc.main(["--audio-dir", "x", "--url-file", "u", "--cdp-port", "1",
+                  "--snapshot-url", "s", "--token-file", "t", "--consumer-log", "l",
+                  "--session-dir", "d", "--scenarios", "a",
+                  "--preflight-report", str(tmp_path / "pre" / "report.json"),
+                  "--out", str(tmp_path / "run")])
+    assert rc == 0
+    assert "PASS fingerprint.bound:" in capsys.readouterr().out
+    data = json.loads((tmp_path / "run" / "report.json").read_text())
+    assert data["preflight_run_id"] == "pre9"
