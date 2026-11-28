@@ -8,9 +8,10 @@ from demo.acceptance import acceptances as acc
 ENTRY = '[[accept]]\ncheck_id = "scenario.d.topic"\nfingerprint = "d1"\naccepted_by = "Alex Example"\nreason = "known, F2"\n'
 
 
-def _git(repo, *args, name="Alex Example", email="alex@example.invalid"):
-    env = {"GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email, "GIT_COMMITTER_NAME": name,
-           "GIT_COMMITTER_EMAIL": email, "PATH": "/usr/bin:/bin", "HOME": str(repo)}
+def _git(repo, *args, name="Alex Example", email="alex@example.invalid", committer=None):
+    cname, cemail = committer or (name, email)
+    env = {"GIT_AUTHOR_NAME": name, "GIT_AUTHOR_EMAIL": email, "GIT_COMMITTER_NAME": cname,
+           "GIT_COMMITTER_EMAIL": cemail, "PATH": "/usr/bin:/bin", "HOME": str(repo)}
     subprocess.run(["git", *args], cwd=repo, env=env, check=True, capture_output=True)
 
 
@@ -115,7 +116,7 @@ def test_zero_sha_blame_rejected_without_status_check(tmp_path):
             return 0, ""
         rc, out = acc.run_sh_in(argv, cwd)
         if "blame" in argv:
-            out = out.replace(out.split()[0], "0" * 40)
+            out = out.replace(out.split()[0], b"0" * 40)
         return rc, out
     ok, rejected = acc.load_verified(f, agent_ids=AGENTS, sh=sh)
     assert ok == [] and "not committed" in rejected[0]
@@ -210,3 +211,93 @@ def test_agent_email_matched_case_insensitively_any_name(tmp_path):
     f = _repo(tmp_path, ("Someone Else", "ROBO@Example.Invalid"))
     ok, rejected = acc.load_verified(f, agent_ids=AGENTS)
     assert ok == [] and "agent identity" in rejected[0]
+
+
+def _forged_first(tmp_path, comment):
+    """Human commit holds ENTRY; an agent commit prepends `comment` plus its own forged entry above it."""
+    f = _repo(tmp_path)
+    forged = ENTRY.replace("scenario.d.topic", "scenario.forged")
+    f.write_bytes((comment + forged + ENTRY).encode("utf-8"))
+    _git(tmp_path, "commit", "-qam", "forge", name="Bot", email="bot@example.invalid")
+    return f
+
+
+BOT = {("Bot", "bot@example.invalid")}
+
+
+@pytest.mark.parametrize("sep", [" ", " ", "\x85", "\x0b", "\x0c", "\x1c"])
+def test_unicode_line_separator_cannot_shift_agent_entry(tmp_path, sep):
+    f = _forged_first(tmp_path, "# c" + sep * 5 + "\n")
+    ok, rejected = acc.load_verified(f, agent_ids=BOT)
+    assert all(a.check_id != "scenario.forged" for a in ok)
+    assert ok == [] or [a.check_id for a in ok] == ["scenario.d.topic"]
+
+
+def test_lone_cr_cannot_shift_agent_entry(tmp_path):
+    f = _forged_first(tmp_path, "# c" + "\r" * 5 + "\n")
+    ok, _ = acc.load_verified(f, agent_ids=BOT)
+    assert all(a.check_id != "scenario.forged" for a in ok)
+
+
+def test_separator_does_not_misattribute_human_entries(tmp_path):
+    f = _forged_first(tmp_path, "# c" + " " * 5 + "\n")
+    ok, rejected = acc.load_verified(f, agent_ids=BOT)
+    assert "scenario.forged" not in [a.check_id for a in ok]
+    assert [a.check_id for a in ok] == ["scenario.d.topic"]
+    assert any("scenario.forged" in r and "agent identity" in r for r in rejected)
+
+
+def test_invalid_utf8_rejects(tmp_path):
+    f = _committed(tmp_path, ENTRY)
+    f.write_bytes(ENTRY.encode() + b'# \xff\xfe\n')
+    _git(tmp_path, "commit", "-qam", "bad")
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS)
+    assert ok == [] and rejected and "UTF-8" in rejected[0]
+
+
+def test_missing_git_binary_rejects(tmp_path):
+    f = _repo(tmp_path)
+
+    def sh(argv, cwd):
+        raise FileNotFoundError("git")
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS, sh=sh)
+    assert ok == [] and rejected and "git" in rejected[0]
+
+
+def test_line_count_mismatch_between_file_and_blame_rejects(tmp_path):
+    f = _repo(tmp_path)
+
+    def sh(argv, cwd):
+        rc, out = acc.run_sh_in(argv, cwd)
+        if "blame" in argv:
+            out = b"\n".join(out.split(b"\n")[:-30])  # truncate: blame reports fewer lines
+        return rc, out
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS, sh=sh)
+    assert ok == [] and rejected
+
+
+def test_agent_committer_rejected(tmp_path):
+    f = _repo(tmp_path)
+    f.write_text(ENTRY.replace('"d1"', '"d2"'))
+    _git(tmp_path, "commit", "-qam", "bump", committer=("Bot", "bot@example.invalid"))
+    ok, rejected = acc.load_verified(f, agent_ids=BOT)
+    assert ok == [] and "agent identity" in rejected[0]
+
+
+def test_agent_committer_email_case_insensitive(tmp_path):
+    f = _repo(tmp_path)
+    f.write_text(ENTRY.replace('"d1"', '"d2"'))
+    _git(tmp_path, "commit", "-qam", "bump", committer=("Someone", "BOT@Example.Invalid"))
+    ok, rejected = acc.load_verified(f, agent_ids=BOT)
+    assert ok == [] and "agent identity" in rejected[0]
+
+
+def test_agent_name_with_other_email_rejected(tmp_path):
+    f = _repo(tmp_path, ("bot", "other@example.invalid"))
+    ok, rejected = acc.load_verified(f, agent_ids=BOT)
+    assert ok == [] and "agent identity" in rejected[0]
+
+
+def test_empty_agent_identities_fail_closed(tmp_path):
+    ok, rejected = acc.load_verified(_repo(tmp_path), agent_ids=set())
+    assert ok == [] and "no agent identities known" in rejected[0]

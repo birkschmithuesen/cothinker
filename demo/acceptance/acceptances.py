@@ -17,8 +17,21 @@ import yaml
 
 
 def run_sh_in(argv, cwd):
-    p = subprocess.run(argv, cwd=cwd, capture_output=True, text=True, check=False)
+    """Run a command; stdout is returned as raw bytes (no newline or encoding folding)."""
+    p = subprocess.run(argv, cwd=cwd, capture_output=True, check=False)
     return p.returncode, p.stdout
+
+
+def _b(out) -> bytes:
+    return out.encode("utf-8") if isinstance(out, str) else out
+
+
+def _lines(data: bytes) -> list:
+    """Split on b"\n" only, as git numbers lines."""
+    parts = data.split(b"\n")
+    if parts and parts[-1] == b"":
+        parts.pop()
+    return parts
 
 
 @dataclass(frozen=True)
@@ -58,38 +71,59 @@ def _blame_lines(name: str, cwd, sh):
     if rc != 0:
         return None
     by_line = {}
-    for ln in out.splitlines():
-        m = re.fullmatch(r"([0-9a-f]{40}) \d+ (\d+)(?: \d+)?", ln)
+    for ln in _b(out).split(b"\n"):
+        m = re.fullmatch(rb"([0-9a-f]{40}) \d+ (\d+)(?: \d+)?", ln)
         if m:
-            by_line[int(m.group(2))] = m.group(1)
+            by_line[int(m.group(2))] = m.group(1).decode("ascii")
     return by_line
 
 
-def _raw_author(sha: str, cwd, sh):
-    """Raw author (name, email) from the commit object; mailmap never applies."""
+def _raw_people(sha: str, cwd, sh):
+    """Raw {"author": (name, email), "committer": (name, email)} from the commit object
+    (mailmap never applies), or None when either is unreadable."""
     rc, out = sh(["git", "cat-file", "commit", sha], cwd)
     if rc != 0:
         return None
-    for ln in out.splitlines():
-        if not ln:
+    people = {}
+    for raw in _b(out).split(b"\n"):
+        if not raw:
             break
-        m = re.fullmatch(r"author (.*?) <([^>]*)> .*", ln)
-        if m:
-            return m.group(1), m.group(2)
-    return None
+        try:
+            ln = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            return None
+        m = re.fullmatch(r"(author|committer) (.*?) <([^>]*)> .*", ln)
+        if m and m.group(1) not in people:
+            people[m.group(1)] = (m.group(2), m.group(3))
+    return people if len(people) == 2 else None
 
 
 def load_verified(path: Path, *, agent_ids: set, allowed_signers: Path | None = None, sh=run_sh_in):
-    path = Path(path)
+    try:
+        return _load_verified(Path(path), agent_ids, allowed_signers, sh)
+    except FileNotFoundError as exc:
+        return [], [f"{Path(path).name}: git could not be run ({exc}); no entry counts"]
+    except OSError as exc:
+        return [], [f"{Path(path).name}: I/O error ({exc}); no entry counts"]
+
+
+def _load_verified(path: Path, agent_ids: set, allowed_signers, sh):
     cwd, name = path.parent, path.name
+    if not agent_ids:
+        return [], [f"{name}: no agent identities known; no entry counts"]
     rc, dirty = sh(["git", "status", "--porcelain", "--", name], cwd)
     if rc != 0:
         return [], [f"{name}: not in a git repository; no entry counts"]
-    if dirty.strip():
+    if _b(dirty).strip():
         return [], [f"{name}: uncommitted changes; no entry counts until committed"]
-    rc, text = sh(["git", "show", f"HEAD:./{name}"], cwd)
+    rc, raw = sh(["git", "show", f"HEAD:./{name}"], cwd)
     if rc != 0:
         return [], [f"{name}: not committed at HEAD; no entry counts"]
+    raw = _b(raw)
+    try:
+        text = raw.decode("utf-8")
+    except UnicodeDecodeError:
+        return [], [f"{name}: not valid UTF-8; no entry counts"]
     try:
         entries = tomllib.loads(text).get("accept", [])
     except tomllib.TOMLDecodeError as exc:
@@ -100,13 +134,21 @@ def load_verified(path: Path, *, agent_ids: set, allowed_signers: Path | None = 
         missing = [k for k in _REQUIRED if not isinstance(e.get(k), str)]
         if missing:
             return [], [f"{name}: entry missing required key(s) {', '.join(missing)}; no entry counts"]
-    ranges = _entry_ranges(text.splitlines())
+    byte_lines = _lines(raw)
+    try:
+        lines = [ln.decode("utf-8") for ln in byte_lines]
+    except UnicodeDecodeError:
+        return [], [f"{name}: not valid UTF-8; no entry counts"]
+    ranges = _entry_ranges(lines)
     if len(entries) != len(ranges):
         return [], [f"{name}: entries could not be matched to lines; no entry counts"]
     blame = _blame_lines(name, cwd, sh)
     if blame is None:
         return [], [f"{name}: git blame failed; no entry counts"]
+    if sorted(blame) != list(range(1, len(lines) + 1)):
+        return [], [f"{name}: line count differs from git blame; no entry counts"]
     agent_emails = {e.lower() for _, e in agent_ids}
+    agent_names = {n.lower() for n, _ in agent_ids}
     accepted, rejected = [], []
     for entry, (a, b) in zip(entries, ranges):
         cid = entry["check_id"]
@@ -114,11 +156,12 @@ def load_verified(path: Path, *, agent_ids: set, allowed_signers: Path | None = 
         if None in shas or _ZERO in shas:
             rejected.append(f"{cid}: lines not committed (blamed to no commit); entry does not count")
             continue
-        authors = {c: _raw_author(c, cwd, sh) for c in shas}
-        if any(w is None for w in authors.values()):
+        people = {c: _raw_people(c, cwd, sh) for c in shas}
+        if any(w is None for w in people.values()):
             rejected.append(f"{cid}: commit author could not be read; entry does not count")
             continue
-        agents = [c for c, (_, em) in authors.items() if em.lower() in agent_emails]
+        agents = [c for c, p in people.items()
+                  if any(nm.lower() in agent_names or em.lower() in agent_emails for nm, em in p.values())]
         if agents:
             rejected.append(f"{cid}: written by an agent identity ({agents[0][:8]})")
             continue
