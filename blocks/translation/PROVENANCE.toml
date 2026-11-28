@@ -1,0 +1,13 @@
+# Provenance of imported prompt, profile and catalogue files under blocks/translation/.
+# Each entry: path (repo-relative), sha256 (hex), reviewed (bool), note (generic description of
+# anything removed into instance content). tests/test_public_text_hygiene.py enforces this file.
+
+[[file]]
+path = "blocks/translation/prompts/scene.de.md"
+sha256 = "5f41e6d6beac6ab133289ec4d3513197bab506bc27f87fe3c79a1b0abb7069a3"
+reviewed = true
+
+[[file]]
+path = "blocks/translation/prompts/scene.en.md"
+sha256 = "5966902235ec084b571d91641cbfc9a362f9e4beef9f344ad61b181732f9b88b"
+reviewed = true
