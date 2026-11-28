@@ -22,7 +22,7 @@ from shared.blocks import BLOCK_API_VERSION, BlockContext
 from shared.modules import CoreEvent, StateStore
 from shared.surface import ViewIntent
 
-GOLDEN_DIR = Path(__file__).resolve().parent / "golden" / "choice_list"
+GOLDEN_DIR = Path(__file__).resolve().parents[3] / "tests" / "golden" / "choice_list"
 
 
 def make_block(tmp_path):
