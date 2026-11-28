@@ -14,9 +14,15 @@ Checks:
 - `preflight.lane-profile.<main|coach|call>`: every lane's profile (the
   `--hermes-home` of the consumer's command line, see `lane_profiles`) is
   checked against the rules in `--invariants` (`invariants.yaml`).
-- `eou_silence`: the last `[sm-rt]` line of `--stt-log` carries
-  `eou_silence=<float>` equal to `--expect-eou`; `max_delay=` is printed
-  for information only.
+- `preflight.stt.eou` / `preflight.stt.max_delay`: the last `[sm-rt]` start
+  line of `--stt-log` carries values equal to `--expect-eou` /
+  `--expect-max-delay` (both required, no default).
+- `preflight.blocks.registry`: with `--consumer-log`, every template block
+  loads via `shared.block_registry` and the log since its last start has no
+  "no block registered" line.
+- `preflight.unit.pending.<unit>` (per `--unit`): FAIL when systemd reports
+  NeedDaemonReload or the unit file or a drop-in is newer than the process
+  start. Read-only; never reloads or restarts.
 - `blocks_registered`: `gateway/block_host_wiring.py` logs
   "block host: no block registered for '<id>'" once per template block id
   nobody has wired up yet; this FAILs if that text occurs anywhere after
@@ -43,7 +49,8 @@ usage: preflight.py --consumer-pid N [--proc-root /proc]
          [--profile-env HERMES_PROFILE_DIR_CALL] [--call-toolset file]
          [--forbidden-profile-glob '*coach*']
          [--invariants PATH] [--home DIR]
-         [--stt-log PATH] [--expect-eou 1.8]
+         [--stt-log PATH] --expect-eou S --expect-max-delay S
+         [--unit NAME ...]
          [--consumer-log PATH] [--template PATH] [--start-marker REGEX]
          [--snapshot-url URL --token-file PATH | --snapshot-file PATH]
          [--expect-fields voice,share,queue]
@@ -70,18 +77,18 @@ _REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 from demo.acceptance.report import Check  # noqa: E402
+from demo.acceptance.fingerprint import run_sh  # noqa: E402
 
 DEFAULT_INVARIANTS = Path(__file__).resolve().parent / "invariants.yaml"
 DEFAULT_PROFILE_ENV = "HERMES_PROFILE_DIR_CALL"
 DEFAULT_CALL_TOOLSET = "file"
 DEFAULT_FORBIDDEN_PROFILE_GLOB = "*coach*"
-DEFAULT_EXPECT_EOU = 1.8
 DEFAULT_START_MARKER = "agent session:"
 DEFAULT_EXPECT_FIELDS = "voice,share,queue"
 DEFAULT_OPTIONAL_FIELDS = "listen,transcript_recent"
 
-_EOU_RE = re.compile(r"eou_silence=([0-9.]+)")
-_MAX_DELAY_RE = re.compile(r"max_delay=([0-9.]+)")
+_SMRT = re.compile(r"\[sm-rt\].*?max_delay=([\d.]+)\s+eou_silence=([\d.]+)")
+_NOREG = re.compile(r"block host: no block registered for '([^']+)'")
 
 
 # --------------------------------------------------------------- lane_profile
@@ -220,33 +227,27 @@ def check_lane_profile(*, proc_root: Path, pid: int, profile_env: str,
     return Check(name, lane.status, lane.evidence)
 
 
-# ----------------------------------------------------------------- eou_silence
+# --------------------------------------------------------------------- stt
 
-def check_eou_silence(*, stt_log: Path, expect_eou: float) -> Check:
-    name = "eou_silence"
-    stt_log = Path(stt_log)
-    if not stt_log.is_file():
-        return Check(name, "FAIL", f"log not found at {stt_log}")
-    last = None
-    for line in stt_log.read_text(encoding="utf-8", errors="replace").splitlines():
-        if "[sm-rt]" in line and "eou_silence=" in line:
-            last = line
-    if last is None:
-        return Check(name, "FAIL",
-                      f"no '[sm-rt]' line with eou_silence= in {stt_log}")
-    m = _EOU_RE.search(last)
-    if not m:
-        return Check(name, "FAIL",
-                      f"eou_silence= not parseable in line: {last.strip()}")
-    found = float(m.group(1))
-    extra = ""
-    md = _MAX_DELAY_RE.search(last)
-    if md:
-        extra = f" max_delay={md.group(1)}"
-    if found != expect_eou:
-        return Check(name, "FAIL",
-                      f"eou_silence={found} (expected {expect_eou}){extra}")
-    return Check(name, "PASS", f"eou_silence={found}{extra}")
+def stt_values(log_text: str) -> dict:
+    """eou_silence and max_delay of the LAST `[sm-rt]` start line."""
+    found = _SMRT.findall(log_text)
+    if not found:
+        return {}
+    md, eou = found[-1]
+    return {"eou": float(eou), "max_delay": float(md)}
+
+
+def check_stt(values: dict, expect_eou: float, expect_max_delay: float) -> list:
+    out = []
+    for key, flag, expected in (("eou", "eou_silence", expect_eou),
+                                ("max_delay", "max_delay", expect_max_delay)):
+        got = values.get(key)
+        ok = got is not None and abs(got - expected) < 1e-9
+        out.append(Check(f"preflight.stt.{key}", "PASS" if ok else "FAIL",
+                         f"found {flag}={got} expected {expected} "
+                         f"(source: last [sm-rt] start line)"))
+    return out
 
 
 # ------------------------------------------------------------ blocks_registered
@@ -288,6 +289,74 @@ def check_template_blocks(template_path) -> Optional[Check]:
                       f"block ids not readable deterministically: {e}")
     ids = [b.id for b in template.blocks]
     return Check(name, "PASS", f"{len(ids)} block ids: {', '.join(ids)}")
+
+
+def check_registry(template_path, registry: dict, log_tail: str) -> Check:
+    """Every block of the template is in `registry`, and the consumer log
+    since its last start holds no 'no block registered' line."""
+    missing = sorted(set(_NOREG.findall(log_tail)))
+    if template_path is not None:
+        from shared.templates import load_template
+        missing += sorted(b.id for b in load_template(Path(template_path)).blocks
+                          if b.id not in registry and b.id not in missing)
+    return Check("preflight.blocks.registry", "FAIL" if missing else "PASS",
+                 f"unregistered: {missing}" if missing
+                 else "every template block registered")
+
+
+def check_unit_pending(unit: str, need_reload: bool, changed_after_start: int) -> Check:
+    bad = need_reload or changed_after_start > 0
+    return Check(f"preflight.unit.pending.{unit}", "FAIL" if bad else "PASS",
+                 f"NeedDaemonReload={'yes' if need_reload else 'no'} "
+                 f"unit/drop-in files changed after start: {changed_after_start}")
+
+
+def _unit_pending_inputs(unit: str, sh: Callable) -> tuple:
+    """-> (need_reload, files changed after the unit's start). Reads only
+    `systemctl --user show` and file mtimes."""
+    props = {}
+    for line in sh(["systemctl", "--user", "show", "-p",
+                    "NeedDaemonReload,ActiveEnterTimestamp,FragmentPath,DropInPaths",
+                    unit]).splitlines():
+        k, _, v = line.partition("=")
+        props[k] = v.strip()
+    need_reload = props.get("NeedDaemonReload") == "yes"
+    started = props.get("ActiveEnterTimestamp", "")
+    start_ts = None
+    if started:
+        out = sh(["date", "-d", started, "+%s"]).strip()
+        start_ts = int(out) if out.isdigit() else None
+    paths = [p for p in [props.get("FragmentPath", "")] +
+             props.get("DropInPaths", "").split() if p]
+    changed = 0
+    for p in paths:
+        try:
+            if start_ts is not None and Path(p).stat().st_mtime > start_ts:
+                changed += 1
+        except OSError:
+            pass
+    return need_reload, changed
+
+
+def _registry_for(template_path) -> dict:
+    """Blocks of the template that `shared.block_registry` can load."""
+    from shared.blocks import BlockError
+    from shared.block_registry import load_block
+    from shared.templates import load_template
+    registry = {}
+    for b in load_template(Path(template_path)).blocks:
+        try:
+            registry[b.id] = load_block(b.id)
+        except BlockError:
+            pass
+    return registry
+
+
+def _log_tail(path: Path, start_marker: str) -> str:
+    lines = Path(path).read_text(encoding="utf-8", errors="replace").splitlines()
+    marker = re.compile(start_marker)
+    starts = [i for i, l in enumerate(lines) if marker.search(l)]
+    return "\n".join(lines[(starts[-1] + 1) if starts else 0:])
 
 
 # -------------------------------------------------------------- contract_fields
@@ -391,7 +460,11 @@ def main(argv=None) -> int:
                     help="home directory the consumer resolves its default "
                          "lane profiles under")
     ap.add_argument("--stt-log")
-    ap.add_argument("--expect-eou", type=float, default=DEFAULT_EXPECT_EOU)
+    ap.add_argument("--expect-eou", type=float, required=True)
+    ap.add_argument("--expect-max-delay", type=float, required=True)
+    ap.add_argument("--unit", action="append", default=[],
+                    help="systemd user unit to check for pending changes "
+                         "(repeatable)")
     ap.add_argument("--consumer-log")
     ap.add_argument("--template")
     ap.add_argument("--start-marker", default=DEFAULT_START_MARKER)
@@ -422,16 +495,31 @@ def main(argv=None) -> int:
             home=Path(a.home)))
 
     if a.stt_log:
-        checks.append(check_eou_silence(stt_log=Path(a.stt_log),
-                                        expect_eou=a.expect_eou))
+        try:
+            text = Path(a.stt_log).read_text(encoding="utf-8", errors="replace")
+        except OSError:
+            text = ""
+        checks.extend(check_stt(stt_values(text), a.expect_eou,
+                                a.expect_max_delay))
 
     if a.consumer_log:
         checks.append(check_blocks_registered(
             consumer_log=Path(a.consumer_log), start_marker=a.start_marker))
+        try:
+            registry = _registry_for(a.template) if a.template else {}
+            tail = _log_tail(Path(a.consumer_log), a.start_marker)
+            checks.append(check_registry(a.template, registry, tail))
+        except Exception as e:  # noqa: BLE001 -- reported as a FAIL
+            checks.append(Check("preflight.blocks.registry", "FAIL",
+                                f"not checkable: {type(e).__name__}: {e}"))
         template_check = check_template_blocks(
             Path(a.template) if a.template else None)
         if template_check is not None:
             checks.append(template_check)
+
+    for unit in a.unit:
+        need_reload, changed = _unit_pending_inputs(unit, run_sh)
+        checks.append(check_unit_pending(unit, need_reload, changed))
 
     if a.snapshot_url or a.snapshot_file:
         snapshot, err = load_snapshot(snapshot_url=a.snapshot_url,

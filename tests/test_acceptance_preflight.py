@@ -16,6 +16,9 @@ def _load(name):
     return mod
 
 
+THR = ["--expect-eou", "1.0", "--expect-max-delay", "2.0"]
+
+
 @pytest.fixture()
 def pf():
     return _load("preflight")
@@ -61,14 +64,14 @@ def test_lane_profile_pass(pf, tmp_path):
     profile = _write_profile(tmp_path, "call", [])
     _write_environ(proc_root, 123, {"HERMES_PROFILE_DIR_CALL": str(profile)})
     extra = _write_lanes(tmp_path, proc_root, 123)
-    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"] + extra)
+    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"] + THR + extra)
     assert rc == 0
 
 
 def test_lane_profile_fails_without_env_var(pf, tmp_path, capsys):
     proc_root = tmp_path / "proc"
     _write_environ(proc_root, 123, {"SOME_OTHER_VAR": "x"})
-    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"])
+    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"] + THR)
     out = capsys.readouterr().out
     assert rc == 1
     assert "FAIL lane_profile:" in out
@@ -79,7 +82,7 @@ def test_lane_profile_fails_without_toolset(pf, tmp_path, capsys):
     proc_root = tmp_path / "proc"
     profile = _write_profile(tmp_path, "call", ["file"])
     _write_environ(proc_root, 123, {"HERMES_PROFILE_DIR_CALL": str(profile)})
-    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"])
+    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"] + THR)
     out = capsys.readouterr().out
     assert rc == 1
     assert "FAIL lane_profile:" in out
@@ -91,7 +94,7 @@ def test_lane_profile_fails_on_forbidden_glob(pf, tmp_path, capsys):
     proc_root = tmp_path / "proc"
     profile = _write_profile(tmp_path, "call-coach", [])
     _write_environ(proc_root, 123, {"HERMES_PROFILE_DIR_CALL": str(profile)})
-    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"])
+    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"] + THR)
     out = capsys.readouterr().out
     assert rc == 1
     assert "FAIL lane_profile:" in out
@@ -103,7 +106,7 @@ def test_lane_profile_fails_without_config_yaml(pf, tmp_path, capsys):
     profile = tmp_path / "profiles" / "call"
     profile.mkdir(parents=True)
     _write_environ(proc_root, 123, {"HERMES_PROFILE_DIR_CALL": str(profile)})
-    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"])
+    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "123"] + THR)
     out = capsys.readouterr().out
     assert rc == 1
     assert "FAIL lane_profile:" in out
@@ -111,7 +114,7 @@ def test_lane_profile_fails_without_config_yaml(pf, tmp_path, capsys):
 
 def test_lane_profile_fails_without_environ_file(pf, tmp_path, capsys):
     proc_root = tmp_path / "proc"
-    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "999"])
+    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "999"] + THR)
     out = capsys.readouterr().out
     assert rc == 1
     assert "FAIL lane_profile:" in out
@@ -148,59 +151,6 @@ def test_resolve_consumer_pid_via_unit_not_running(pf):
         runner=lambda cmd, **kw: FakeResult())
     assert pid is None
     assert "not running" in err
-
-
-# ----------------------------------------------------------------- eou_silence
-
-def test_eou_silence_pass(pf, tmp_path):
-    log = tmp_path / "stt.log"
-    log.write_text(
-        "line one\n"
-        "[sm-rt] turn end eou_silence=1.8 max_delay=0.3\n",
-        encoding="utf-8")
-    rc = pf.main(["--proc-root", str(tmp_path / "noproc"),
-                  "--consumer-pid", "1", "--stt-log", str(log)])
-    assert rc == 1  # lane_profile still fails, no environ -- isolate below
-
-
-def test_eou_silence_check_alone(pf, tmp_path, capsys):
-    log = tmp_path / "stt.log"
-    log.write_text("[sm-rt] turn end eou_silence=1.8 max_delay=0.3\n",
-                    encoding="utf-8")
-    check = pf.check_eou_silence(stt_log=log, expect_eou=1.8)
-    assert check.status == "PASS"
-    assert "eou_silence=1.8" in check.evidence
-    assert "max_delay=0.3" in check.evidence
-
-
-def test_eou_silence_wrong_value_fails(pf, tmp_path):
-    log = tmp_path / "stt.log"
-    log.write_text("[sm-rt] turn end eou_silence=2.5\n", encoding="utf-8")
-    check = pf.check_eou_silence(stt_log=log, expect_eou=1.8)
-    assert check.status == "FAIL"
-    assert "2.5" in check.evidence
-
-
-def test_eou_silence_missing_line_fails(pf, tmp_path):
-    log = tmp_path / "stt.log"
-    log.write_text("no eou line here\n", encoding="utf-8")
-    check = pf.check_eou_silence(stt_log=log, expect_eou=1.8)
-    assert check.status == "FAIL"
-
-
-def test_eou_silence_uses_last_matching_line(pf, tmp_path):
-    log = tmp_path / "stt.log"
-    log.write_text(
-        "[sm-rt] turn end eou_silence=2.5\n"
-        "[sm-rt] turn end eou_silence=1.8\n",
-        encoding="utf-8")
-    check = pf.check_eou_silence(stt_log=log, expect_eou=1.8)
-    assert check.status == "PASS"
-
-
-def test_eou_silence_missing_file_fails(pf, tmp_path):
-    check = pf.check_eou_silence(stt_log=tmp_path / "nope.log", expect_eou=1.8)
-    assert check.status == "FAIL"
 
 
 # ------------------------------------------------------------ blocks_registered
@@ -404,7 +354,7 @@ def test_end_to_end_all_pass(pf, tmp_path, capsys):
     extra = _write_lanes(tmp_path, proc_root, 1)
 
     stt_log = tmp_path / "stt.log"
-    stt_log.write_text("[sm-rt] eou_silence=1.8\n", encoding="utf-8")
+    stt_log.write_text("[sm-rt] language=de max_delay=2.0 eou_silence=1.8 max_speakers=10\n", encoding="utf-8")
 
     consumer_log = tmp_path / "consumer.log"
     consumer_log.write_text("[10:00:00] agent session: s1\n", encoding="utf-8")
@@ -416,6 +366,7 @@ def test_end_to_end_all_pass(pf, tmp_path, capsys):
     rc = pf.main([
         "--proc-root", str(proc_root), "--consumer-pid", "1",
         "--stt-log", str(stt_log), "--expect-eou", "1.8",
+        "--expect-max-delay", "2.0",
         "--consumer-log", str(consumer_log),
         "--snapshot-file", str(snapshot_file),
     ] + extra)
@@ -423,7 +374,8 @@ def test_end_to_end_all_pass(pf, tmp_path, capsys):
     assert rc == 0
     for check_name in ("lane_profile", "preflight.lane-profile.main",
                        "preflight.lane-profile.coach",
-                       "preflight.lane-profile.call", "eou_silence", "blocks_registered",
+                       "preflight.lane-profile.call", "preflight.stt.eou",
+                       "preflight.stt.max_delay", "blocks_registered",
                        "contract_fields"):
         assert f"PASS {check_name}:" in out
 
@@ -439,7 +391,7 @@ def test_end_to_end_one_fail_exits_1(pf, tmp_path, capsys):
     rc = pf.main([
         "--proc-root", str(proc_root), "--consumer-pid", "1",
         "--snapshot-file", str(snapshot_file),
-    ])
+    ] + THR)
     out = capsys.readouterr().out
     assert rc == 1
     assert "FAIL contract_fields:" in out
@@ -447,7 +399,13 @@ def test_end_to_end_one_fail_exits_1(pf, tmp_path, capsys):
 
 def test_requires_pid_or_unit(pf):
     with pytest.raises(SystemExit) as e:
-        pf.main(["--proc-root", "/proc"])
+        pf.main(["--proc-root", "/proc"] + THR)
+    assert e.value.code == 2
+
+
+def test_thresholds_are_required_args(pf):
+    with pytest.raises(SystemExit) as e:
+        pf.main(["--consumer-pid", "1"])
     assert e.value.code == 2
 
 
@@ -568,9 +526,87 @@ def test_main_reports_every_lane_and_fails_on_bad_call_lane(pf, tmp_path, capsys
     extra = _write_lanes(tmp_path, proc_root, 7)
     _write_profile(tmp_path, "lane-call", ["file"])   # call lane loses its file toolset
     _write_environ(proc_root, 7, {"HERMES_PROFILE_DIR_CALL": str(tmp_path / "lane-call")})
-    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "7"] + extra)
+    rc = pf.main(["--proc-root", str(proc_root), "--consumer-pid", "7"] + THR + extra)
     out = capsys.readouterr().out
     assert rc == 1
     assert "PASS preflight.lane-profile.main:" in out
     assert "PASS preflight.lane-profile.coach:" in out
     assert "FAIL preflight.lane-profile.call:" in out and "toolset file disabled" in out
+
+
+# ------------------------------------------- stt, registry, pending unit changes
+
+LOG = ("[sm-rt] language=de max_delay=2.0 eou_silence=0.5 max_speakers=10\n"
+       "... restart ...\n"
+       "[sm-rt] language=de max_delay=2.0 eou_silence=1.0 max_speakers=10\n")
+
+
+def test_stt_values_take_last_start(pf):
+    assert pf.stt_values(LOG) == {"eou": 1.0, "max_delay": 2.0}
+
+
+def test_check_stt_fails_with_found_values(pf):
+    eou, md = pf.check_stt({"eou": 0.5, "max_delay": 2.0}, expect_eou=1.0, expect_max_delay=2.0)
+    assert (eou.status, md.status) == ("FAIL", "PASS")
+    assert "found eou_silence=0.5" in eou.evidence and "expected 1.0" in eou.evidence
+
+
+def test_check_stt_max_delay_rule(pf):
+    eou, md = pf.check_stt({"eou": 1.0, "max_delay": 1.0}, expect_eou=1.0, expect_max_delay=2.0)
+    assert (eou.status, md.id, md.status) == ("PASS", "preflight.stt.max_delay", "FAIL")
+    assert "found max_delay=1.0" in md.evidence
+
+
+def test_check_stt_without_log_line_fails(pf):
+    eou, md = pf.check_stt(pf.stt_values("no start line"), expect_eou=1.0, expect_max_delay=2.0)
+    assert eou.status == md.status == "FAIL" and "found eou_silence=None" in eou.evidence
+
+
+TEMPLATE = ('[template]\nname = "X"\napi_version = 1\nrules = ["grounding", "add-dont-restructure"]\n'
+            '[[blocks]]\nid = "timer"\n[[blocks]]\nid = "ghost"\n[[phases]]\nid = "p"\nblocks = ["timer"]\n')
+
+
+def test_registry_missing_block(pf, tmp_path):
+    t = tmp_path / "template.toml"
+    t.write_text(TEMPLATE)
+    c = pf.check_registry(t, {"timer": object}, log_tail="")
+    assert (c.id, c.status) == ("preflight.blocks.registry", "FAIL") and "ghost" in c.evidence
+
+
+def test_registry_complete_passes(pf, tmp_path):
+    t = tmp_path / "template.toml"
+    t.write_text(TEMPLATE)
+    assert pf.check_registry(t, {"timer": object, "ghost": object}, log_tail="").status == "PASS"
+
+
+def test_registry_log_line_fails(pf):
+    c = pf.check_registry(None, {}, log_tail="block host: no block registered for 'capture-bullets'\n")
+    assert c.status == "FAIL" and "capture-bullets" in c.evidence
+
+
+def test_unit_changed_after_start_fails(pf):
+    assert pf.check_unit_pending("stt", need_reload=False, changed_after_start=1).status == "FAIL"
+    assert pf.check_unit_pending("stt", need_reload=True, changed_after_start=0).status == "FAIL"
+    assert pf.check_unit_pending("stt", need_reload=False, changed_after_start=0).status == "PASS"
+
+
+def test_unit_pending_inputs_counts_newer_files_read_only(pf, tmp_path):
+    old = tmp_path / "old.service"
+    new = tmp_path / "new.conf"
+    old.write_text("x")
+    new.write_text("x")
+    import os
+    os.utime(old, (1000, 1000))
+    os.utime(new, (3000, 3000))
+    calls = []
+
+    def sh(argv):
+        calls.append(argv)
+        if argv[0] == "date":
+            return "2000\n"
+        return (f"NeedDaemonReload=no\nActiveEnterTimestamp=Tue 2026-11-24 20:42:11 CET\n"
+                f"FragmentPath={old}\nDropInPaths={new}\n")
+
+    assert pf._unit_pending_inputs("stt", sh) == (False, 1)
+    assert all(c[0] in ("systemctl", "date") and c[2] == "show" for c in calls if c[0] == "systemctl")
+    assert not any(w in " ".join(sum(calls, [])) for w in ("restart", "reload ", "daemon-reload"))
