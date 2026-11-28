@@ -196,10 +196,10 @@ def test_baseline_file_shape_and_measured_by():
     assert base["thresholds"] == {} and base["stt"] == {} and base["measurements"] == []
     a = base["gap_profiles"]["track-a"]
     b = base["gap_profiles"]["track-b"]
-    assert (a["p50_s"], a["p90_s"], a["runs_per_voiced_min"]) == (0.58, 1.90, 12.1)
+    assert (a["p50_s"], a["p90_s"], a["runs_per_voiced_min"]) == (0.49, 1.30, 8.27)
     assert (b["p50_s"], b["p90_s"], b["runs_per_voiced_min"]) == (0.43, 1.34, 11.0)
     for prof in base["gap_profiles"].values():
-        assert "M4" in prof["measured_by"]
+        assert prof["measured_by"]
     for t in base["thresholds"].values():
         assert t["measured_by"]
 

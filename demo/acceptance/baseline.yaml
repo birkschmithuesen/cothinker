@@ -5,10 +5,10 @@
 
 gap_profiles:
   track-a:
-    p50_s: 0.58
-    p90_s: 1.90
-    runs_per_voiced_min: 12.1
-    measured_by: "M4: private 135-minute 8-speaker meeting corpus, one affected track, 360 zero runs over 29.8 voiced min"
+    p50_s: 0.49
+    p90_s: 1.30
+    runs_per_voiced_min: 8.27
+    measured_by: "gap_probe 2026-11-28: per-track call audio, one affected track of a long multi-speaker session, n=246 runs over 29.76 voiced min"
   track-b:
     p50_s: 0.43
     p90_s: 1.34
