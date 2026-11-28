@@ -1,6 +1,6 @@
 # ADR 0027: Meeting chat — typed tasks for the agent through the surface contract
 
-- **Status:** proposed
+- **Status:** accepted
 - **Date:** 2026-11-27
 
 ## Context
