@@ -123,3 +123,46 @@ def test_unreadable_proc_is_an_input_not_a_crash(tmp_path):
                          proc=tmp_path / "proc")
     assert inputs["unit:stt:argv"] == b"<unreadable>"
     assert inputs["unit:stt:env"] == b"<unreadable>"
+
+
+def _git_repo(tmp_path):
+    import subprocess
+    repo = tmp_path / "repo"
+    (repo / "pkg" / "__pycache__").mkdir(parents=True)
+    (repo / "mod.py").write_text("x = 1\n")
+    (repo / "pkg" / "__pycache__" / "m.cpython-311.pyc").write_bytes(b"v1")
+    (repo / "top.pyc").write_bytes(b"v1")
+
+    def git(*a):
+        subprocess.run(["git", "-C", str(repo), "-c", "user.name=T", "-c", "user.email=t@example.org", *a],
+                       check=True, capture_output=True)
+    git("init", "-q")
+    git("add", ".")
+    git("commit", "-q", "-m", "init")
+    return repo
+
+
+def _digest_of(repo, tmp_path):
+    env = tmp_path / "demo.env"
+    env.write_text("")
+    return fpm.from_inputs(fpm.collect([], repo=repo, demo_env=env, profiles={}))
+
+
+def test_bytecode_does_not_change_the_digest_but_source_does(tmp_path):
+    repo = _git_repo(tmp_path)
+    base = _digest_of(repo, tmp_path).digest
+    (repo / "pkg" / "__pycache__" / "m.cpython-311.pyc").write_bytes(b"v2")
+    (repo / "top.pyc").write_bytes(b"v2")
+    (repo / "pkg" / "__pycache__" / "new.cpython-311.pyc").write_bytes(b"new")
+    (repo / "fresh.pyc").write_bytes(b"new")
+    assert _digest_of(repo, tmp_path).digest == base
+    (repo / "mod.py").write_text("x = 2\n")
+    assert _digest_of(repo, tmp_path).digest != base
+
+
+def test_missing_profile_dir_is_recorded_not_a_crash(tmp_path):
+    env = tmp_path / "demo.env"
+    env.write_text("")
+    inputs = fpm.collect([], repo=tmp_path, demo_env=env, profiles={"main": None}, sh=lambda argv: "")
+    assert inputs["profile:main:config.yaml"] == b"<missing>"
+    assert inputs["profile:main:skills"] == b"<missing>"

@@ -484,6 +484,10 @@ def fingerprint_check(*, unit: Optional[str], profiles: dict, home: Path):
         return (Check("preflight.fingerprint", "FAIL",
                       "repo (consumer unit WorkingDirectory) not determinable; "
                       "give --consumer-unit"), None)
+    if not profiles:
+        return (Check("preflight.fingerprint", "FAIL",
+                      "no lane profiles found (consumer command line unresolved or "
+                      "unreadable); a digest without them can never match the gate's"), None)
     fp = fingerprint.from_inputs(fingerprint.collect(
         fingerprint.DEFAULT_UNITS, repo=repo, demo_env=_demo_env_path(home),
         profiles=profiles))

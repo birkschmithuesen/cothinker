@@ -59,9 +59,16 @@ def _read_proc(path: Path, transform=lambda b: b) -> bytes:
         return b"<unreadable>"
 
 
+_NO_BYTECODE = (":(exclude)*.pyc", ":(exclude)**/__pycache__/**")  # rewritten on every import
+
+
+def _is_bytecode(name: str) -> bool:
+    return name.endswith(".pyc") or "__pycache__/" in name
+
+
 def _untracked(repo: Path, sh) -> bytes:
     names = sorted(n for n in sh(["git", "-C", str(repo), "ls-files", "--others",
-                                  "--exclude-standard"]).splitlines() if n)
+                                  "--exclude-standard"]).splitlines() if n and not _is_bytecode(n))
     out = []
     for n in names:
         try:
@@ -86,6 +93,11 @@ def collect(units, *, repo: Path, demo_env: Path, profiles: dict, sh=run_sh,
             inputs[f"unit:{u}:argv"] = b"<not running>"
             inputs[f"unit:{u}:env"] = b"<not running>"
     for lane, d in sorted(profiles.items()):
+        if d is None:  # no profile directory known for this lane
+            for f in PROFILE_FILES:
+                inputs[f"profile:{lane}:{f}"] = b"<missing>"
+            inputs[f"profile:{lane}:skills"] = b"<missing>"
+            continue
         for f in PROFILE_FILES:
             p = Path(d) / f
             inputs[f"profile:{lane}:{f}"] = p.read_bytes() if p.exists() else b"<missing>"
@@ -96,7 +108,7 @@ def collect(units, *, repo: Path, demo_env: Path, profiles: dict, sh=run_sh,
         else:
             inputs[f"profile:{lane}:skills"] = b"<missing>"
     inputs["repo:head"] = sh(["git", "-C", str(repo), "rev-parse", "HEAD"]).encode()
-    inputs["repo:diff"] = sh(["git", "-C", str(repo), "diff", "HEAD"]).encode()
+    inputs["repo:diff"] = sh(["git", "-C", str(repo), "diff", "HEAD", "--", ".", *_NO_BYTECODE]).encode()
     inputs["repo:untracked"] = _untracked(repo, sh)
     inputs["demo.env"] = demo_env.read_bytes() if demo_env.exists() else b"<missing>"
     return inputs
