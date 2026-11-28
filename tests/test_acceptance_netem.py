@@ -116,3 +116,172 @@ def test_start_participant_applies_wrapper(monkeypatch, tmp_path):
                           wrapper=lambda c: ["WRAP", *c])
     assert seen["cmd"][0] == "WRAP"
     assert "--name" in seen["cmd"]
+
+
+# ---- behavioural tests of run()/main() with fakes --------------------------
+
+import signal as _signal
+
+
+class FakeProc:
+    def __init__(self, pid, polls=0, rc=0, subprocess_wait_timeouts=0):
+        self.pid, self.rc, self._polls = pid, rc, polls
+        self.returncode = None
+        self.terminated = self.killed = False
+        self.waits = []
+        self._timeouts = subprocess_wait_timeouts
+
+    def poll(self):
+        if self._polls <= 0 and not self.killed:
+            self.returncode = self.rc
+        elif self._polls > 0:
+            self._polls -= 1
+        if self.killed:
+            self.returncode = self.rc
+        return self.returncode
+
+    def wait(self, timeout=None):
+        self.waits.append(timeout)
+        if self._timeouts > 0 and not self.killed:
+            self._timeouts -= 1
+            raise subprocess.TimeoutExpired("x", timeout)
+        if self.returncode is None:
+            self.returncode = self.rc
+        return self.returncode
+
+    def terminate(self):
+        self.terminated = True
+
+    def kill(self):
+        self.killed = True
+
+
+def _harness(child, slirp, ns=lambda pid: "new" if pid != 1 else "host", **kw):
+    procs = [child, slirp]
+    started = []
+
+    def popen(argv, **k):
+        started.append((argv, k))
+        return procs[len(started) - 1]
+
+    groups = []
+    kw.setdefault("handoff_s", 1.0)
+    rc = netem.run({"loss": "2%"}, ["x"], popen=popen, ns_of=lambda pid: "host" if pid == __import__("os").getpid() else "new",
+                   sleep=lambda s: None, killpg=lambda pid, sig: groups.append((pid, sig)), **kw)
+    return rc, started, groups
+
+
+def test_run_propagates_exit_code_and_cleans_up_slirp():
+    child, slirp = FakeProc(100, polls=2, rc=7), FakeProc(200, polls=10**6)
+    rc, started, groups = _harness(child, slirp)
+    assert rc == 7
+    assert started[0][1].get("start_new_session") is True
+    assert started[1][0][:4] == ["slirp4netns", "--configure", "--mtu=65520", "100"]
+    assert slirp.terminated
+    assert (100, _signal.SIGTERM) in groups
+
+
+def test_run_cleans_up_slirp_when_child_fails():
+    child, slirp = FakeProc(100, polls=0, rc=1), FakeProc(200, polls=10**6)
+    rc, _, _ = _harness(child, slirp)
+    assert rc == 1 and slirp.terminated
+
+
+def test_run_signal_death_becomes_128_plus_signum():
+    child, slirp = FakeProc(100, polls=0, rc=-9), FakeProc(200, polls=10**6)
+    rc, _, _ = _harness(child, slirp)
+    assert rc == 137
+
+
+def test_run_slirp_dying_early_stops_group(capsys):
+    child, slirp = FakeProc(100, polls=10**6), FakeProc(200, polls=0, rc=3)
+    rc, _, groups = _harness(child, slirp)
+    assert rc == netem.EXIT_SLIRP_FAILED
+    assert "slirp4netns exited early" in capsys.readouterr().err
+    assert (100, _signal.SIGTERM) in groups
+
+
+def test_run_handoff_timeout_is_bounded(capsys):
+    child = FakeProc(100, polls=10**6)
+    import os
+    ticks = iter(range(0, 1000))
+    groups = []
+    rc = netem.run({}, ["x"], popen=lambda a, **k: child, ns_of=lambda pid: "host",
+                   sleep=lambda s: None, killpg=lambda p, s: groups.append((p, s)),
+                   clock=lambda: next(ticks), handoff_s=5)
+    assert rc == netem.EXIT_HANDOFF_TIMEOUT
+    assert "handoff timed out" in capsys.readouterr().err
+    assert (100, _signal.SIGTERM) in groups and child.waits  # bounded wait
+
+
+def test_run_kills_group_when_terminate_is_ignored():
+    child = FakeProc(100, polls=10**6, subprocess_wait_timeouts=1)
+    groups = []
+    ticks = iter(range(0, 1000))
+    netem.run({}, ["x"], popen=lambda a, **k: child, ns_of=lambda pid: "host",
+              sleep=lambda s: None, killpg=lambda p, s: groups.append((p, s)),
+              clock=lambda: next(ticks), handoff_s=3)
+    assert (100, _signal.SIGKILL) in groups
+
+
+def test_run_interrupt_cleans_up_and_returns_143():
+    child, slirp = FakeProc(100, polls=10**6), FakeProc(200, polls=10**6)
+    calls = {"n": 0}
+
+    def sleep(_s):
+        calls["n"] += 1
+        raise KeyboardInterrupt
+
+    groups = []
+    procs = [child, slirp]
+    n = []
+    rc = netem.run({}, ["x"], popen=lambda a, **k: (n.append(1), procs[len(n) - 1])[1],
+                   ns_of=lambda pid: "host" if pid == __import__("os").getpid() else "new",
+                   sleep=sleep, killpg=lambda p, s: groups.append((p, s)), handoff_s=1)
+    assert rc == 143 and slirp.terminated and (100, _signal.SIGTERM) in groups
+
+
+def test_main_installs_sigterm_handler_and_restores(monkeypatch):
+    seen = {}
+
+    def fake_run(spec, cmd):
+        seen["handler"] = _signal.getsignal(_signal.SIGTERM)
+        return 5
+
+    before = _signal.getsignal(_signal.SIGTERM)
+    monkeypatch.setattr(netem, "run", fake_run)
+    assert netem.main(["--spec", "loss=1%", "--", "true"]) == 5
+    assert seen["handler"] is netem._sigterm_to_interrupt
+    assert _signal.getsignal(_signal.SIGTERM) == before
+
+
+def test_main_rejects_bad_usage():
+    assert netem.main(["--spec", "loss=1%"]) == 2
+    assert netem.main(["--spec", "x=1", "--", "true"]) == 2
+    assert netem.main(["--spec", "loss=1%", "--"]) == 2
+
+
+def test_failure_reason_maps_only_reserved_codes():
+    assert netem.failure_reason(97) and netem.failure_reason(98)
+    assert netem.failure_reason(96) and netem.failure_reason(95)
+    assert netem.failure_reason(0) is None and netem.failure_reason(1) is None
+
+
+def test_netem_failure_becomes_skipped_not_fail():
+    import argparse
+    from demo.acceptance import scenarios
+    args = argparse.Namespace(netem="loss=2%")
+    row = scenarios.netem_setup(args, avail=lambda: (True, ""))
+    procs = {"Alex": {"proc": argparse.Namespace(returncode=97)},
+             "Sam": {"proc": argparse.Namespace(returncode=0)}}
+    scenarios.note_netem_failures(args, procs)
+    final = scenarios.netem_final_row(args, row)
+    assert final.status == "SKIPPED" and "tap0" in final.evidence
+
+
+def test_netem_with_transcript_is_rejected(capsys):
+    from demo.acceptance import scenarios
+    with pytest.raises(SystemExit):
+        scenarios.parse_args(["--catalogue", "c", "--via", "transcript", "--out", "o",
+                              "--netem", "loss=2%"])
+    assert "--netem" in capsys.readouterr().err

@@ -15,9 +15,12 @@ import argparse
 import os
 import re
 import shutil
+import signal
 import subprocess
 import sys
+import tempfile
 import time
+from typing import Optional
 
 _VALUE_SHAPES = {
     "loss": re.compile(r"\d{1,3}(\.\d{1,3})?%"),
@@ -97,29 +100,93 @@ def _net_ns(pid: int):
         return None
 
 
-def run(spec: dict, cmd: list[str]) -> int:
-    child = subprocess.Popen(inner_argv(spec, cmd))
-    slirp = None
+# Exit codes reserved for impairment setup failures. Neither the participant
+# nor Chrome use them, so a caller can tell "netem could not be set up" apart
+# from a real participant failure.
+EXIT_SLIRP_FAILED = 95
+EXIT_HANDOFF_TIMEOUT = 96
+EXIT_TAP_TIMEOUT = 97   # raised by the inner script
+EXIT_TC_FAILED = 98     # raised by the inner script
+FAILURE_REASONS = {
+    EXIT_SLIRP_FAILED: "slirp4netns exited before the participant finished",
+    EXIT_HANDOFF_TIMEOUT: "the network namespace was not ready for slirp4netns in time",
+    EXIT_TAP_TIMEOUT: "tap0 never appeared inside the namespace",
+    EXIT_TC_FAILED: "tc netem could not be applied to tap0",
+}
+EXIT_TERMINATED = 128 + signal.SIGTERM
+
+
+def failure_reason(code) -> Optional[str]:
+    """Reason text when `code` is a netem setup failure, else None."""
+    return FAILURE_REASONS.get(code)
+
+
+def _exit_code(rc: int) -> int:
+    return 128 - rc if rc < 0 else rc  # signal death -> 128 + signum
+
+
+def _stop_group(child, killpg, grace_s: float) -> None:
+    """Ends the whole process group of `child` (unshare, shell, participant,
+    browser) so nothing is orphaned, and reaps the child."""
     try:
-        mine = _net_ns(os.getpid())
-        deadline = time.time() + _TAP_WAIT_S
-        while _net_ns(child.pid) in (None, mine):  # child has not unshared yet
-            if child.poll() is not None or time.time() > deadline:
-                return child.wait()
-            time.sleep(0.02)
-        slirp = subprocess.Popen(
-            ["slirp4netns", "--configure", "--mtu=65520", str(child.pid), "tap0"],
-            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-        return child.wait()
+        killpg(child.pid, signal.SIGTERM)
+    except (ProcessLookupError, PermissionError):
+        pass
+    try:
+        child.wait(timeout=grace_s)
+    except subprocess.TimeoutExpired:
+        try:
+            killpg(child.pid, signal.SIGKILL)
+        except (ProcessLookupError, PermissionError):
+            pass
+        child.wait()
+
+
+def _sigterm_to_interrupt(signum, _frame):
+    raise KeyboardInterrupt(f"signal {signum}")
+
+
+def run(spec: dict, cmd: list[str], popen=subprocess.Popen, ns_of=_net_ns,
+        sleep=time.sleep, killpg=os.killpg, handoff_s: float = _TAP_WAIT_S,
+        grace_s: float = 5.0, clock=time.time) -> int:
+    child = popen(inner_argv(spec, cmd), start_new_session=True)
+    slirp = None
+    errlog = tempfile.TemporaryFile()
+    try:
+        mine = ns_of(os.getpid())
+        deadline = clock() + handoff_s
+        while ns_of(child.pid) in (None, mine):  # child has not unshared yet
+            if child.poll() is not None:
+                return _exit_code(child.returncode)
+            if clock() > deadline:
+                print("netem: namespace handoff timed out; stopping the participant",
+                      file=sys.stderr)
+                return EXIT_HANDOFF_TIMEOUT
+            sleep(0.02)
+        slirp = popen(["slirp4netns", "--configure", "--mtu=65520", str(child.pid), "tap0"],
+                      stdout=subprocess.DEVNULL, stderr=errlog)
+        while child.poll() is None:
+            if slirp.poll() is not None:
+                errlog.seek(0)
+                tail = errlog.read().decode("utf-8", "replace").strip()[-300:]
+                print(f"netem: slirp4netns exited early (code {slirp.returncode}): "
+                      f"{tail or 'no output'}", file=sys.stderr)
+                return EXIT_SLIRP_FAILED
+            sleep(0.1)
+        return _exit_code(child.returncode)
+    except KeyboardInterrupt:
+        return EXIT_TERMINATED
     finally:
-        if child.poll() is None:
-            child.terminate()
+        _stop_group(child, killpg, grace_s)
         if slirp is not None:
-            slirp.terminate()
+            if slirp.poll() is None:
+                slirp.terminate()
             try:
-                slirp.wait(timeout=5)
+                slirp.wait(timeout=grace_s)
             except subprocess.TimeoutExpired:
                 slirp.kill()
+                slirp.wait()
+        errlog.close()
 
 
 def main(argv=None) -> int:
@@ -140,7 +207,11 @@ def main(argv=None) -> int:
     except ValueError as exc:
         print(f"netem: {exc}", file=sys.stderr)
         return 2
-    return run(spec, cmd)
+    previous = signal.signal(signal.SIGTERM, _sigterm_to_interrupt)
+    try:
+        return run(spec, cmd)
+    finally:
+        signal.signal(signal.SIGTERM, previous)
 
 
 if __name__ == "__main__":

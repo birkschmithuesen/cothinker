@@ -452,6 +452,7 @@ def netem_setup(args, avail=None) -> Optional[Check]:
     command -> command function) and returns the `audio.netem` row, or None
     when the flag is absent."""
     args.netem_wrapper = None
+    args.netem_failures = []
     if not getattr(args, "netem", None):
         return None
     from demo.acceptance import netem
@@ -461,6 +462,27 @@ def netem_setup(args, avail=None) -> Optional[Check]:
     spec = netem.parse_spec(args.netem)
     args.netem_wrapper = lambda cmd: netem.wrap(cmd, spec)
     return Check("audio.netem", "PASS", args.netem)
+
+
+def note_netem_failures(args, procs: dict) -> None:
+    """Remembers netem setup failures (reserved exit codes of the wrapper) so
+    the run reports `audio.netem` SKIPPED instead of a deployment failure."""
+    if not getattr(args, "netem_wrapper", None):
+        return
+    from demo.acceptance import netem
+    for name, info in procs.items():
+        why = netem.failure_reason(getattr(info["proc"], "returncode", None))
+        if why:
+            args.netem_failures.append(f"{name}: {why}")
+
+
+def netem_final_row(args, row: Optional[Check]) -> Optional[Check]:
+    failures = getattr(args, "netem_failures", [])
+    if row is not None and row.status == "PASS" and failures:
+        return Check("audio.netem", "SKIPPED",
+                     "impairment could not be applied (" + "; ".join(failures)
+                     + "); results of this run are not impaired-network results")
+    return row
 
 
 def fresh_answers(samples, baseline: str) -> list:
@@ -554,6 +576,7 @@ def run_call(s, args, workdir: Path, baseline: Optional[dict] = None):
             continue
         samples.append(snap.get("call_answer"))
     e2e.collect_participants(procs, token, seconds)
+    note_netem_failures(args, procs)
     topics = after_mark(history_titles(snap), base_history)
     lines: list = []
     if args.session_dir:
@@ -662,12 +685,14 @@ def main_catalogue(args) -> int:
     rep = Report(tool="scenarios")
     bind_preflight(rep, args.preflight_report)
     out = Path(args.out)
-    if args.via == "call":
-        netem_row = netem_setup(args)
-        if netem_row:
-            rep.extend([netem_row])
+    netem_row = netem_setup(args) if args.via == "call" else None
+    rows: list = []
     for s in scenarios.values():
-        rep.extend(grade_scenario(s, args, baseline, overrides, judge, out / "work" / s.id))
+        rows.extend(grade_scenario(s, args, baseline, overrides, judge, out / "work" / s.id))
+    netem_row = netem_final_row(args, netem_row)
+    if netem_row:
+        rep.extend([netem_row])
+    rep.extend(rows)
     rep.judge = judge.summary()
     for c in rep.checks:
         print(f"{c.status} {c.id}: {c.evidence}")
@@ -776,6 +801,8 @@ def parse_args(argv=None):
     if given and len(given) != len(JUDGE_FLAGS):
         absent = ["--judge-" + f.replace("_", "-") for f in JUDGE_FLAGS if f not in given]
         ap.error("judge flags are all-or-none; missing: " + ", ".join(absent))
+    if args.netem and not (args.catalogue and args.via == "call"):
+        ap.error("--netem only applies to --catalogue --via call")
     if args.catalogue:
         if not args.via:
             ap.error("--catalogue needs --via call|transcript")
