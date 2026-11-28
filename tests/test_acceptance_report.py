@@ -40,3 +40,14 @@ def test_no_tool_writes_accepted_by():
             assert not any(w in text for w in ("write_text", "write_bytes", "open(")), py.name
         else:
             assert "accepted_by" not in text, py.name
+
+
+def test_bind_preflight(tmp_path):
+    pre = report.Report("pre1", fingerprint={"digest": "d1", "parts": {}})
+    pre.write(tmp_path / "pre")
+    r = report.Report("run1")
+    report.bind_preflight(r, tmp_path / "pre" / "report.json")
+    assert (r.preflight_run_id, r.fingerprint["digest"]) == ("pre1", "d1")
+    r2 = report.Report("run2")
+    report.bind_preflight(r2, None)
+    assert r2.checks[0].id == "fingerprint.bound" and r2.checks[0].status == "SKIPPED"

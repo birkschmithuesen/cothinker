@@ -88,3 +88,16 @@ class Report:
 
 def load(path: Path) -> dict:
     return json.loads(Path(path).read_text(encoding="utf-8"))
+
+
+def bind_preflight(rep: Report, preflight_report) -> None:
+    """Record which preflight (and so which deployment fingerprint) this run
+    belongs to, or say that it is not bound."""
+    if preflight_report is None:
+        rep.add("fingerprint.bound", "SKIPPED", "no --preflight-report given")
+        return
+    pre = load(preflight_report)
+    rep.preflight_run_id = pre["run_id"]
+    rep.fingerprint = pre["fingerprint"]
+    rep.add("fingerprint.bound", "PASS",
+            f"preflight {pre['run_id']} digest {pre['fingerprint']['digest'][:12]}")
