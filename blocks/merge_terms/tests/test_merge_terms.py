@@ -15,7 +15,7 @@ from blocks.merge_terms import MergeTermsBlock, term_merge
 from shared.blocks import BlockContext
 from shared.modules import CoreEvent, StateStore
 
-GOLDEN = Path(__file__).resolve().parent / "golden" / "merge_terms"
+GOLDEN = Path(__file__).resolve().parents[3] / "tests" / "golden" / "merge_terms"
 
 
 def make_fake_embed(vectors_by_form):
