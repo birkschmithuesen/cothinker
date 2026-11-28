@@ -195,11 +195,25 @@ if any check FAILs. Checks:
   or a unit file or drop-in is newer than the running process, meaning the
   files on disk are not what is running. It needs `--unit`; without one it is
   SKIPPED.
-- `preflight.fingerprint`: never FAILs; records the digest and its parts.
+- `preflight.fingerprint`: records the digest and its parts. It FAILs when the
+  repository cannot be determined or no lane profile was found, because such a
+  digest could never match the gate's.
 
 `--out` writes `preflight-<run id>/report.json` under `<reports-dir>`,
-including the fingerprint. Pass that file to the outside run as
-`--preflight-report`.
+including the fingerprint. The outside machine has no access to the host's
+files, so copy that one file to the outside machine by any means you trust
+and pass its path to the outside run as `--preflight-report`. A preflight
+report without a fingerprint makes the run record a FAIL `fingerprint.bound`.
+Every FAIL in the preflight report also counts at the gate (see below).
+
+### Getting the outside report to the gate
+
+The gate reads `<reports-dir>/<name>/report.json`, exactly one directory level
+below `--reports`, and the preflight report must sit in the same `<reports-dir>`
+so the gate can resolve the run's `preflight_run_id`. After an outside run,
+copy its whole `--out` directory to the host as
+`<reports-dir>/<some name>/` (a name unique per run). Each report records the
+`tool` that wrote it (`e2e` or `scenarios`).
 
 ### The fingerprint
 
@@ -217,7 +231,8 @@ Inputs:
 - per lane profile: `config.yaml`, `SOUL.md`, and every file under its
   `skills/` tree;
 - the deployed repository: `HEAD`, the diff of tracked files against `HEAD`,
-  and the untracked files that are not ignored;
+  and the untracked files that are not ignored (compiled `.pyc` files and
+  `__pycache__` directories are left out, the runtime rewrites them);
 - the deployment's `demo.env`.
 
 Excluded, with the reason: `secrets.env` (rotating a key is not a behaviour
@@ -234,20 +249,27 @@ python -m demo.acceptance.gate \
     [--agent-identity "<name> <<email>>" ...] [--allowed-signers <file>]
 ```
 
-`demo.sh start` writes the start marker after the demo is up. The gate
+`--marker` is required. `demo.sh start` writes the start marker, a JSON file
+`{"at": <epoch seconds>}`, to `$DEMO_HOME/acceptance/last-start.json` after the
+demo is up. The gate
 recomputes the fingerprint of the running deployment and prints `GO`
 (exit 0) or `NO-GO: <reason>` (exit 1). It says GO only when all of these hold:
 
-1. the newest outside report whose fingerprint equals the current one names a
-   preflight report with the same digest, and that preflight has a passing
-   `preflight.fingerprint` check;
-2. that report is well formed: no duplicate run ids, no unreadable or
+1. for each tool that has an outside report with the current fingerprint, the
+   newest such report names a preflight report with the same digest, and that
+   preflight has a passing `preflight.fingerprint` check. A rerun of a tool
+   can therefore clear that tool's own earlier FAIL, but a passing run of one
+   tool cannot hide a failing run of another. A report without a `tool` is
+   NO-GO;
+2. each of those reports is well formed: no duplicate run ids, no unreadable or
    malformed report, at least one PASS other than `fingerprint.bound`, and its
    `fingerprint.bound` check is PASS (a report that is empty, only SKIPPED,
    or not bound to a preflight is NO-GO);
-3. it started after the start marker; with no `--marker` the gate says
-   "start marker not checked";
-4. it has no FAIL, except a FAIL covered by an acceptance.
+3. each started after the start marker, and the marker file is readable (a
+   missing marker is NO-GO);
+4. neither those reports nor their preflight reports have a FAIL, except a
+   FAIL covered by an acceptance for its check id and the current
+   fingerprint.
 
 When the fingerprint does not match, the NO-GO names the changed inputs. An
 acceptance for a different fingerprint does not count, so every change to the
