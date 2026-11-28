@@ -610,3 +610,58 @@ def test_unit_pending_inputs_counts_newer_files_read_only(pf, tmp_path):
     assert pf._unit_pending_inputs("stt", sh) == (False, 1)
     assert all(c[0] in ("systemctl", "date") and c[2] == "show" for c in calls if c[0] == "systemctl")
     assert not any(w in " ".join(sum(calls, [])) for w in ("restart", "reload ", "daemon-reload"))
+
+
+def _unit_sh(props, date_out="2000\n"):
+    def sh(argv):
+        return date_out if argv[0] == "date" else props
+    return sh
+
+
+def test_unit_pending_empty_start_time_fails(pf, tmp_path):
+    f = tmp_path / "u.service"
+    f.write_text("x")
+    sh = _unit_sh(f"NeedDaemonReload=no\nActiveEnterTimestamp=\nFragmentPath={f}\nDropInPaths=\n")
+    need, changed = pf._unit_pending_inputs("stt", sh)
+    c = pf.check_unit_pending("stt", need, changed)
+    assert c.status == "FAIL" and "start time not determinable" in c.evidence
+
+
+def test_unit_pending_non_digit_date_output_fails(pf, tmp_path):
+    f = tmp_path / "u.service"
+    f.write_text("x")
+    sh = _unit_sh(f"NeedDaemonReload=no\nActiveEnterTimestamp=garbage\nFragmentPath={f}\nDropInPaths=\n",
+                  date_out="date: invalid date\n")
+    need, changed = pf._unit_pending_inputs("stt", sh)
+    c = pf.check_unit_pending("stt", need, changed)
+    assert c.status == "FAIL" and "start time not determinable" in c.evidence
+
+
+def test_unit_pending_unreadable_unit_file_fails(pf, tmp_path):
+    gone = tmp_path / "missing.service"
+    sh = _unit_sh(f"NeedDaemonReload=no\nActiveEnterTimestamp=Tue 2026-11-24 20:42:11 CET\n"
+                  f"FragmentPath={gone}\nDropInPaths=\n")
+    need, changed = pf._unit_pending_inputs("stt", sh)
+    c = pf.check_unit_pending("stt", need, changed)
+    assert c.status == "FAIL" and "cannot stat 1 unit file(s)" in c.evidence
+
+
+def test_main_without_unit_reports_skipped(pf, tmp_path, capsys):
+    proc_root = tmp_path / "proc"
+    extra = _write_lanes(tmp_path, proc_root, 7)
+    pf.main(["--proc-root", str(proc_root), "--consumer-pid", "7"] + THR + extra)
+    out = capsys.readouterr().out
+    assert "SKIPPED preflight.unit.pending: no --unit given" in out
+
+
+def test_main_registry_check_fails_for_unresolvable_block(pf, tmp_path, capsys):
+    proc_root = tmp_path / "proc"
+    extra = _write_lanes(tmp_path, proc_root, 7)
+    tpl = tmp_path / "template.toml"
+    tpl.write_text(TEMPLATE.replace('"ghost"', '"no-such-block-zz"'))
+    log = tmp_path / "consumer.log"
+    log.write_text("started\n")
+    pf.main(["--proc-root", str(proc_root), "--consumer-pid", "7"] + THR + extra
+            + ["--consumer-log", str(log), "--template", str(tpl)])
+    out = capsys.readouterr().out
+    assert "FAIL preflight.blocks.registry:" in out and "no-such-block-zz" in out
