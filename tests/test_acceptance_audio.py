@@ -60,6 +60,16 @@ def test_zero_run_next_to_silence_is_ignored():
     assert gap_probe.zero_runs(a, RATE) == []
 
 
+def test_flanking_voiced_frames_must_be_within_the_window_of_each_other():
+    def build(quiet_s):
+        return (speech(1.0) + lead_noise(quiet_s) + array.array("h", [0] * (RATE // 2))
+                + lead_noise(quiet_s, seed=3) + speech(1.0))
+    # each neighbour is 2 s away (<= 3 s) but they are 4.5 s apart: not counted
+    assert gap_probe.zero_runs(build(2.0), RATE) == []
+    # neighbours 1.5 s apart: counted
+    assert len(gap_probe.zero_runs(build(0.5), RATE)) == 1
+
+
 def test_runs_outside_min_max_are_ignored():
     short = with_zeros(speech(6.0), 2.0, 0.1)
     long_ = with_zeros(speech(12.0), 2.0, 4.0)

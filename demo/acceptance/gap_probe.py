@@ -15,18 +15,19 @@ from pathlib import Path
 if __package__ in (None, ""):  # run as a script
     sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from demo.acceptance.audio import voiced_frames  # noqa: E402
+from demo.acceptance.audio import (  # noqa: E402
+    FRAME_S, GAP_MAX_S, GAP_MIN_S, VOICED_RMS, voiced_frames)
 
 
-def zero_runs(samples, rate: int, *, zero_max: int = 1, voiced_rms: float = 300,
-              frame_s: float = 0.1, within_s: float = 3.0, min_s: float = 0.2,
-              max_s: float = 3.0) -> list[float]:
+def zero_runs(samples, rate: int, *, zero_max: int = 1, voiced_rms: float = VOICED_RMS,
+              frame_s: float = FRAME_S, within_s: float = 3.0, min_s: float = GAP_MIN_S,
+              max_s: float = GAP_MAX_S) -> list[float]:
     """Lengths (s) of zero runs lying between two voiced frames.
 
     A zero run is consecutive samples with `|x| <= zero_max`. It counts only
-    if it is `min_s..max_s` long, and a voiced frame (`rms > voiced_rms` over
-    `frame_s`) ends within `within_s` before it starts and another starts
-    within `within_s` after it ends.
+    if it is `min_s..max_s` long and the nearest voiced frame (`rms >
+    voiced_rms` over `frame_s`) before it and the nearest one after it are
+    within `within_s` of each other (end of the first to start of the second).
     """
     n = max(1, int(round(rate * frame_s)))
     voiced = voiced_frames(samples, rate, frame_s=frame_s, voiced_rms=voiced_rms)
@@ -54,7 +55,8 @@ def zero_runs(samples, rate: int, *, zero_max: int = 1, voiced_rms: float = 300,
         after = [j for j in voiced_idx if j * n >= end]
         if not before or not after:
             continue
-        if start - (before[-1] + 1) * n > reach or after[0] * n - end > reach:
+        # the two flanking voiced frames must be within `within_s` of each other
+        if after[0] * n - (before[-1] + 1) * n > reach:
             continue
         out.append(length_s)
     return out
@@ -97,7 +99,7 @@ def main(argv: list[str] | None = None) -> int:
     for p in paths:
         a, rate = _read_mono(Path(p))
         runs = zero_runs(a, rate)
-        voiced_min = sum(voiced_frames(a, rate)) * 0.1 / 60.0
+        voiced_min = sum(voiced_frames(a, rate)) * FRAME_S / 60.0
         st = stats(runs, voiced_min)
         print(f"{Path(p).name}: n={st['n']} p50_s={st['p50_s']} p90_s={st['p90_s']} "
               f"runs_per_voiced_min={st['runs_per_voiced_min']} "
