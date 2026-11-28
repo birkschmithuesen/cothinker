@@ -226,3 +226,23 @@ def test_grade_scenario_adds_an_audio_row_with_the_gap_evidence(tmp_path, monkey
     rows = sc.grade_scenario(s, args, {}, {}, J(), tmp_path)
     audio_rows = [r for r in rows if r.id == "scenario.g.audio"]
     assert len(audio_rows) == 1 and audio_rows[0].evidence == ev
+
+
+def test_audio_row_is_skipped_when_no_gap_was_injected(tmp_path, monkeypatch):
+    from demo.acceptance import catalogue, oracle
+    sc = _scenarios_module()
+    root = Path(__file__).resolve().parent.parent / "demo" / "acceptance"
+    s = catalogue.load_all(root / "scenarios")["g"]
+    ev = "gaps: profile=track-a seed=3 injected=0"
+    monkeypatch.setattr(sc, "run_call", lambda *a, **k: oracle.Observation(audio_evidence=ev))
+
+    class J:
+        cfg = None
+    args = sc.parse_args(["--catalogue", str(root / "scenarios"), "--via", "transcript",
+                          "--out", str(tmp_path)])
+    args.via = "call"
+    rows = sc.grade_scenario(s, args, {}, {}, J(), tmp_path)
+    audio_rows = [r for r in rows if r.id == "scenario.g.audio"]
+    assert len(audio_rows) == 1
+    assert audio_rows[0].status == "SKIPPED"
+    assert "no room for gaps (injected=0)" in audio_rows[0].evidence

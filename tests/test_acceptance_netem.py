@@ -1,4 +1,5 @@
 """Optional rootless network impairment for synthetic participants."""
+import os
 import subprocess
 import sys
 
@@ -118,6 +119,31 @@ def test_start_participant_applies_wrapper(monkeypatch, tmp_path):
     assert "--name" in seen["cmd"]
 
 
+def test_start_participant_wrapped_child_gets_repo_root_on_pythonpath(monkeypatch, tmp_path):
+    from pathlib import Path
+    from demo.acceptance import e2e
+    seen = {}
+    monkeypatch.setenv("PYTHONPATH", "/existing/path")
+    monkeypatch.setattr(e2e.subprocess, "Popen",
+                        lambda cmd, **k: seen.update(cmd=cmd, **k))
+    e2e.start_participant("Alex", tmp_path / "a.wav", tmp_path / "u", tmp_path / "s",
+                          tmp_path / "p", 9301, "chromium", 5.0,
+                          wrapper=lambda c: ["WRAP", *c])
+    repo = str(Path(e2e.__file__).resolve().parents[2])
+    parts = seen["env"]["PYTHONPATH"].split(os.pathsep)
+    assert parts[0] == repo and parts[1:] == ["/existing/path"]
+    assert os.path.isfile(os.path.join(repo, "demo", "acceptance", "netem.py"))
+
+
+def test_start_participant_unwrapped_keeps_default_env(monkeypatch, tmp_path):
+    from demo.acceptance import e2e
+    seen = {}
+    monkeypatch.setattr(e2e.subprocess, "Popen", lambda cmd, **k: seen.update(k))
+    e2e.start_participant("Alex", tmp_path / "a.wav", tmp_path / "u", tmp_path / "s",
+                          tmp_path / "p", 9301, "chromium", 5.0)
+    assert seen.get("env") is None
+
+
 # ---- behavioural tests of run()/main() with fakes --------------------------
 
 import signal as _signal
@@ -156,7 +182,7 @@ class FakeProc:
         self.killed = True
 
 
-def _harness(child, slirp, ns=lambda pid: "new" if pid != 1 else "host", **kw):
+def _harness(child, slirp, **kw):
     procs = [child, slirp]
     started = []
 
@@ -166,7 +192,7 @@ def _harness(child, slirp, ns=lambda pid: "new" if pid != 1 else "host", **kw):
 
     groups = []
     kw.setdefault("handoff_s", 1.0)
-    rc = netem.run({"loss": "2%"}, ["x"], popen=popen, ns_of=lambda pid: "host" if pid == __import__("os").getpid() else "new",
+    rc = netem.run({"loss": "2%"}, ["x"], popen=popen, ns_of=lambda pid: "host" if pid == os.getpid() else "new",
                    sleep=lambda s: None, killpg=lambda pid, sig: groups.append((pid, sig)), **kw)
     return rc, started, groups
 
@@ -203,7 +229,6 @@ def test_run_slirp_dying_early_stops_group(capsys):
 
 def test_run_handoff_timeout_is_bounded(capsys):
     child = FakeProc(100, polls=10**6)
-    import os
     ticks = iter(range(0, 1000))
     groups = []
     rc = netem.run({}, ["x"], popen=lambda a, **k: child, ns_of=lambda pid: "host",
@@ -226,17 +251,14 @@ def test_run_kills_group_when_terminate_is_ignored():
 
 def test_run_interrupt_cleans_up_and_returns_143():
     child, slirp = FakeProc(100, polls=10**6), FakeProc(200, polls=10**6)
-    calls = {"n": 0}
-
     def sleep(_s):
-        calls["n"] += 1
         raise KeyboardInterrupt
 
     groups = []
     procs = [child, slirp]
     n = []
     rc = netem.run({}, ["x"], popen=lambda a, **k: (n.append(1), procs[len(n) - 1])[1],
-                   ns_of=lambda pid: "host" if pid == __import__("os").getpid() else "new",
+                   ns_of=lambda pid: "host" if pid == os.getpid() else "new",
                    sleep=sleep, killpg=lambda p, s: groups.append((p, s)), handoff_s=1)
     assert rc == 143 and slirp.terminated and (100, _signal.SIGTERM) in groups
 
@@ -285,3 +307,16 @@ def test_netem_with_transcript_is_rejected(capsys):
         scenarios.parse_args(["--catalogue", "c", "--via", "transcript", "--out", "o",
                               "--netem", "loss=2%"])
     assert "--netem" in capsys.readouterr().err
+
+
+def test_non_reserved_exit_of_a_wrapped_participant_is_not_a_clean_pass():
+    import argparse
+    from demo.acceptance import scenarios
+    args = argparse.Namespace(netem="loss=2%")
+    row = scenarios.netem_setup(args, avail=lambda: (True, ""))
+    procs = {"Alex": {"proc": argparse.Namespace(returncode=1)},
+             "Sam": {"proc": argparse.Namespace(returncode=0)}}
+    scenarios.note_netem_failures(args, procs)
+    final = scenarios.netem_final_row(args, row)
+    assert final.status == "SKIPPED"
+    assert "exit 1" in final.evidence and "impairment not confirmed" in final.evidence

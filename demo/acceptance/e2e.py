@@ -29,6 +29,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import re
 import ssl
 import subprocess
@@ -484,9 +485,17 @@ def start_participant(name: str, wav: Path, url_file: Path, stats_out: Path,
            "--name", name, "--wav", str(wav), "--seconds", str(seconds),
            "--cdp-port", str(cdp_port), "--chrome", chrome,
            "--stats-out", str(stats_out), "--screenshot", str(screenshot)]
+    env = None
     if wrapper is not None:
         cmd = wrapper(cmd)
-    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        # the wrapped child runs `python -m demo.acceptance.netem`; make that
+        # importable whatever the caller's working directory is
+        env = dict(os.environ)
+        repo_root = str(Path(__file__).resolve().parents[2])
+        env["PYTHONPATH"] = os.pathsep.join(
+            [repo_root] + ([env["PYTHONPATH"]] if env.get("PYTHONPATH") else []))
+    return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True,
+                            env=env)
 
 
 def start_participants(base_url: str, token: str, out_dir: Path, chrome: str,

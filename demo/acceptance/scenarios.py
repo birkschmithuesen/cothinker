@@ -471,9 +471,13 @@ def note_netem_failures(args, procs: dict) -> None:
         return
     from demo.acceptance import netem
     for name, info in procs.items():
-        why = netem.failure_reason(getattr(info["proc"], "returncode", None))
+        rc = getattr(info["proc"], "returncode", None)
+        why = netem.failure_reason(rc)
         if why:
             args.netem_failures.append(f"{name}: {why}")
+        elif isinstance(rc, int) and rc != 0:
+            args.netem_failures.append(
+                f"{name}: wrapper or participant failed (exit {rc}); impairment not confirmed")
 
 
 def netem_final_row(args, row: Optional[Check]) -> Optional[Check]:
@@ -644,7 +648,11 @@ def grade_scenario(s, args, baseline, overrides, judge, workdir: Path) -> list:
         combined = Check(f"scenario.{s.id}.regression", combined.status, combined.evidence)
     rows = [*mech, *([jrow] if jrow else []), combined]
     if obs is not None and obs.audio_evidence:
-        rows.append(Check(f"scenario.{s.id}.audio", "PASS", obs.audio_evidence))
+        if "injected=0" in obs.audio_evidence.split():
+            rows.append(Check(f"scenario.{s.id}.audio", "SKIPPED",
+                              f"no room for gaps (injected=0); {obs.audio_evidence}"))
+        else:
+            rows.append(Check(f"scenario.{s.id}.audio", "PASS", obs.audio_evidence))
     return rows
 
 
