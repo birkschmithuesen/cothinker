@@ -389,20 +389,10 @@ def test_catalogue_transcript_threshold_override_skips_clip_scenario(sc, tmp_pat
     assert "SKIPPED scenario.c.transcript: scenario uses an audio clip" in out
 
 
-def test_catalogue_transcript_run_of_h_without_judge(sc, tmp_path, capsys, monkeypatch):
-    from demo.acceptance import replay
-    from demo.acceptance.oracle import Observation
-    seen = {}
-
-    def fake_run(s, *, repo, workdir, speed, timeout_s):
-        seen.update(id=s.id, speed=speed)
-        return Observation(lane_calls=["Hey Robo, fass bitte kurz zusammen."],
-                           mode="transcript")
-    monkeypatch.setattr(replay, "run", fake_run)
+def test_catalogue_transcript_run_of_h_without_judge(sc, tmp_path, capsys):
     rc = sc.main(["--catalogue", str(CATALOGUE), "--via", "transcript", "--only", "h",
-                  "--out", str(tmp_path / "run")])
+                  "--speed", "4.0", "--out", str(tmp_path / "run")])
     assert rc == 0
-    assert seen == {"id": "h", "speed": 1.0}
     data = json.loads((tmp_path / "run" / "report.json").read_text())
     by_id = {c["id"]: c for c in data["checks"]}
     assert by_id["scenario.h.lane_calls"]["status"] == "PASS"
@@ -410,6 +400,43 @@ def test_catalogue_transcript_run_of_h_without_judge(sc, tmp_path, capsys, monke
     assert data["judge"] is None
     assert data["tool"] == "scenarios"
     assert "PASS scenario.h.lane_calls:" in capsys.readouterr().out
+
+
+def test_catalogue_replay_exception_becomes_fail_row(sc, tmp_path, capsys, monkeypatch):
+    from demo.acceptance import replay
+
+    def boom(s, **kw):
+        raise TimeoutError("too slow")
+    monkeypatch.setattr(replay, "run", boom)
+    rc = sc.main(["--catalogue", str(CATALOGUE), "--via", "transcript", "--only", "h",
+                  "--out", str(tmp_path / "run")])
+    assert rc == 1
+    assert "FAIL scenario.h: replay failed: TimeoutError" in capsys.readouterr().out
+
+
+_CALL_BASE = ["--catalogue", str(CATALOGUE), "--via", "call", "--base-url", "http://x",
+              "--token-file", "t", "--piper-voice-alex", "a", "--piper-voice-sam", "s"]
+
+
+def test_call_mode_requires_consumer_log_for_lane_calls(sc, tmp_path, capsys):
+    with pytest.raises(SystemExit) as e:
+        sc.parse_args([*_CALL_BASE, "--only", "h", "--out", str(tmp_path)])
+    assert e.value.code == 2
+    assert "--consumer-log" in capsys.readouterr().err
+
+
+def test_call_mode_requires_session_dir_for_transcript(sc, tmp_path, capsys):
+    with pytest.raises(SystemExit) as e:
+        sc.parse_args([*_CALL_BASE, "--only", "c", "--consumer-log", "l",
+                       "--out", str(tmp_path)])
+    assert e.value.code == 2
+    assert "--session-dir" in capsys.readouterr().err
+
+
+def test_call_mode_accepts_sources_when_given(sc, tmp_path):
+    args = sc.parse_args([*_CALL_BASE, "--only", "c", "--consumer-log", "l",
+                          "--session-dir", "d", "--out", str(tmp_path)])
+    assert args.via == "call"
 
 
 def test_catalogue_judge_flags_are_all_or_none(sc, tmp_path, capsys):

@@ -361,10 +361,10 @@ def lane_model_from_preflight(path) -> Optional[str]:
     return None
 
 
-def _scenario_wavs(s, args, workdir: Path) -> dict:
+def _scenario_wavs(s, args, workdir: Path) -> tuple:
     """Per-speaker WAV files for a call run: every say step rendered by piper,
     clip steps read verbatim from `<audio-dir>/<x>.wav`, each placed at its
-    scenario time with silence padding. -> {speaker: path}."""
+    scenario time with silence padding. -> ({speaker: path}, total_seconds)."""
     import tempfile
     from demo.acceptance import e2e
     from demo.acceptance import make_tts
@@ -436,11 +436,13 @@ def run_call(s, args, workdir: Path):
     if args.session_dir:
         protocol = (Path(args.session_dir) / "protokoll.md").read_text(
             encoding="utf-8", errors="replace")
-        topics += topic_titles(protocol)
+        topics += [t for t in topic_titles(protocol) if t not in topics]
         lines = [p for p in (_score.parse_line(ln)
                              for ln in _score.raw_transcript_lines(protocol)) if p]
-    agenda = []
-    if args.agenda_file:
+    agenda = [str(i.get("title", "")).strip()
+              for i in ((snap.get("agenda") or {}).get("items") or [])
+              if isinstance(i, dict) and str(i.get("title", "")).strip()]
+    if not agenda and args.agenda_file:
         agenda = agenda_lines(Path(args.agenda_file).read_text(encoding="utf-8"))
     # live order text is invisible: one placeholder entry per ORDER log line
     return Observation(lane_calls=order_lines()[before:], answers=answers, topics=topics,
@@ -460,8 +462,12 @@ def grade_scenario(s, args, baseline, overrides, judge, workdir: Path) -> list:
                     for g in s.expect]
             obs = None
         else:
-            obs = replay.run(s, repo=Path(args.consumer_repo), workdir=workdir,
-                             speed=args.speed, timeout_s=float(s.timeouts["scenario_s"]))
+            try:
+                obs = replay.run(s, repo=Path(args.consumer_repo), workdir=workdir,
+                                 speed=args.speed, timeout_s=float(s.timeouts["scenario_s"]))
+            except Exception as exc:  # noqa: BLE001 - one scenario must not abort the run
+                return [Check(f"scenario.{s.id}", "FAIL",
+                              f"replay failed: {type(exc).__name__}: {exc}")]
     else:
         obs = run_call(s, args, workdir)
         if isinstance(obs, Check):
@@ -542,6 +548,23 @@ def _id_list(raw: str) -> list:
     return [x.strip() for x in raw.split(",") if x.strip()]
 
 
+def _require_observation_sources(ap, args) -> None:
+    """Call mode: flags the selected scenarios' observations depend on."""
+    from demo.acceptance import catalogue
+    try:
+        scenarios = catalogue.load_all(Path(args.catalogue))
+    except Exception:  # noqa: BLE001 - main_catalogue reports a broken catalogue
+        return
+    chosen = [scenarios[i] for i in (args.only or scenarios) if i in scenarios]
+    need = []
+    if not args.consumer_log and any("lane_calls" in s.expect for s in chosen):
+        need.append("--consumer-log (a selected scenario expects lane_calls)")
+    if not args.session_dir and any("transcript" in s.expect for s in chosen):
+        need.append("--session-dir (a selected scenario expects transcript)")
+    if need:
+        ap.error("--via call needs " + ", ".join(need))
+
+
 def parse_args(argv=None):
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     # required only in the legacy a-d mode (checked after parsing)
@@ -600,6 +623,7 @@ def parse_args(argv=None):
             gone = [f"--{n.replace('_', '-')}" for n in need if not getattr(args, n)]
             if gone:
                 ap.error("--via call needs " + ", ".join(gone))
+            _require_observation_sources(ap, args)
     else:
         gone = [f"--{n.replace('_', '-')}" for n in _LEGACY_REQUIRED if getattr(args, n) is None]
         if gone:
