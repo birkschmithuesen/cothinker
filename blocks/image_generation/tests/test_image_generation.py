@@ -20,7 +20,7 @@ from blocks.image_generation import ImageGenerationBlock
 from shared.blocks import BLOCK_API_VERSION, BlockContext
 from shared.modules import CoreEvent, StateStore
 
-GOLDEN = Path(__file__).parent / "golden" / "image_generation"
+GOLDEN = Path(__file__).resolve().parents[3] / "tests" / "golden" / "image_generation"
 
 
 def load_golden(case: str) -> tuple[dict, dict, bytes]:
