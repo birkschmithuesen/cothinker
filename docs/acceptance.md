@@ -439,6 +439,61 @@ it did and never calls the result "secure". The rule is that an agent never
 writes the acceptance file, and a review that finds an agent-authored entry
 treats the run as NO-GO.
 
+## Audio
+
+The synthetic participant can speak with two classes of audio, so a run
+covers both the best case and a realistic one.
+
+- **Synthetic voices with injected gaps.** A text-to-speech voice, then a
+  seeded packet-gap injection that mimics what per-track call audio does in
+  practice: runs of zero samples inside speech.
+- **Licence-clean recorded speech.** Short German clips with natural pauses
+  and a punctuated reference text, selected in a scenario with
+  `voice: "clip:<id>"`. The clip is decoded with `ffmpeg` to 16 kHz WAV
+  before gap injection.
+
+### Gap profiles
+
+`python -m demo.acceptance.gap_probe <wav>...` measures zero-sample runs
+inside speech on per-track call audio and prints numbers only: run count,
+voiced minutes, runs per voiced minute, and the p50 and p90 run length. The
+profiles in `demo/acceptance/baseline.yaml` (`gap_profiles`, each with
+`measured_by`) come from such measurements on private meeting audio. A fresh
+probe run on private per-track call audio reproduced the first profile (about
+360 runs over about 30 voiced minutes, p50 0.58 s, p90 1.90 s, about 12 runs
+per voiced minute); the second track was within 3 %.
+
+`demo/acceptance/audio.py` fits a log-normal distribution to a profile's p50
+and p90, clipped to 0.2 to 3.0 s. The fitted p75 lies within 0.07 s of the
+measured p75, so no piecewise draw is needed. `inject_gaps` is seeded: the
+same input, profile and seed give byte-identical output, and gaps are placed
+only between voiced frames. With `--via call` the audio row carries the
+evidence `gaps: profile=<p> seed=<s> injected=<n>`.
+
+### Clips and licences
+
+`demo/acceptance/clips/` holds three German clips from VoxPopuli, licensed
+CC0 1.0. Source, licence and attribution are in `clips/SOURCES.md` and the
+repository's `THIRD_PARTY.md`; the total stays under 3 MB. The reference
+texts keep the source punctuation and were not corrected by listening, which
+is a known limitation: a word error rate against them includes any
+transcription slips in the source.
+
+No real participant's recording is committed; private clips use
+`--audio-dir` only (or `audio-dir:` in a scenario).
+
+### Network impairment (netem)
+
+`--netem loss=2%,delay=80ms` (only with `--catalogue --via call`) impairs the
+synthetic participant's network. It runs rootless, in a user and network
+namespace (`unshare`, `slirp4netns`, `tc netem`), and never uses `sudo`. The
+`audio.netem` row is PASS with the spec when the impairment was applied. It
+is reported SKIPPED, with the reason, when the tools or user namespaces are
+not available, or when the wrapper fails with one of its reserved exit codes
+95 to 98 (slirp4netns died, namespace handoff timed out, the `tap0` device
+timed out, or `tc` failed). A SKIPPED row is not a pass: the run did not
+exercise the impaired network.
+
 ## What a green report does not prove
 
 - Human perception: a recogniser-friendly synthetic voice is not a human
