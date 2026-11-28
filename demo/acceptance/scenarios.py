@@ -392,13 +392,54 @@ def _scenario_wavs(s, args, workdir: Path) -> tuple:
     return paths, total
 
 
+def fresh_answers(samples, baseline: str) -> list:
+    """Answers that belong to this scenario's window.
+
+    `samples` are the successive `call_answer` values polled during the run.
+    `call_answer` stays on the snapshot after it was given, so a value equal
+    to the pre-scenario one is the previous run's answer, not a new one.
+    Consecutive repeats collapse to one entry."""
+    out: list = []
+    for raw in samples:
+        ans = str(raw or "").strip()
+        if ans and ans != baseline.strip() and (not out or out[-1] != ans):
+            out.append(ans)
+    return out
+
+
+def after_mark(items, mark: int) -> list:
+    """The entries added after the first `mark` ones (the pre-scenario state)."""
+    return list(items)[mark:]
+
+
+def history_titles(snap: dict) -> list:
+    return [str(h.get("title", "")) for h in (snap or {}).get("history") or []
+            if isinstance(h, dict) and h.get("title")]
+
+
+def _protocol_lines(protocol: str) -> list:
+    return [p for p in (_score.parse_line(ln)
+                        for ln in _score.raw_transcript_lines(protocol)) if p]
+
+
+def _read_protocol(args) -> str:
+    if not args.session_dir:
+        return ""
+    return (Path(args.session_dir) / "protokoll.md").read_text(
+        encoding="utf-8", errors="replace")
+
+
 def run_call(s, args, workdir: Path):
-    """Live call driver. -> Observation, or a Check when it cannot run."""
+    """Live call driver. -> Observation, or a Check when it cannot run.
+
+    Every part of the observation is limited to this scenario's own window:
+    the state is read before the participants start and only what is new
+    afterwards is kept."""
     from demo.acceptance import e2e
     from demo.acceptance.oracle import Observation
     odd = sorted({sp["name"] for sp in s.speakers} - {"Alex", "Sam"})
     if odd:
-        return Check(f"scenario.{s.id}", "FAIL",
+        return Check(_row_id(s), "FAIL",
                      f"call mode supports only speakers Alex and Sam, got {odd}")
     token = Path(args.token_file).read_text(encoding="utf-8").strip()
     paths, total = _scenario_wavs(s, args, workdir)
@@ -415,10 +456,19 @@ def run_call(s, args, workdir: Path):
         text = log_path.read_text(encoding="utf-8", errors="replace")
         return [ln for ln in text.splitlines() if "— ORDER" in ln]
 
+    try:
+        base_snap = e2e.fetch_snapshot(args.base_url, token)
+    except OSError:
+        base_snap = {}
+    base_answer = str((base_snap or {}).get("call_answer") or "")
+    base_history = len(history_titles(base_snap))
+    base_protocol = _read_protocol(args)
+    base_topics = len(topic_titles(base_protocol))
+    base_lines = len(_protocol_lines(base_protocol))
     before = len(order_lines())
     seconds = total + float(s.timeouts["answer_s"])
     procs = e2e.start_participants(args.base_url, token, workdir, args.chrome, seconds)
-    answers: list = []
+    samples: list = []
     snap: dict = {}
     deadline = time.time() + seconds
     while time.time() < deadline:
@@ -427,26 +477,29 @@ def run_call(s, args, workdir: Path):
             snap = e2e.fetch_snapshot(args.base_url, token)
         except OSError:
             continue
-        ans = str(snap.get("call_answer") or "").strip()
-        if ans and (not answers or answers[-1] != ans):
-            answers.append(ans)
+        samples.append(snap.get("call_answer"))
     e2e.collect_participants(procs, token, seconds)
-    topics = [h.get("title", "") for h in snap.get("history") or [] if h.get("title")]
+    topics = after_mark(history_titles(snap), base_history)
     lines: list = []
     if args.session_dir:
-        protocol = (Path(args.session_dir) / "protokoll.md").read_text(
-            encoding="utf-8", errors="replace")
-        topics += [t for t in topic_titles(protocol) if t not in topics]
-        lines = [p for p in (_score.parse_line(ln)
-                             for ln in _score.raw_transcript_lines(protocol)) if p]
+        protocol = _read_protocol(args)
+        topics += [t for t in after_mark(topic_titles(protocol), base_topics)
+                   if t not in topics]
+        lines = after_mark(_protocol_lines(protocol), base_lines)
     agenda = [str(i.get("title", "")).strip()
               for i in ((snap.get("agenda") or {}).get("items") or [])
               if isinstance(i, dict) and str(i.get("title", "")).strip()]
     if not agenda and args.agenda_file:
         agenda = agenda_lines(Path(args.agenda_file).read_text(encoding="utf-8"))
     # live order text is invisible: one placeholder entry per ORDER log line
-    return Observation(lane_calls=order_lines()[before:], answers=answers, topics=topics,
+    return Observation(lane_calls=after_mark(order_lines(), before),
+                       answers=fresh_answers(samples, base_answer), topics=topics,
                        transcript_lines=lines, agenda_lines=agenda, mode="call")
+
+
+def _row_id(s) -> str:
+    """Id of a scenario's own row; regression-only scenarios end in `.regression`."""
+    return f"scenario.{s.id}.regression" if s.regression_only else f"scenario.{s.id}"
 
 
 def _spoken(s) -> str:
@@ -466,16 +519,22 @@ def grade_scenario(s, args, baseline, overrides, judge, workdir: Path) -> list:
                 obs = replay.run(s, repo=Path(args.consumer_repo), workdir=workdir,
                                  speed=args.speed, timeout_s=float(s.timeouts["scenario_s"]))
             except Exception as exc:  # noqa: BLE001 - one scenario must not abort the run
-                return [Check(f"scenario.{s.id}", "FAIL",
+                return [Check(_row_id(s), "FAIL",
                               f"replay failed: {type(exc).__name__}: {exc}")]
     else:
-        obs = run_call(s, args, workdir)
+        try:
+            obs = run_call(s, args, workdir)
+        except Exception as exc:  # noqa: BLE001 - one scenario must not abort the run
+            return [Check(_row_id(s), "FAIL",
+                          f"call run failed: {type(exc).__name__}: {exc}")]
         if isinstance(obs, Check):
             return [obs]
     if obs is not None:
         mech = oracle.grade(s, obs, baseline, overrides)
     jrow = None
-    if s.judge and judge.cfg is not None:
+    ran = any(c.status == "PASS" for c in mech) and not any(
+        c.status == "FAIL" for c in mech)
+    if s.judge and judge.cfg is not None and ran:
         if args.via == "transcript":
             jrow = Check(f"scenario.{s.id}.judge", "SKIPPED", "judge needs a live answer")
         else:
@@ -489,7 +548,11 @@ def grade_scenario(s, args, baseline, overrides, judge, workdir: Path) -> list:
 
 def main_catalogue(args) -> int:
     from demo.acceptance import catalogue, judge as judge_mod
-    scenarios = catalogue.load_all(Path(args.catalogue))
+    try:
+        scenarios = catalogue.load_all(Path(args.catalogue))
+    except catalogue.CatalogueError as exc:
+        print(f"catalogue error: {exc}", file=sys.stderr)
+        return 2
     if args.only:
         unknown = [i for i in args.only if i not in scenarios]
         if unknown:
@@ -561,6 +624,10 @@ def _require_observation_sources(ap, args) -> None:
         need.append("--consumer-log (a selected scenario expects lane_calls)")
     if not args.session_dir and any("transcript" in s.expect for s in chosen):
         need.append("--session-dir (a selected scenario expects transcript)")
+    if not args.audio_dir and any(
+            "clip" in st or str(sp.get("voice", "")).startswith("audio-dir:")
+            for s in chosen for st in s.timeline for sp in s.speakers):
+        need.append("--audio-dir (a selected scenario uses an audio clip)")
     if need:
         ap.error("--via call needs " + ", ".join(need))
 

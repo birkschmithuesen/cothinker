@@ -411,7 +411,7 @@ def test_catalogue_replay_exception_becomes_fail_row(sc, tmp_path, capsys, monke
     rc = sc.main(["--catalogue", str(CATALOGUE), "--via", "transcript", "--only", "h",
                   "--out", str(tmp_path / "run")])
     assert rc == 1
-    assert "FAIL scenario.h: replay failed: TimeoutError" in capsys.readouterr().out
+    assert "FAIL scenario.h.regression: replay failed: TimeoutError" in capsys.readouterr().out
 
 
 _CALL_BASE = ["--catalogue", str(CATALOGUE), "--via", "call", "--base-url", "http://x",
@@ -435,7 +435,7 @@ def test_call_mode_requires_session_dir_for_transcript(sc, tmp_path, capsys):
 
 def test_call_mode_accepts_sources_when_given(sc, tmp_path):
     args = sc.parse_args([*_CALL_BASE, "--only", "c", "--consumer-log", "l",
-                          "--session-dir", "d", "--out", str(tmp_path)])
+                          "--session-dir", "d", "--audio-dir", "a", "--out", str(tmp_path)])
     assert args.via == "call"
 
 
@@ -471,3 +471,149 @@ def test_step_starts_places_steps_by_duration_and_overlap(sc):
     starts, total = sc.step_starts(timeline, {0: 3.0, 2: 1.0})
     assert starts == {0: 0.0, 2: 4.5}
     assert total == pytest.approx(5.5)
+
+
+# ------------------------------------------------- call mode: scenario window
+
+def test_fresh_answers_ignores_the_previous_scenarios_answer(sc):
+    samples = ["old", "old", None, "new", "new", "newer"]
+    assert sc.fresh_answers(samples, "old") == ["new", "newer"]
+
+
+def test_fresh_answers_empty_when_nothing_new(sc):
+    assert sc.fresh_answers(["old", ""], " old ") == []
+
+
+def test_after_mark_keeps_only_new_entries(sc):
+    assert sc.after_mark(["a", "b", "c"], 2) == ["c"]
+    assert sc.after_mark(["a"], 5) == []
+
+
+def _fake_run_env(sc, monkeypatch, tmp_path, snaps, protocols, order_logs):
+    """Drive run_call with a fake e2e: no deployment, no audio, no clock."""
+    from demo.acceptance import e2e
+    state = {"snap": iter(snaps), "last": snaps[-1], "t": 0.0}
+
+    def fetch(base, token):
+        try:
+            state["last"] = next(state["snap"])
+        except StopIteration:
+            pass
+        return state["last"]
+    monkeypatch.setattr(e2e, "fetch_snapshot", fetch)
+    monkeypatch.setattr(e2e, "start_participants", lambda *a, **k: "procs")
+    monkeypatch.setattr(e2e, "collect_participants", lambda *a, **k: None)
+    monkeypatch.setattr(sc, "_scenario_wavs", lambda s, a, w: ({"Alex": 1, "Sam": 2}, 4.0))
+
+    class Clock:
+        def sleep(self, n):
+            state["t"] += n
+
+        def time(self):
+            return state["t"]
+    monkeypatch.setattr(sc, "time", Clock())
+    sess = tmp_path / "sess"
+    sess.mkdir()
+    proto = iter(protocols)
+    cur = {"p": protocols[0]}
+    real_read = sc._read_protocol
+
+    def read_protocol(args):
+        try:
+            cur["p"] = next(proto)
+        except StopIteration:
+            pass
+        (sess / "protokoll.md").write_text(cur["p"], encoding="utf-8")
+        return real_read(args)
+    monkeypatch.setattr(sc, "_read_protocol", read_protocol)
+    log = tmp_path / "consumer.log"
+    log.write_text(order_logs, encoding="utf-8")
+    tok = tmp_path / "tok"
+    tok.write_text("secret\n")
+    import argparse
+    return argparse.Namespace(
+        token_file=str(tok), base_url="http://x", consumer_log=str(log),
+        session_dir=str(sess), agenda_file=None, chrome="c")
+
+
+def test_run_call_only_observes_the_scenarios_own_window(sc, tmp_path, monkeypatch):
+    from demo.acceptance import catalogue
+    s = catalogue.load_all(CATALOGUE)["g"]
+    old_proto = ("### 10:00 Old topic\n\n**Rohtranskript**\n"
+                 "- **10:00** *Alex:* Alte Zeile.\n")
+    new_proto = old_proto + ("### 10:05 New topic\n\n"
+                             "- **10:05** *Sam:* Neue Zeile.\n")
+    snap_old = {"call_answer": "stale answer", "history": [{"title": "Old topic"}]}
+    snap_new = {"call_answer": "fresh answer",
+                "history": [{"title": "Old topic"}, {"title": "New topic"}]}
+    args = _fake_run_env(sc, monkeypatch, tmp_path, [snap_old, snap_old, snap_new],
+                         [old_proto, new_proto, new_proto],
+                         "x — ORDER\n")
+    obs = sc.run_call(s, args, tmp_path / "w")
+    assert obs.answers == ["fresh answer"]
+    assert obs.topics == ["New topic"]
+    assert all("Alte" not in t for _, t in obs.transcript_lines)
+    assert obs.lane_calls == []
+    assert obs.mode == "call"
+
+
+def test_run_call_no_new_answer_when_the_old_one_stays(sc, tmp_path, monkeypatch):
+    from demo.acceptance import catalogue
+    s = catalogue.load_all(CATALOGUE)["g"]
+    snap = {"call_answer": "stale answer", "history": []}
+    args = _fake_run_env(sc, monkeypatch, tmp_path, [snap], [""], "")
+    obs = sc.run_call(s, args, tmp_path / "w")
+    assert obs.answers == []
+
+
+def test_call_exception_becomes_fail_row_and_report_is_written(sc, tmp_path, capsys, monkeypatch):
+    def boom(s, args, workdir):
+        raise TypeError("expected str, not NoneType")
+    monkeypatch.setattr(sc, "run_call", boom)
+    args = sc.parse_args([*_CALL_BASE, "--only", "h", "--consumer-log", "l",
+                          "--out", str(tmp_path / "run")])
+    rc = sc.main_catalogue(args)
+    assert rc == 1
+    assert "FAIL scenario.h.regression: call run failed: TypeError" in capsys.readouterr().out
+    assert (tmp_path / "run" / "report.json").is_file()
+
+
+def test_call_mode_requires_audio_dir_for_clip_scenarios(sc, tmp_path, capsys):
+    with pytest.raises(SystemExit) as e:
+        sc.parse_args([*_CALL_BASE, "--only", "c", "--consumer-log", "l",
+                       "--session-dir", "d", "--out", str(tmp_path)])
+    assert e.value.code == 2
+    assert "--audio-dir" in capsys.readouterr().err
+
+
+def test_call_mode_accepts_audio_dir_for_clip_scenarios(sc, tmp_path):
+    args = sc.parse_args([*_CALL_BASE, "--only", "c", "--consumer-log", "l",
+                          "--session-dir", "d", "--audio-dir", "a", "--out", str(tmp_path)])
+    assert args.audio_dir == "a"
+
+
+def test_broken_catalogue_exits_2_with_message(sc, tmp_path, capsys):
+    cat = tmp_path / "cat"
+    cat.mkdir()
+    (cat / "x.yaml").write_text("id: x\n", encoding="utf-8")
+    rc = sc.main(["--catalogue", str(cat), "--via", "transcript",
+                  "--out", str(tmp_path / "run")])
+    assert rc == 2
+    assert "catalogue error" in capsys.readouterr().err
+
+
+def test_judge_is_not_called_after_a_mechanical_fail(sc, tmp_path, monkeypatch):
+    from demo.acceptance import catalogue, oracle, replay
+    from demo.acceptance.report import Check
+    s = catalogue.load_all(CATALOGUE)["a"]
+    monkeypatch.setattr(replay, "run", lambda *a, **k: oracle.Observation(mode="transcript"))
+
+    class J:
+        cfg = object()
+
+        def grade(self, *a):
+            pytest.fail("judge must not run")
+    args = sc.parse_args(["--catalogue", str(CATALOGUE), "--via", "transcript",
+                          "--out", str(tmp_path)])
+    rows = sc.grade_scenario(s, args, {}, {}, J(), tmp_path)
+    assert any(r.status == "FAIL" for r in rows)
