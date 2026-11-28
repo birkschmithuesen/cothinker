@@ -47,6 +47,7 @@ class Report:
     fingerprint: dict | None = None
     preflight_run_id: str | None = None
     judge: dict | None = None
+    tool: str = ""
     started_at: float = field(default_factory=time.time)
     checks: list[Check] = field(default_factory=list)
 
@@ -68,7 +69,7 @@ class Report:
     def to_dict(self) -> dict:
         return {"run_id": self.run_id, "base_url": self.base_url, "started_at": self.started_at,
                 "finished_at": time.time(), "fingerprint": self.fingerprint,
-                "preflight_run_id": self.preflight_run_id, "judge": self.judge,
+                "preflight_run_id": self.preflight_run_id, "tool": self.tool, "judge": self.judge,
                 "pass": self.passed, "checks": [c.to_dict() for c in self.checks]}
 
     def to_markdown(self) -> str:
@@ -97,7 +98,12 @@ def bind_preflight(rep: Report, preflight_report) -> None:
         rep.add("fingerprint.bound", "SKIPPED", "no --preflight-report given")
         return
     pre = load(preflight_report)
+    fp = pre.get("fingerprint")
+    digest = fp.get("digest") if isinstance(fp, dict) else None
+    if not isinstance(digest, str) or not digest or not isinstance(pre.get("run_id"), str):
+        rep.add("fingerprint.bound", "FAIL",
+                "preflight report has no fingerprint (run preflight with --consumer-unit and --out)")
+        return
     rep.preflight_run_id = pre["run_id"]
-    rep.fingerprint = pre["fingerprint"]
-    rep.add("fingerprint.bound", "PASS",
-            f"preflight {pre['run_id']} digest {pre['fingerprint']['digest'][:12]}")
+    rep.fingerprint = fp
+    rep.add("fingerprint.bound", "PASS", f"preflight {pre['run_id']} digest {digest[:12]}")

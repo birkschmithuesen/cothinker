@@ -342,7 +342,7 @@ def parse_args(argv=None):
 
 def main(argv=None) -> int:
     args = parse_args(argv)
-    rep = Report()
+    rep = Report(tool="scenarios")
     bind_preflight(rep, args.preflight_report)
     checks = [run_scenario(name, args) for name in args.scenarios]
     rep.extend(checks)

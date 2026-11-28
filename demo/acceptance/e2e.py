@@ -589,7 +589,7 @@ def main(argv: list[str]) -> int:
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    report = Report(new_run_id(), base_url=args.base_url, token=token)
+    report = Report(new_run_id(), base_url=args.base_url, token=token, tool="e2e")
     session_title = "e2e-" + time.strftime("%Y%m%dT%H%M%SZ", time.gmtime())
 
     bind_preflight(report, args.preflight_report)
