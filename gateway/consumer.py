@@ -105,7 +105,7 @@ from blocks.knowledge_link import KnowledgeLinkBlock  # noqa: E402
 from gateway.block_host_wiring import (SessionBlocks, build_session_blocks,  # noqa: E402
                                        coach_block_config, dispatch_call_window_state,
                                        feed_utterance, make_agent_for,
-                                       wire_call_window)
+                                       wire_call_window, wire_meeting_chat)
 from gateway.raw_transcript import MinutesFile  # noqa: E402
 from blocks.minutes_document import MinutesDocumentBlock  # noqa: E402
 from blocks.minutes_document import minutes as minutes_block  # noqa: E402
@@ -3503,10 +3503,24 @@ def main() -> int:
         # once (IntentWriter.settle, blocks/decisions_tasks_questions), so
         # by the time `current()` runs it may already be gone from the
         # board -- the row that applies it must still see it this once.
-        if session_blocks_cell:
-            current = {i.id: i for i in session_blocks_cell[0].intents.current()}
-            current.setdefault(intent.id, intent)
-            stage_surface.render(list(current.values()))
+        #
+        # Blocks emit from more than one thread (a decider's `on_result`,
+        # an agent turn's take_turn/end_turn, the SSE reader, the ticker):
+        # reading the snapshot and rendering it must be ONE step under the
+        # surface's own lock (an RLock; render() re-enters it on the same
+        # thread harmlessly). Without this, a slower thread's snapshot --
+        # taken before a pending that a faster thread already announced
+        # AND rendered -- can still apply after it, and render()'s
+        # `_clear_gone` then reads "that pending left the board" from a
+        # snapshot that never had it, forgets it was ever seen, and the
+        # next occurrence announces a SECOND real pending for the same
+        # order. The first one never settles and freezes into the final
+        # stage file (issue #184).
+        with stage_surface._lock:                       # noqa: SLF001 -- lock order
+            if session_blocks_cell:
+                current = {i.id: i for i in session_blocks_cell[0].intents.current()}
+                current.setdefault(intent.id, intent)
+                stage_surface.render(list(current.values()))
         if lanes is not None:
             lanes.observe_intent(intent)
 
@@ -3969,6 +3983,16 @@ def main() -> int:
                          changed=veraendert,
                          latency_s=round(time.monotonic() - b.end, 1))
         return bool(result["ok"])
+
+    # Meeting chat (issue #208, ADR 0027): a typed message is recorded in
+    # the raw transcript by its one writer and goes to the call lane, the
+    # lane a spoken wake order goes to. Without --lanes (or with
+    # --no-agent) the chat says "unavailable" instead of waiting. Wired
+    # before the ticker starts polling the action spool.
+    wire_meeting_chat(
+        session_blocks, record=minutes_doc.append_raw,
+        ask=(lanes.handle_chat if lanes is not None and not a.no_agent else None),
+        log=log)
 
     queue = RunQueue(run=run_turn, max_chars=a.max_batch)
     if lanes is not None and decisions.policy_on:

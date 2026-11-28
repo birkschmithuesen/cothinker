@@ -14,6 +14,7 @@ set of intents and hands each `Surface` only the kinds it understands.
 from __future__ import annotations
 
 import re
+import threading
 from dataclasses import dataclass
 from typing import Any, Callable, Iterator, Protocol, Sequence
 
@@ -33,6 +34,7 @@ INTENT_KINDS = frozenset(
         "transcript",
         "transcript_partial",
         "tasks",
+        "chat",
     }
 )
 
@@ -82,27 +84,40 @@ class Surface(Protocol):
 
 
 class IntentBoard:
+    """Blocks emit from more than one thread (a decider's `on_result`, an
+    agent turn's take_turn/end_turn, the SSE reader, the ticker) -- `put`
+    and `current` touch the SAME plain dict, and `current` both iterates
+    and mutates it (expiring entries). Without a lock, a `put` from one
+    thread racing a `current` sweep on another can corrupt the dict or
+    drop an entry: an announce or a settle that loses that race never
+    reaches the surface, and its pending can freeze into the final stage
+    file (issue #184). A leaf lock -- nothing in here calls back out."""
+
     def __init__(self, clock: Callable[[], float]) -> None:
         self._clock = clock
         self._intents: dict[str, ViewIntent] = {}
         self._logged_unrenderable_ids: set[str] = set()
+        self._lock = threading.Lock()
 
     def put(self, intent: ViewIntent) -> None:
-        self._intents[intent.id] = intent
+        with self._lock:
+            self._intents[intent.id] = intent
 
     def remove(self, intent_id: str) -> None:
-        self._intents.pop(intent_id, None)
+        with self._lock:
+            self._intents.pop(intent_id, None)
 
     def current(self) -> list[ViewIntent]:
         now = self._clock()
-        expired = [
-            intent_id
-            for intent_id, intent in self._intents.items()
-            if intent.expires_at is not None and intent.expires_at <= now
-        ]
-        for intent_id in expired:
-            del self._intents[intent_id]
-        return list(self._intents.values())
+        with self._lock:
+            expired = [
+                intent_id
+                for intent_id, intent in self._intents.items()
+                if intent.expires_at is not None and intent.expires_at <= now
+            ]
+            for intent_id in expired:
+                del self._intents[intent_id]
+            return list(self._intents.values())
 
     def for_surface(
         self, kinds: frozenset, log: Callable[[str], None]

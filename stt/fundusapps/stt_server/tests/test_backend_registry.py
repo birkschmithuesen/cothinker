@@ -31,6 +31,7 @@ def test_get_whisper_class_lazy():
 
 
 def test_get_elevenlabs_scribe_class_lazy():
+    pytest.importorskip("fundusapps.stt_server.backends.elevenlabs_scribe_backend")
     cls = get_backend_class("elevenlabs-scribe")
     from fundusapps.stt_server.backends.elevenlabs_scribe_backend import (
         ElevenLabsScribeBackend,

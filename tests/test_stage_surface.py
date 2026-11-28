@@ -114,7 +114,7 @@ def test_status_rule_sets_operating_line():
     assert surface.name == "stage" and list(surface.actions()) == []
     assert surface.kinds == {"prompt", "status", "artefact", "graph", "timer",
                              "queue", "voice", "share", "knowledge", "listen", "transcript",
-                             "transcript_partial", "tasks"}
+                             "transcript_partial", "tasks", "chat"}
     surface.render([intent("status:line", "status",
                            {"state": "working", "detail": {"count": 3, "failed": False}})])
     assert len(writer.statuses) == 1
@@ -254,6 +254,21 @@ def test_listen_rule_sets_listen_key_and_clears_it():
     assert state.content()["listen"] == listen
     surface.render([])
     assert "listen" not in state.content()
+
+
+def test_chat_rule_sets_chat_key_and_clears_it():
+    """issue #208: the meeting-chat block's `chat:room` intent renders as
+    a region -- set on an intent, cleared when it leaves the board -- so
+    live mode serves `chat` straight from `buehne.json`."""
+    surface, state, _, _ = make()
+    assert "chat" not in state.content()
+    chat = {"messages": [{"id": "m1", "role": "participant", "name": "Person A",
+                          "text": "Compare X and Y", "at": "2026-11-27T10:00:00+01:00",
+                          "reply_to": None, "status": "pending"}]}
+    surface.render([intent("chat:room", "chat", chat)])
+    assert state.content()["chat"] == chat
+    surface.render([])
+    assert "chat" not in state.content()
 
 
 def test_knowledge_rule_sets_knowledge_key_and_clears_it():

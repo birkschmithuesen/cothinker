@@ -23,7 +23,13 @@ from fastapi.responses import StreamingResponse
 
 from shared.actions_spool import append_action as spool_append_action
 from surfaces.contract.live_player import LivePlayer
-from surfaces.contract.models import StageStateSnapshot, TapAction, UserAction
+from surfaces.contract.models import (
+    EditAction,
+    MessageAction,
+    StageStateSnapshot,
+    TapAction,
+    UserAction,
+)
 from surfaces.contract.player import ScenarioPlayer
 
 SSE_PING_S = 15.0
@@ -37,6 +43,12 @@ MIN_ACTION_GAP_S = 0.5
 QUEUE_OPS = ("request", "done")
 LISTEN_OPS = ("open", "close", "toggle")
 LIVE_ACTION_OPS = {"queue:room": QUEUE_OPS, "listen:room": LISTEN_OPS}
+# Meeting chat (issue #208): the one intent a `message` may answer, and the
+# display-name edit the chat surface sends (the stage's own `/join` writes
+# the same spool line, `stage/stage.py`).
+CHAT_INTENT_ID = "chat:room"
+NAME_INTENT_ID = "participant:name"
+NAME_MAX_CHARS = 40
 _PID_RE = re.compile(r"[0-9a-f]{16}")
 
 
@@ -46,13 +58,33 @@ def _default_spool_dir() -> Path:
 
 def _is_allowed_live_action(action: UserAction) -> bool:
     """The live-mode action allowlist (issue #183): a `queue:room` floor
-    request or hand-off, and a `listen:room` open/close/toggle of the call
-    window (issue #180, ADR 0024). Everything else is rejected with 422
-    rather than silently spooled."""
+    request or hand-off, a `listen:room` open/close/toggle of the call
+    window (issue #180, ADR 0024), a meeting-chat message to `chat:room`
+    with non-blank text and a non-blank one-line `participant:name` of at
+    most NAME_MAX_CHARS (issue #208). Everything else is rejected with 422
+    rather than silently spooled. The message length limit lives in the
+    model (`MessageAction.text`), so it holds in fixture mode too."""
+    if isinstance(action, MessageAction):
+        return action.intent_id == CHAT_INTENT_ID and bool(action.text.strip())
+    if isinstance(action, EditAction):
+        name = action.text.strip()
+        return (action.intent_id == NAME_INTENT_ID and bool(name)
+                and len(name) <= NAME_MAX_CHARS and "\n" not in name)
     if not isinstance(action, TapAction):
         return False
     ops = LIVE_ACTION_OPS.get(action.intent_id)
     return ops is not None and (action.payload or {}).get("op") in ops
+
+
+def _spool_payload(action: UserAction) -> dict:
+    """The spool line's `payload` for an allowed action. A message's or a
+    name's text goes in stripped; nothing the surface claims about the
+    person is ever spooled (the person is the cookie pid)."""
+    if isinstance(action, MessageAction):
+        return {"text": action.text.strip()}
+    if isinstance(action, EditAction):
+        return {"name": action.text.strip()}
+    return action.payload or {}
 
 
 def create_app(player: ScenarioPlayer | None = None, cors_origins: list[str] | None = None,
@@ -134,7 +166,7 @@ def create_app(player: ScenarioPlayer | None = None, cors_origins: list[str] | N
         if _rate_limited(pid):
             raise HTTPException(status_code=429, detail="slow down")
         spool_append_action(spool_dir, session_dir.name, pid,
-                            action.intent_id, action.kind, action.payload or {})
+                            action.intent_id, action.kind, _spool_payload(action))
         return {"received": action.kind, "mode": "live"}
 
     @app.get("/events", tags=["events"])

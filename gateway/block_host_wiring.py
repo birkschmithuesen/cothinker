@@ -38,6 +38,7 @@ import blocks.status_line as status_line_block
 from blocks.condense import CondenseBlock
 from blocks.graph import GraphBlock
 from blocks.live_transcript import LiveTranscriptBlock
+from blocks.meeting_chat import MeetingChatBlock
 from blocks.mirroring_coach.coach import MirroringCoach, resolve_config
 from blocks.topics import TopicsBlock
 from gateway.infomaniak_chat import ChatError, Client as InfomaniakClient, api_key
@@ -74,6 +75,7 @@ REGISTRY: dict[str, Callable[[], Block]] = {
     "speaking-share": SpeakingShareBlock,
     "call-window": CallWindowBlock,
     "live-transcript": LiveTranscriptBlock,
+    "meeting-chat": MeetingChatBlock,
 }
 
 REGISTRY["condense"] = CondenseBlock
@@ -331,6 +333,51 @@ def dispatch_call_window_state(blocks: SessionBlocks, bb) -> None:
     `listen:room` view intent exactly like a tap-triggered one does --
     the block only reacts to events, it never polls the segmenter."""
     blocks.dispatch("block_output", {"call_window": bb.state()})
+
+
+# -------------------------------------------------------- meeting chat
+def wire_meeting_chat(blocks: SessionBlocks, *,
+                      record: Callable[[str, str], object],
+                      ask: Optional[Callable[[str, str, str], object]],
+                      log: Callable[..., None] = print) -> None:
+    """The session host's side of the `meeting-chat` block (issue #208,
+    ADR 0027): one `on_output` listener.
+
+    `chat_record {"speaker", "text"}` -> `record(text, speaker)`: the
+    session host's `MinutesFile.append_raw`, the one writer of the
+    record's `## Rohtranskript`. `chat_request {"id", "name", "text"}` ->
+    `ask(id, name, text)`: `CallLane.handle_chat`, the same lane a spoken
+    wake order goes to. Without an agent that answers chat (`ask` is None:
+    no `--lanes`, or `--no-agent`) the request is answered at once as
+    `unavailable`, so nobody waits for an answer that cannot come.
+
+    Never raises into the block host; logs the failure's type only, never
+    the message text."""
+    def on_output(payload) -> None:
+        if not hasattr(payload, "get") or payload.get("from") != "meeting-chat":
+            return
+        rec = payload.get("chat_record")
+        if isinstance(rec, Mapping):
+            try:
+                record(str(rec.get("text") or ""), str(rec.get("speaker") or ""))
+            except Exception as e:  # noqa: BLE001 -- the request below still goes out
+                log(f"meeting chat: record failed: {type(e).__name__}")
+        req = payload.get("chat_request")
+        try:
+            if isinstance(req, Mapping):
+                if ask is None:
+                    blocks.dispatch("block_output", {"from": HOST_LISTENER_ID, "chat_answer": {
+                        "ids": [req.get("id")], "ok": False, "text": "",
+                        "reason": "unavailable"}})
+                else:
+                    ask(str(req.get("id") or ""), str(req.get("name") or ""),
+                        str(req.get("text") or ""))
+        except Exception as e:  # noqa: BLE001 -- a chat failure must not cost the session
+            log(f"meeting chat: request failed: {type(e).__name__}")
+            blocks.dispatch("block_output", {"from": HOST_LISTENER_ID, "chat_answer": {
+                "ids": [req.get("id")], "ok": False, "text": "", "reason": "failed"}})
+
+    blocks.on_output(on_output)
 
 
 # ------------------------------------------------------------ agent lanes

@@ -123,7 +123,9 @@ In **live mode** the action is validated against an allowlist before it
 is spooled -- a `queue:room` floor request or hand-off (`TapAction` with
 `intent_id: "queue:room"` and `payload: {"op": "request" | "done"}`) or a
 call-window tap (`intent_id: "listen:room"`, `payload: {"op": "open" |
-"close" | "toggle"}`, ADR 0024); anything else answers `422`. `503` answers instead of acting
+"close" | "toggle"}`, ADR 0024), a meeting-chat message (`MessageAction`
+with `intent_id: "chat:room"`) or a display name (`EditAction` with
+`intent_id: "participant:name"`, see "Meeting chat" below); anything else answers `422`. `503` answers instead of acting
 if no live session has resolved yet (the same condition `GET /snapshot`
 reports). On success: `202 {"received": "<kind>", "mode": "live"}`.
 
@@ -210,6 +212,29 @@ deployment does: green with the words "Robo hört" while listening, red/neutral 
 icon plus word, never colour alone. The "meeting" fixture scenario demonstrates one full listening phase (opened
 by voice, closed with `reason: "end"`), so you can design the toggle's three states (idle, listening, just closed)
 against real data without a live session.
+
+## Meeting chat
+
+Participants type a task for the agent and read its answer in the same chat (issue #208, ADR 0027). The chat works
+without the voice path: no wake phrase, no speech recognition.
+
+- **Send a message:** `POST /actions` with `{"kind": "message", "intent_id": "chat:room", "text": "..."}`. Text is
+  1 to 1000 characters (`MESSAGE_MAX_CHARS`) after trimming; a blank text or another `intent_id` answers `422`, the
+  per-person rate limit answers `429`. `person` is not sent: the server's `cothinker_pid` cookie is the person.
+- **Set your display name:** `{"kind": "edit", "intent_id": "participant:name", "text": "<name>"}`, at most 40
+  characters, one line -- the same spool line the stage's own `/join` writes.
+- **Read the thread:** `StageStateSnapshot.chat` (`None` until the first message) and the `chat:room` view intent
+  (kind `chat`) carry the same `ChatSnapshot`: `messages`, the last 50, oldest first. Each `ChatMessage` has `id`,
+  `role` (`participant`|`agent`), `name` (empty for an unnamed participant and for the agent -- render your own
+  label), `text`, `at`, `reply_to` (an agent message: the id it answers) and `status`. A participant message is
+  `pending` while the agent works on it, then `answered`, `failed` or `unavailable` (this session has no agent that
+  answers chat); render the status on the message itself.
+- **Where the answer goes:** the agent answers through the call lane, the same lane a spoken wake order uses, so an
+  answer that belongs on the stage still appears there; the chat gets the same text in addition.
+- **Record:** every message and every answer is a line of the session's minutes raw transcript, marked `(Chat)`.
+
+`surfaces/meeting_chat/` is the reference chat surface; the operator console embeds it with
+`?chat=<same-origin URL of the chat page>`.
 
 ## Missing data
 

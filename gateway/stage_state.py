@@ -434,6 +434,10 @@ class StageState:
         # contract's `StageStateSnapshot.tasks`. None until the first task
         # -- the key is left out of `content()` until then.
         self.tasks: list | None = None
+        # The meeting chat thread, from the `meeting-chat` block's
+        # `chat:room` view intent (issue #208). None = no chat yet
+        # (key-absent-means-hidden).
+        self.chat: dict | None = None
 
     # ------------------------------------------------------------ helpers
     @property
@@ -1154,7 +1158,8 @@ class StageState:
                            ("knowledge", self.knowledge),
                            ("listen", self.listen),
                            ("transcript_partial", self.transcript_partial),
-                           ("tasks", self.tasks)):
+                           ("tasks", self.tasks),
+                           ("chat", self.chat)):
             if value is not None:
                 content[key] = value
         return content

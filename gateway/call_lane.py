@@ -429,6 +429,35 @@ class CallLane:
                                         "calls": calls}))
         return ack
 
+    def handle_chat(self, chat_id: str, name: str, text: str) -> None:
+        """A meeting-chat message (issue #208, ADR 0027): an order on the
+        SAME call lane a spoken wake order goes to -- same queue, merge
+        rule, timeout and prompt -- without the wake phrase, the segmenter
+        or STT. Typed text is taken as typed (no speech prefilter), and no
+        spoken-style ack goes to the stage: the chat shows the message as
+        pending itself. The answer takes the spoken call's stage path
+        unchanged (`_on_call_result`) and is handed to the blocks as
+        `chat_answer` in addition (`_chat_answer`)."""
+        text = text.strip()
+        if self.call_ctx.add_utterance(f"{name or 'Guest'} (Chat)", text):
+            self.log("call lane: context window rolled, Stand folded")
+            self._rolled(self.call_lane)
+        calls = [{"text": text, "intent": call_intent(text), "ack": "",
+                  "at": self.now(), "chat_id": chat_id}]
+        self.call_lane.submit(Job(id=self._next_job_id("chat"),
+                                  prompt=self._call_prompt(calls),
+                                  timeout=self.call_turn_timeout_s,
+                                  meta={"intent": calls[0]["intent"],
+                                        "calls": calls}))
+
+    def _chat_answer(self, job: Job, *, ok: bool, text: str = "") -> None:
+        """The job's chat messages, if it carries any, get their answer
+        (or their failure) through the block host."""
+        ids = [c["chat_id"] for c in job.meta.get("calls") or [] if c.get("chat_id")]
+        if ids:
+            self._publish({"chat_answer": {"ids": ids, "ok": ok, "text": text,
+                                           "reason": "" if ok else "failed"}})
+
     def observe_intent(self, intent) -> None:
         """The stage sink's tee: a coach contribution (`mirror:` intent of
         the mirroring-coach block) goes into the call window as an
@@ -580,12 +609,14 @@ class CallLane:
         its ack must not outlive the meeting as a forever-running line."""
         self._log_call_outcome(job, "dropped")
         self._write(CALL_FAILED_TEXT)
+        self._chat_answer(job, ok=False)
 
     def _on_call_result(self, job: Job, result: dict, duration: float) -> None:
         if _is_timeout(result):
             self._log_call_outcome(job, "timed out")
             self._write(TIMEOUT_ABORT_TEXT)
             self._broadcast("Robo (Zuruf)", TIMEOUT_ABORT_TEXT)
+            self._chat_answer(job, ok=False)
             return
         text = (result.get("final") or "").strip()
         if not result.get("ok") or not text:
@@ -593,12 +624,14 @@ class CallLane:
             self._log_call_outcome(job, "failed")
             self._write(CALL_FAILED_TEXT)
             self._broadcast("Robo (Zuruf)", CALL_FAILED_TEXT)
+            self._chat_answer(job, ok=False)
             return
         if _is_meta_answer(text):
             # Reject both patterns: keep the ack line on stage instead of
             # publishing a non-answer as Robo's answer.
             self.log(f"call lane: {job.id} meta answer rejected: {text!r}")
             self._log_call_outcome(job, "rejected (meta answer)")
+            self._chat_answer(job, ok=False)
             return
         self._log_call_outcome(job, "answered")
         text, image = self._take_image(text)
@@ -613,6 +646,7 @@ class CallLane:
             # AFTER the mirror line: a new mirror line closes an image.
             self._show_image(*image)
         self._broadcast("Robo (Zuruf)", reply)
+        self._chat_answer(job, ok=True, text=text)
         # A call result is NOT a topic: it goes INTO the current topic's
         # entry (2026-10-20 replay: own "Robo: Antwort" entries pushed the
         # real topics out and the coach attached to a call result).

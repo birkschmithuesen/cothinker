@@ -11,6 +11,8 @@ h1 { font-size: var(--ct-size-lg); font-weight: 400; }
 section { background: var(--ct-sheet); border: 1px solid var(--ct-rule); border-radius: var(--ct-radius-8);
           padding: var(--ct-space-16); }
 section[data-panel="control"] { grid-column: span 3; display: flex; flex-wrap: wrap; gap: var(--ct-space-16); align-items: center; }
+section[data-panel="chat"] { grid-column: span 3; }
+#chat-frame { width: 100%; min-height: calc(var(--ct-space-64) * 6); border: 0; }
 h2 { font-size: var(--ct-size-sm); color: var(--ct-muted); font-weight: 600; margin-bottom: var(--ct-space-8); }
 dl { display: grid; grid-template-columns: auto 1fr; gap: var(--ct-space-4) var(--ct-space-12); }
 dt { color: var(--ct-muted); }

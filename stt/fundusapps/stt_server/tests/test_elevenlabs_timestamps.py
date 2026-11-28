@@ -15,6 +15,9 @@ Every text here is an invented placeholder.
 import time
 
 import numpy as np
+import pytest
+
+pytest.importorskip("fundusapps.stt_server.backends.elevenlabs_scribe_backend")
 
 from fundusapps.stt_server.backends.elevenlabs_scribe_backend import (
     ElevenLabsScribeBackend, _ScribeStateMachine,
