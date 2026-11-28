@@ -504,6 +504,7 @@ def _fake_run_env(sc, monkeypatch, tmp_path, snaps, protocols, order_logs):
     monkeypatch.setattr(e2e, "start_participants", lambda *a, **k: "procs")
     monkeypatch.setattr(e2e, "collect_participants", lambda *a, **k: None)
     monkeypatch.setattr(sc, "_scenario_wavs", lambda s, a, w: ({"Alex": 1, "Sam": 2}, 4.0))
+    monkeypatch.setattr(sc, "apply_gaps", lambda s, p, b: "gaps: profile=x seed=1 injected=2")
 
     class Clock:
         def sleep(self, n):
@@ -555,6 +556,7 @@ def test_run_call_only_observes_the_scenarios_own_window(sc, tmp_path, monkeypat
     assert all("Alte" not in t for _, t in obs.transcript_lines)
     assert obs.lane_calls == []
     assert obs.mode == "call"
+    assert obs.audio_evidence == "gaps: profile=x seed=1 injected=2"
 
 
 def test_run_call_no_new_answer_when_the_old_one_stays(sc, tmp_path, monkeypatch):
@@ -567,7 +569,7 @@ def test_run_call_no_new_answer_when_the_old_one_stays(sc, tmp_path, monkeypatch
 
 
 def test_call_exception_becomes_fail_row_and_report_is_written(sc, tmp_path, capsys, monkeypatch):
-    def boom(s, args, workdir):
+    def boom(s, args, workdir, baseline=None):
         raise TypeError("expected str, not NoneType")
     monkeypatch.setattr(sc, "run_call", boom)
     args = sc.parse_args([*_CALL_BASE, "--only", "h", "--consumer-log", "l",

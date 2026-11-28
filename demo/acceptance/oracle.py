@@ -22,6 +22,7 @@ class Observation:
     transcript_lines: list[tuple[str, str]] = field(default_factory=list)
     agenda_lines: list[str] = field(default_factory=list)
     mode: str = "call"
+    audio_evidence: str = ""
 
 
 def _ends_sentence(text: str) -> bool:

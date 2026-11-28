@@ -392,6 +392,31 @@ def _scenario_wavs(s, args, workdir: Path) -> tuple:
     return paths, total
 
 
+def apply_gaps(s, paths: dict, baseline: dict) -> str:
+    """Inject the scenario's packet gaps into each speaker's WAV, in place.
+
+    -> evidence `gaps: profile=<p> seed=<s> injected=<n>`, or "" when the
+    scenario has no `gaps:` block. Each speaker gets its own seed
+    (`seed + index`), so two tracks never lose the same samples."""
+    from demo.acceptance import audio, make_tts
+    if not s.gaps:
+        return ""
+    name = s.gaps["profile"]
+    entry = (baseline.get("gap_profiles") or {}).get(name)
+    if entry is None:
+        raise ValueError(f"gap profile {name!r} is not in baseline gap_profiles")
+    profile = audio.GapProfile.from_baseline(entry)
+    seed = int(s.gaps.get("seed", 0))
+    injected = 0
+    for k, who in enumerate(sorted(paths)):
+        with wave.open(str(paths[who]), "rb") as w:
+            pcm = w.readframes(w.getnframes())
+        out, n = audio.inject_gaps_counted(pcm, make_tts.RATE, profile, seed + k)
+        make_tts.write_wav(Path(paths[who]), out)
+        injected += n
+    return f"gaps: profile={name} seed={seed} injected={injected}"
+
+
 def fresh_answers(samples, baseline: str) -> list:
     """Answers that belong to this scenario's window.
 
@@ -429,7 +454,7 @@ def _read_protocol(args) -> str:
         encoding="utf-8", errors="replace")
 
 
-def run_call(s, args, workdir: Path):
+def run_call(s, args, workdir: Path, baseline: Optional[dict] = None):
     """Live call driver. -> Observation, or a Check when it cannot run.
 
     Every part of the observation is limited to this scenario's own window:
@@ -443,6 +468,7 @@ def run_call(s, args, workdir: Path):
                      f"call mode supports only speakers Alex and Sam, got {odd}")
     token = Path(args.token_file).read_text(encoding="utf-8").strip()
     paths, total = _scenario_wavs(s, args, workdir)
+    audio_evidence = apply_gaps(s, paths, baseline or {}) if s.gaps else ""
     for who in ("Alex", "Sam"):  # start_participants is hard-wired to both
         if who not in paths:
             from demo.acceptance import make_tts
@@ -494,7 +520,8 @@ def run_call(s, args, workdir: Path):
     # live order text is invisible: one placeholder entry per ORDER log line
     return Observation(lane_calls=after_mark(order_lines(), before),
                        answers=fresh_answers(samples, base_answer), topics=topics,
-                       transcript_lines=lines, agenda_lines=agenda, mode="call")
+                       transcript_lines=lines, agenda_lines=agenda, mode="call",
+                       audio_evidence=audio_evidence)
 
 
 def _row_id(s) -> str:
@@ -523,7 +550,7 @@ def grade_scenario(s, args, baseline, overrides, judge, workdir: Path) -> list:
                               f"replay failed: {type(exc).__name__}: {exc}")]
     else:
         try:
-            obs = run_call(s, args, workdir)
+            obs = run_call(s, args, workdir, baseline)
         except Exception as exc:  # noqa: BLE001 - one scenario must not abort the run
             return [Check(_row_id(s), "FAIL",
                           f"call run failed: {type(exc).__name__}: {exc}")]
@@ -543,7 +570,10 @@ def grade_scenario(s, args, baseline, overrides, judge, workdir: Path) -> list:
     combined = judge_mod.combine(mech, jrow, s.id)
     if s.regression_only:
         combined = Check(f"scenario.{s.id}.regression", combined.status, combined.evidence)
-    return [*mech, *([jrow] if jrow else []), combined]
+    rows = [*mech, *([jrow] if jrow else []), combined]
+    if obs is not None and obs.audio_evidence:
+        rows.append(Check(f"scenario.{s.id}.audio", "PASS", obs.audio_evidence))
+    return rows
 
 
 def main_catalogue(args) -> int:
