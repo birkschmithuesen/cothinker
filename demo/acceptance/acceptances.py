@@ -1,8 +1,10 @@
 """Human acceptances of a FAIL (ADR 0025 rule 7). Read-only: this module never writes files.
 
 An entry counts only if (a) the file is committed and clean, (b) every line of
-the entry is blamed to a commit whose (author name, email) is not an agent
-identity, (c) with an allowed-signers file, each of those commits has a valid
+the entry is blamed to ONE commit whose (author name, email) is not an agent
+identity and whose lines are consecutive there (a deletion-only commit cannot splice
+surviving lines of two entries; as a consequence an entry a human edited across two
+commits is rejected, and the human re-commits the whole entry), (c) with an allowed-signers file, each of those commits has a valid
 SSH signature. On a single-user host an agent can forge (b) and, with an
 unlocked key, (c); `verification` says what was checked, never more."""
 from __future__ import annotations
@@ -66,15 +68,16 @@ def _entry_ranges(lines):
 
 
 def _blame_lines(name: str, cwd, sh):
-    """Blame HEAD (never the working tree); returns {line_no: sha} or None."""
-    rc, out = sh(["git", "blame", "--line-porcelain", "HEAD", "--", name], cwd)
+    """Blame HEAD (never the working tree); returns {final_line: (sha, orig_line)} or None.
+    Repo-configured ignore-revs are switched off so no commit can be skipped over."""
+    rc, out = sh(["git", "-c", "blame.ignoreRevsFile=", "blame", "--line-porcelain", "HEAD", "--", name], cwd)
     if rc != 0:
         return None
     by_line = {}
     for ln in _b(out).split(b"\n"):
-        m = re.fullmatch(rb"([0-9a-f]{40}) \d+ (\d+)(?: \d+)?", ln)
+        m = re.fullmatch(rb"([0-9a-f]{40}) (\d+) (\d+)(?: \d+)?", ln)
         if m:
-            by_line[int(m.group(2))] = m.group(1).decode("ascii")
+            by_line[int(m.group(3))] = (m.group(1).decode("ascii"), int(m.group(2)))
     return by_line
 
 
@@ -152,7 +155,8 @@ def _load_verified(path: Path, agent_ids: set, allowed_signers, sh):
     accepted, rejected = [], []
     for entry, (a, b) in zip(entries, ranges):
         cid = entry["check_id"]
-        shas = {blame.get(n) for n in range(a, b + 1)}
+        got = [blame.get(n) for n in range(a, b + 1)]
+        shas = {g[0] if g else None for g in got}
         if None in shas or _ZERO in shas:
             rejected.append(f"{cid}: lines not committed (blamed to no commit); entry does not count")
             continue
@@ -174,6 +178,10 @@ def _load_verified(path: Path, agent_ids: set, allowed_signers, sh):
                 rejected.append(f"{cid}: commit {bad[0][:8]} has no valid allowed signature")
                 continue
             verification = "signature-checked"
+        origs = [g[1] for g in got]
+        if len(shas) != 1 or any(y != x + 1 for x, y in zip(origs, origs[1:])):
+            rejected.append(f"{cid}: entry lines not contiguous in one commit (lines deleted or merged); entry does not count")
+            continue
         accepted.append(Acceptance(entry["check_id"], entry["fingerprint"], entry["accepted_by"],
                                    entry.get("reason", ""), verification))
     return accepted, rejected

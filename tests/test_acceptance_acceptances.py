@@ -225,12 +225,17 @@ def _forged_first(tmp_path, comment):
 BOT = {("Bot", "bot@example.invalid")}
 
 
-@pytest.mark.parametrize("sep", [" ", " ", "\x85", "\x0b", "\x0c", "\x1c"])
-def test_unicode_line_separator_cannot_shift_agent_entry(tmp_path, sep):
+# U+2028, U+2029 and NEL are legal in a TOML comment, so the human entry survives; the
+# control characters are not, so the whole file is invalid TOML and nothing counts.
+@pytest.mark.parametrize("sep,expected", [
+    ("\u2028", ["scenario.d.topic"]), ("\u2029", ["scenario.d.topic"]), ("\x85", ["scenario.d.topic"]),
+    ("\x0b", []), ("\x0c", []), ("\x1c", []),
+])
+def test_unicode_line_separator_cannot_shift_agent_entry(tmp_path, sep, expected):
     f = _forged_first(tmp_path, "# c" + sep * 5 + "\n")
     ok, rejected = acc.load_verified(f, agent_ids=BOT)
     assert all(a.check_id != "scenario.forged" for a in ok)
-    assert ok == [] or [a.check_id for a in ok] == ["scenario.d.topic"]
+    assert [a.check_id for a in ok] == expected
 
 
 def test_lone_cr_cannot_shift_agent_entry(tmp_path):
@@ -301,3 +306,53 @@ def test_agent_name_with_other_email_rejected(tmp_path):
 def test_empty_agent_identities_fail_closed(tmp_path):
     ok, rejected = acc.load_verified(_repo(tmp_path), agent_ids=set())
     assert ok == [] and "no agent identities known" in rejected[0]
+
+
+def _entry(cid, fp):
+    return f'[[accept]]\ncheck_id = "{cid}"\nfingerprint = "{fp}"\naccepted_by = "Alex Example"\n'
+
+
+def test_deletion_only_agent_commit_cannot_splice_human_entries(tmp_path):
+    _git(tmp_path, "init", "-q")
+    f = tmp_path / "acceptances.toml"
+    f.write_text(_entry("scenario.x", "old") + _entry("scenario.y", "cur"))
+    _git(tmp_path, "add", "acceptances.toml")
+    _git(tmp_path, "commit", "-qm", "accept")
+    lines = f.read_text().split("\n")
+    # delete X.fingerprint, X.accepted_by, Y.header, Y.check_id: result is check_id x with fingerprint cur
+    f.write_text("\n".join(lines[0:2] + lines[6:]))
+    _git(tmp_path, "commit", "-qam", "trim", name="Bot", email="bot@example.invalid")
+    ok, rejected = acc.load_verified(f, agent_ids=BOT)
+    assert ok == []
+    assert len(rejected) == 1 and "scenario.x" in rejected[0] and "not contiguous" in rejected[0]
+
+
+def test_human_entry_edited_in_later_human_commit_rejected(tmp_path):
+    f = _repo(tmp_path)
+    f.write_text(ENTRY.replace('"d1"', '"d2"'))
+    _git(tmp_path, "commit", "-qam", "bump")
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS)
+    assert ok == []
+    assert len(rejected) == 1 and "not contiguous in one commit" in rejected[0]
+
+
+def test_two_untouched_human_entries_both_count(tmp_path):
+    _git(tmp_path, "init", "-q")
+    f = tmp_path / "acceptances.toml"
+    f.write_text(_entry("scenario.x", "a") + _entry("scenario.y", "b"))
+    _git(tmp_path, "add", "acceptances.toml")
+    _git(tmp_path, "commit", "-qm", "accept")
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS)
+    assert [a.check_id for a in ok] == ["scenario.x", "scenario.y"] and rejected == []
+
+
+def test_blame_ignores_repo_ignore_revs_config(tmp_path):
+    f = _repo(tmp_path)
+    seen = []
+
+    def sh(argv, cwd):
+        if "blame" in argv:
+            seen.append(argv)
+        return acc.run_sh_in(argv, cwd)
+    acc.load_verified(f, agent_ids=AGENTS, sh=sh)
+    assert "blame.ignoreRevsFile=" in seen[0]
