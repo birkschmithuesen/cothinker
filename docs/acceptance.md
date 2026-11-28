@@ -168,7 +168,7 @@ and invented sentences only.
 |----|---------------|-----------------|--------------|
 | a | order-with-pause | no | lane_calls, judge |
 | b | answer-from-files | no | answer, judge |
-| c | natural-segmentation | no | transcript (needs a recorded clip) |
+| c | natural-segmentation | no | transcript (uses the committed clip `de-parl-01`; graded with `--via call`, SKIPPED with `--via transcript`) |
 | d | wake-never-topic | no | topic |
 | e | structure-a-list | no | lane_calls, answer, judge |
 | f | interruption | no | lane_calls, transcript, judge |
@@ -264,8 +264,10 @@ what is new is graded: an answer equal to the pre-scenario one is not counted,
 and older topics and transcript lines are dropped. A scenario that raises
 (missing Piper, unreadable file, wrong WAV rate) becomes a FAIL row and the
 run continues, so the report is always written. `--audio-dir` is required when
-a selected scenario has a clip step or an `audio-dir:` voice; without it the
-run exits 2 naming the flag.
+a selected scenario has a clip step with no committed
+`demo/acceptance/clips/<id>.opus`, or an `audio-dir:` voice; a private
+`<audio-dir>/<id>.wav` takes precedence over a committed clip of the same id.
+Without it the run exits 2 naming the flag.
 
 Other flags: `--only a,b` selects scenarios, `--baseline` points at another
 baseline file, `--preflight-report` binds the run to a preflight, and
@@ -448,8 +450,8 @@ covers both the best case and a realistic one.
   seeded packet-gap injection that mimics what per-track call audio does in
   practice: runs of zero samples inside speech.
 - **Licence-clean recorded speech.** Short German clips with natural pauses
-  and a punctuated reference text, selected in a scenario with
-  `voice: "clip:<id>"`. The clip is decoded with `ffmpeg` to 16 kHz WAV
+  and a punctuated reference text, selected by a timeline step
+  `clip: <id>` (the speaker's `voice: "clip:<id>"` is a label). The clip is decoded with `ffmpeg` to 16 kHz WAV
   before gap injection.
 
 ### Gap profiles
@@ -467,8 +469,10 @@ per voiced minute); the second track was within 3 %.
 and p90, clipped to 0.2 to 3.0 s. The fitted p75 lies within 0.07 s of the
 measured p75, so no piecewise draw is needed. `inject_gaps` is seeded: the
 same input, profile and seed give byte-identical output, and gaps are placed
-only between voiced frames. With `--via call` the audio row carries the
-evidence `gaps: profile=<p> seed=<s> injected=<n>`.
+only between voiced frames. With `--via call` a scenario with a `gaps:` block gets
+the row `scenario.<id>.audio` (only for such scenarios) with the evidence
+`gaps: profile=<p> seed=<s> injected=<n>`; speaker k (in sorted name order)
+uses seed+k. The row is SKIPPED when `injected=0` (no room for gaps).
 
 ### Clips and licences
 
@@ -480,7 +484,8 @@ is a known limitation: a word error rate against them includes any
 transcription slips in the source.
 
 No real participant's recording is committed; private clips use
-`--audio-dir` only (or `audio-dir:` in a scenario).
+`--audio-dir` only: they are clip steps whose id has no committed opus,
+supplied as `<audio-dir>/<id>.wav` (or `audio-dir:` in a scenario).
 
 ### Network impairment (netem)
 
