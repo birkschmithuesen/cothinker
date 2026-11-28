@@ -141,6 +141,7 @@ block:speaker-queue          block — speaker queue (tap to request/leave the f
 block:voice-attribution      block — voice attribution (who is talking right now, by track/STT speaker label)
 block:call-window            block — call window (listen:room open/close by voice, tap, or timeout)
 block:live-transcript        block — live transcript (side panel: last 10 finished lines + the in-progress partial)
+block:piece-model            block — piece model (one JSON piece per group, history, undo, read tools)
 retire                       dropped by the target (decision 25 engines)
 ```
 
@@ -183,6 +184,14 @@ blocks/topics/title.py                                                          
 gateway/actions_reader.py                                                         core:session
 blocks/graph/__init__.py                                                          block:graph
 blocks/graph/session_graph.py                                                     block:graph
+blocks/piece_model/__init__.py                                                   block:piece-model
+blocks/piece_model/gaps.py                                                       block:piece-model
+blocks/piece_model/store.py                                                      block:piece-model
+blocks/piece_model/tools_read.py                                                 block:piece-model
+blocks/piece_model/views.py                                                      block:piece-model
+blocks/mirroring_coach/__init__.py                                                block:mirroring-coach
+blocks/mirroring_coach/coach.py                                                   block:mirroring-coach
+blocks/mirroring_coach/context.py                                                 block:mirroring-coach
 gateway/agent_lane.py                                                             core:agent
 gateway/block_host_wiring.py                                                      core:session
 gateway/conflict_triage.py                                                        core:session
@@ -215,9 +224,6 @@ gateway/thought_end.py                                                          
 gateway/thought_end_laya_worker.py                                                stt:thought-end
 gateway/thought_end_live.py                                                       stt:thought-end
 gateway/timing.py                                                                 core:session
-blocks/mirroring_coach/__init__.py                                                block:mirroring-coach
-blocks/mirroring_coach/coach.py                                                   block:mirroring-coach
-blocks/mirroring_coach/context.py                                                 block:mirroring-coach
 blocks/knowledge_link/__init__.py                                                 block:knowledge-link
 blocks/knowledge_link/wiki.py                                                     block:knowledge-link
 gateway/worker.py                                                                 core:agent
