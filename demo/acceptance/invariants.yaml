@@ -1,0 +1,12 @@
+# demo/acceptance/invariants.yaml
+# Deployment invariants checked by preflight (ADR 0025 rule 5). Generic: no paths.
+lanes:
+  main:
+    toolsets_disabled: [file]
+  coach:
+    toolsets_disabled: [file]
+  call:
+    toolsets_enabled: [file]
+    soul_must_not_match: ['(?i)\bcoach\b']
+    path_must_not_match: ['*coach*']
+    distinct_from: [coach]
