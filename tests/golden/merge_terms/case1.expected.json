@@ -1,0 +1,7 @@
+{
+  "merged_terms": [
+    {"label": "milestones", "members": ["milestone", "milestones"], "mentions": 3},
+    {"label": "feedback loop", "members": ["feedback loop", "feedback cycle"], "mentions": 3},
+    {"label": "deadline", "members": ["deadline"], "mentions": 3}
+  ]
+}
