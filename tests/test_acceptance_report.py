@@ -51,3 +51,17 @@ def test_bind_preflight(tmp_path):
     r2 = report.Report("run2")
     report.bind_preflight(r2, None)
     assert r2.checks[0].id == "fingerprint.bound" and r2.checks[0].status == "SKIPPED"
+
+
+def test_bind_preflight_without_fingerprint_is_a_fail_not_a_crash(tmp_path):
+    for fp in (None, {}, {"digest": None}):
+        pre = report.Report("pre1", fingerprint=fp)
+        pre.write(tmp_path / "pre")
+        r = report.Report("run1")
+        report.bind_preflight(r, tmp_path / "pre" / "report.json")
+        assert r.preflight_run_id is None and r.fingerprint is None
+        assert [(c.id, c.status) for c in r.checks] == [("fingerprint.bound", "FAIL")]
+
+
+def test_tool_is_written_to_the_report(tmp_path):
+    assert report.Report("r", tool="e2e").to_dict()["tool"] == "e2e"

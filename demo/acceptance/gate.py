@@ -121,37 +121,49 @@ def decide(current, reports_dir, accepted, marker=None):
             return False, [f"NO-GO: deployment changed since {outside[0]['run_id']}: "
                            + (", ".join(changed) or "fingerprint differs")]
         return False, ["NO-GO: no level-4 report bound to a preflight"]
-    run = match[0]
-    why = _check_problem(run, by_id[run["preflight_run_id"]])
-    if why:
-        return False, [f"NO-GO: {why}"]
-    started = _num(run.get("started_at"))
-    if started is None:
-        return False, [f"NO-GO: {run['run_id']} has no finite numeric started_at"]
+    latest = {}  # newest matching report per tool: a rerun of one tool may clear its own FAIL
+    for r in match:  # match is newest first
+        tool = r.get("tool")
+        if not isinstance(tool, str) or not tool:
+            return False, [f"NO-GO: report {r['run_id']} has no tool"]
+        latest.setdefault(tool, r)
+    runs = list(latest.values())
+    at = None
     if marker is not None:
         at, why = _marker_at(Path(marker))
         if why:
             return False, [f"NO-GO: {why}"]
-        if started < at:
+    pres = {}
+    for run in runs:
+        why = _check_problem(run, by_id[run["preflight_run_id"]])
+        if why:
+            return False, [f"NO-GO: {why}"]
+        started = _num(run.get("started_at"))
+        if started is None:
+            return False, [f"NO-GO: {run['run_id']} has no finite numeric started_at"]
+        if at is not None and started < at:
             return False, [f"NO-GO: {run['run_id']} is older than the last demo.sh start"]
+        pres[run["preflight_run_id"]] = by_id[run["preflight_run_id"]]
     bound = {a.check_id: a for a in accepted if a.fingerprint == current.digest}
     notes, open_fails, used = [], [], []
-    for c in run["checks"]:
-        if c.get("status") != "FAIL":
-            continue
-        a = bound.get(c["id"])
-        if a:
-            used.append(a)
-            notes.append(f"FAIL {c['id']} accepted by {a.accepted_by} ({a.verification})")
-        else:
-            open_fails.append(c["id"])
+    for owner in [*pres.values(), *runs]:
+        for c in owner["checks"]:
+            if c.get("status") != "FAIL":
+                continue
+            a = bound.get(c["id"])
+            if a:
+                used.append(a)
+                notes.append(f"FAIL {c['id']} accepted by {a.accepted_by} ({a.verification})")
+            else:
+                open_fails.append(c["id"])
     if used:
         for v in sorted({a.verification for a in used}):
             notes.append(f"acceptance verification: {v}: "
                          + _VERIFICATION_TEXT.get(v, "unknown verification level; treat as unchecked"))
     if open_fails:
         return False, ["NO-GO: open FAIL " + ", ".join(open_fails)] + notes
-    return True, [f"GO: {run['run_id']} (preflight {run['preflight_run_id']})"] + notes
+    head = ", ".join(f"{r['run_id']} (preflight {r['preflight_run_id']})" for r in runs)
+    return True, [f"GO: {head}"] + notes
 
 
 def main(argv) -> int:
@@ -160,7 +172,8 @@ def main(argv) -> int:
     ap.add_argument("--acceptances", required=True)
     ap.add_argument("--agent-identity", action="append", default=[])
     ap.add_argument("--allowed-signers")
-    ap.add_argument("--marker")
+    ap.add_argument("--marker", required=True,
+                    help="start marker file written by demo.sh start")
     ap.add_argument("--factory", default=str(_REPO_ROOT / "FACTORY.yaml"))
     ap.add_argument("--consumer-unit", required=True, help="consumer unit whose WorkingDirectory is the deployed repo")
     ap.add_argument("--consumer-pid", type=int)
@@ -184,9 +197,7 @@ def main(argv) -> int:
     accepted, rejected = acceptances.load_verified(
         Path(a.acceptances), agent_ids=agent_ids,
         allowed_signers=Path(a.allowed_signers) if a.allowed_signers else None)
-    ok, lines = decide(current, Path(a.reports), accepted, Path(a.marker) if a.marker else None)
-    if not a.marker:
-        lines = lines + ["start marker not checked (no --marker given)"]
+    ok, lines = decide(current, Path(a.reports), accepted, Path(a.marker))
     for ln in lines + [f"ignored acceptance: {r}" for r in rejected]:
         print(ln)
     return 0 if ok else 1

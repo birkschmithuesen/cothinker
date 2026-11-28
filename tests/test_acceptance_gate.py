@@ -16,9 +16,9 @@ from demo.acceptance.fingerprint import Fingerprint  # noqa: E402
 CUR = Fingerprint("d1", {"unit:stt:argv": "h1"})
 
 
-def _write(tmp, rid, digest, checks, pre=None, parts=None, raw=False, started_at=None):
+def _write(tmp, rid, digest, checks, pre=None, parts=None, raw=False, started_at=None, tool="e2e"):
     r = report.Report(rid, fingerprint={"digest": digest, "parts": parts or {"unit:stt:argv": "h1"}},
-                      preflight_run_id=pre)
+                      preflight_run_id=pre, tool=tool if pre else "")
     if started_at is not None:
         r.started_at = started_at
     if not raw:
@@ -108,6 +108,32 @@ def test_newest_matching_report_decides(tmp_path):
     _write_at(tmp_path, "newer", [("scenario.ok", "PASS"), ("scenario.a", "FAIL")], started_at=300.0)
     ok, why = gate.decide(CUR, tmp_path, [])
     assert not ok and "open FAIL scenario.a" in why[0]
+
+
+def test_other_tool_pass_cannot_hide_a_failing_run(tmp_path):
+    _write(tmp_path, "pre1", "d1", [])
+    _write(tmp_path, "e2e1", "d1", [("scenario.ok", "PASS"), ("e2e.x", "FAIL")], pre="pre1",
+           started_at=100.0, tool="e2e")
+    _write(tmp_path, "sc1", "d1", [("scenario.ok", "PASS")], pre="pre1", started_at=200.0, tool="scenarios")
+    ok, why = gate.decide(CUR, tmp_path, [])
+    assert not ok and "open FAIL e2e.x" in why[0]
+
+
+def test_matching_report_without_tool_is_no_go(tmp_path):
+    _write(tmp_path, "pre1", "d1", [])
+    _write(tmp_path, "run1", "d1", [("scenario.a", "PASS")], pre="pre1", tool="")
+    ok, why = gate.decide(CUR, tmp_path, [])
+    assert not ok and "has no tool" in why[0]
+
+
+def test_preflight_fail_is_no_go_unless_accepted(tmp_path):
+    _write(tmp_path, "pre1", "d1", [("preflight.lane-profile.call", "FAIL")])
+    _write(tmp_path, "run1", "d1", [("scenario.a", "PASS")], pre="pre1")
+    ok, why = gate.decide(CUR, tmp_path, [])
+    assert not ok and "open FAIL preflight.lane-profile.call" in why[0]
+    acc = Acceptance("preflight.lane-profile.call", "d1", "A Human", "F2", "author-checked")
+    ok, why = gate.decide(CUR, tmp_path, [acc])
+    assert ok and "accepted by A Human" in " ".join(why)
 
 
 def test_preflight_must_carry_the_same_digest(tmp_path):
@@ -245,6 +271,10 @@ def _factory_main(tmp_path, monkeypatch, capsys, factory_text, extra=()):
     fac.write_text(factory_text)
     acc = tmp_path / "acc.toml"
     acc.write_text("")
+    if "--marker" not in extra:
+        marker = tmp_path / "default-marker.json"
+        marker.write_text('{"at": 0}')
+        extra = [*extra, "--marker", str(marker)]
     rc = gate.main(["--reports", str(tmp_path), "--acceptances", str(acc), "--factory", str(fac),
                     "--consumer-unit", "u", *extra])
     return rc, capsys.readouterr().out
@@ -257,13 +287,15 @@ def test_malformed_factory_yaml_fails_closed_with_note(tmp_path, monkeypatch, ca
         assert rc == 0 and "GO: run1" in out
 
 
-def test_main_states_marker_not_checked(tmp_path, monkeypatch, capsys):
-    rc, out = _factory_main(tmp_path, monkeypatch, capsys, "commit_identity: {}\n")
-    assert "start marker not checked" in out
-    marker = tmp_path / "m.json"
-    marker.write_text('{"at": 0}')
-    rc, out = _factory_main(tmp_path, monkeypatch, capsys, "commit_identity: {}\n", ["--marker", str(marker)])
-    assert "start marker not checked" not in out
+def test_marker_is_required(tmp_path):
+    with pytest.raises(SystemExit):
+        gate.main(["--reports", str(tmp_path), "--acceptances", str(tmp_path), "--consumer-unit", "u"])
+
+
+def test_main_missing_marker_file_is_no_go(tmp_path, monkeypatch, capsys):
+    rc, out = _factory_main(tmp_path, monkeypatch, capsys, "commit_identity: {}\n",
+                            ["--marker", str(tmp_path / "absent.json")])
+    assert rc == 1 and "NO-GO" in out
 
 
 def test_consumer_unit_is_required(tmp_path):

@@ -361,3 +361,4 @@ def test_main_binds_to_preflight_report(sc, tmp_path, monkeypatch, capsys):
     assert "PASS fingerprint.bound:" in capsys.readouterr().out
     data = json.loads((tmp_path / "run" / "report.json").read_text())
     assert data["preflight_run_id"] == "pre9"
+    assert data["tool"] == "scenarios"
