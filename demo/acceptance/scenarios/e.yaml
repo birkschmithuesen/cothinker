@@ -1,0 +1,28 @@
+id: e
+title: Structure a spoken list
+request_class: structure-a-list
+regression_only: false
+speakers:
+  - {name: Alex, voice: voice-1}
+  - {name: Sam, voice: voice-2}
+timeline:
+  - {speaker: Alex, say: "Hey Robo."}
+  - {pause: 2.0}
+  - {speaker: Alex, say: "Wir brauchen drei Dinge für den Start. Erstens ein Budget. Zweitens ein Team. Drittens einen Terminplan."}
+  - {speaker: Sam, say: "Ja, genau, und der Terminplan sollte bis Freitag stehen."}
+  - {speaker: Alex, say: "Robo, bring bitte die Punkte in eine Liste."}
+gaps:
+  profile: track-a
+  seed: 1
+expect:
+  lane_calls:
+    count: 1
+    keywords_all: [Liste]
+  answer:
+    must_not: ["[SILENT]"]
+    keywords_all: [Budget, Team, Terminplan]
+judge:
+  question: "Is the answer a clear list of the three items (budget, team, schedule) that were spoken, without invented items?"
+timeouts:
+  answer_s: 90
+  scenario_s: 300

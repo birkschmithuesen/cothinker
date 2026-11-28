@@ -1,0 +1,28 @@
+id: f
+title: A second speaker interrupts an order
+request_class: interruption
+regression_only: false
+speakers:
+  - {name: Alex, voice: voice-1}
+  - {name: Sam, voice: voice-2}
+timeline:
+  - {speaker: Alex, say: "Hey Robo, fass bitte zusammen, was wir zum Budget besprochen haben."}
+  - {speaker: Sam, say: "Moment, ich muss kurz etwas ergänzen."}
+  - {pause: 1.0}
+  - {speaker: Sam, say: "Das Budget gilt nur für das erste Halbjahr."}
+  - {speaker: Alex, say: "Gut, danke. Robo, Ende."}
+gaps:
+  profile: track-b
+  seed: 2
+expect:
+  lane_calls:
+    count: 1
+    keywords_all: [Budget]
+  transcript:
+    speakers_all: [Alex, Sam]
+    keywords_all: [Budget, Halbjahr]
+judge:
+  question: "Does the answer cover the budget summary and take the interrupting speaker's correction (first half-year only) into account?"
+timeouts:
+  answer_s: 90
+  scenario_s: 300

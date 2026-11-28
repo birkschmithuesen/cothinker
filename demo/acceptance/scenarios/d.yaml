@@ -1,0 +1,18 @@
+id: d
+title: The wake sentence never becomes a topic
+request_class: wake-never-topic
+regression_only: false
+speakers:
+  - {name: Alex, voice: voice-1}
+  - {name: Sam, voice: voice-2}
+timeline:
+  - {speaker: Alex, say: "Hey Robo, fass bitte kurz zusammen."}
+  - {speaker: Sam, say: "Der nächste Punkt auf der Agenda ist das Budget für das dritte Quartal."}
+  - {speaker: Alex, say: "Wir entscheiden uns für die Variante B und setzen sie diese Woche um."}
+gaps: null
+expect:
+  topic:
+    must_not_contain: ["Hey Robo", "fass bitte"]
+timeouts:
+  answer_s: 90
+  scenario_s: 300

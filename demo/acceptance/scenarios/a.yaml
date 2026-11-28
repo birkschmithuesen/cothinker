@@ -1,0 +1,21 @@
+id: a
+title: Order with a pause after the wake phrase
+request_class: order-with-pause
+regression_only: false
+speakers:
+  - {name: Alex, voice: voice-1}
+timeline:
+  - {speaker: Alex, say: "Hey Robo."}
+  - {pause: 4.0}
+  - {speaker: Alex, say: "Fass bitte zusammen, was wir zu Infrastruktur, Server und Oberflaechen besprochen haben."}
+  - {speaker: Alex, say: "Robo, Ende."}
+gaps: null
+expect:
+  lane_calls:
+    count: 1
+    keywords_all: [Infrastruktur, Server, Oberflaechen]
+judge:
+  question: "Does the answer summarise what was said about infrastructure, servers and surfaces, as one coherent reply to a single order?"
+timeouts:
+  answer_s: 90
+  scenario_s: 300

@@ -1,0 +1,16 @@
+id: h
+title: Order spoken in one breath (regression)
+request_class: order-one-breath
+regression_only: true
+speakers:
+  - {name: Alex, voice: voice-1}
+timeline:
+  - {speaker: Alex, say: "Hey Robo, fass bitte kurz zusammen."}
+gaps: null
+expect:
+  lane_calls:
+    count: 1
+    keywords_all: [fass]
+timeouts:
+  answer_s: 60
+  scenario_s: 180

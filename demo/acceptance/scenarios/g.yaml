@@ -1,0 +1,27 @@
+id: g
+title: Two speakers talk over each other
+request_class: overlap
+regression_only: false
+speakers:
+  - {name: Alex, voice: voice-1}
+  - {name: Sam, voice: voice-2}
+timeline:
+  - {speaker: Alex, say: "Ich finde, wir sollten die Planung für das nächste Quartal heute noch abschließen."}
+  - {speaker: Sam, say: "Ja, und wir müssen auch die Räume für den Workshop buchen.", overlap_prev_s: 1.5}
+  - {pause: 1.0}
+  - {speaker: Alex, say: "Robo, was haben wir gerade zur Planung gesagt?"}
+gaps:
+  profile: track-a
+  seed: 3
+expect:
+  lane_calls:
+    count: 1
+    keywords_all: [Planung]
+  transcript:
+    speakers_all: [Alex, Sam]
+    keywords_all: [Planung, Workshop]
+judge:
+  question: "Does the answer mention both the planning for the next quarter and the workshop rooms, despite the overlapping speech?"
+timeouts:
+  answer_s: 90
+  scenario_s: 300

@@ -1,0 +1,18 @@
+id: b
+title: Answer read from the agenda file
+request_class: answer-from-files
+regression_only: false
+speakers:
+  - {name: Alex, voice: voice-1}
+timeline:
+  - {speaker: Alex, say: "Robo, lies die Agenda vor."}
+gaps: null
+expect:
+  answer:
+    agenda_line: true
+    must_not: ["[SILENT]"]
+judge:
+  question: "Does the answer read out the agenda items from the agenda file, rather than inventing items?"
+timeouts:
+  answer_s: 90
+  scenario_s: 300

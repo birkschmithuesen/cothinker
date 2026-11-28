@@ -1,0 +1,15 @@
+id: c
+title: Natural speech is segmented at sentence ends
+request_class: natural-segmentation
+regression_only: false
+speakers:
+  - {name: Alex, voice: "audio-dir:c"}
+timeline:
+  - {speaker: Alex, clip: c}
+gaps: null
+expect:
+  transcript:
+    mid_sentence_max: "baseline:scenario.share_no_sentence_end"
+timeouts:
+  answer_s: 90
+  scenario_s: 300
