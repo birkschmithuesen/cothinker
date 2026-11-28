@@ -151,8 +151,8 @@ def test_eou_silence_check_alone(pf, tmp_path, capsys):
                     encoding="utf-8")
     check = pf.check_eou_silence(stt_log=log, expect_eou=1.8)
     assert check.status == "PASS"
-    assert "eou_silence=1.8" in check.text
-    assert "max_delay=0.3" in check.text
+    assert "eou_silence=1.8" in check.evidence
+    assert "max_delay=0.3" in check.evidence
 
 
 def test_eou_silence_wrong_value_fails(pf, tmp_path):
@@ -160,7 +160,7 @@ def test_eou_silence_wrong_value_fails(pf, tmp_path):
     log.write_text("[sm-rt] turn end eou_silence=2.5\n", encoding="utf-8")
     check = pf.check_eou_silence(stt_log=log, expect_eou=1.8)
     assert check.status == "FAIL"
-    assert "2.5" in check.text
+    assert "2.5" in check.evidence
 
 
 def test_eou_silence_missing_line_fails(pf, tmp_path):
@@ -206,7 +206,7 @@ def test_blocks_registered_fails_on_missing_block_after_start(pf, tmp_path):
         encoding="utf-8")
     check = pf.check_blocks_registered(consumer_log=log, start_marker="agent session:")
     assert check.status == "FAIL"
-    assert "topics" in check.text
+    assert "topics" in check.evidence
 
 
 def test_blocks_registered_ignores_missing_block_before_start(pf, tmp_path):
@@ -238,8 +238,8 @@ def test_template_blocks_lists_ids_for_reflect_template(pf):
     check = pf.check_template_blocks(reflect)
     assert check is not None
     assert check.status == "PASS"
-    assert "capture-bullets" in check.text
-    assert "voice-attribution" in check.text
+    assert "capture-bullets" in check.evidence
+    assert "voice-attribution" in check.evidence
 
 
 def test_template_blocks_none_without_template_path(pf):
@@ -281,7 +281,7 @@ def test_contract_fields_pass_with_optional_absent(pf):
     by_name = {c.name: c for c in checks}
     assert by_name["contract_fields"].status == "PASS"
     assert by_name["contract_fields:listen"].status == "SKIPPED"
-    assert "feature not merged yet" in by_name["contract_fields:listen"].text
+    assert "feature not merged yet" in by_name["contract_fields:listen"].evidence
     assert by_name["contract_fields:transcript_recent"].status == "SKIPPED"
 
 
@@ -292,8 +292,8 @@ def test_contract_fields_fail_on_missing_required(pf):
         optional_fields=[])
     by_name = {c.name: c for c in checks}
     assert by_name["contract_fields"].status == "FAIL"
-    assert "share" in by_name["contract_fields"].text
-    assert "queue" in by_name["contract_fields"].text
+    assert "share" in by_name["contract_fields"].evidence
+    assert "queue" in by_name["contract_fields"].evidence
 
 
 def test_contract_fields_listen_present_pass(pf):
@@ -324,7 +324,7 @@ def test_contract_fields_listen_last_close_without_reason_fails(pf):
         optional_fields=["listen"])
     by_name = {c.name: c for c in checks}
     assert by_name["contract_fields:listen"].status == "FAIL"
-    assert "reason" in by_name["contract_fields:listen"].text
+    assert "reason" in by_name["contract_fields:listen"].evidence
 
 
 def test_contract_fields_listen_last_close_with_reason_pass(pf):

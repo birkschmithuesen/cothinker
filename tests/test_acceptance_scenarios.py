@@ -97,7 +97,7 @@ def test_evaluate_scenario_a_fails_on_wrong_call_count(sc):
         keywords=["Infrastruktur", "Server", "Oberflaechen"],
         snapshot_during=None, snapshot_after=None)
     assert check.status == "FAIL"
-    assert "calls=2" in check.text
+    assert "calls=2" in check.evidence
 
 
 def test_evaluate_scenario_a_fails_on_missing_keyword(sc):
@@ -108,7 +108,7 @@ def test_evaluate_scenario_a_fails_on_missing_keyword(sc):
         keywords=["Infrastruktur", "Server", "Oberflaechen"],
         snapshot_during=None, snapshot_after=None)
     assert check.status == "FAIL"
-    assert "Server" in check.text
+    assert "Server" in check.evidence
 
 
 def test_evaluate_scenario_a_listen_skipped_when_absent(sc):
@@ -119,7 +119,7 @@ def test_evaluate_scenario_a_listen_skipped_when_absent(sc):
         keywords=["Infrastruktur", "Server", "Oberflaechen"],
         snapshot_during={}, snapshot_after={})
     assert check.status == "PASS"
-    assert "feature not merged yet" in check.text
+    assert "feature not merged yet" in check.evidence
 
 
 def test_evaluate_scenario_a_listen_checked_when_present_ok(sc):
@@ -131,7 +131,7 @@ def test_evaluate_scenario_a_listen_checked_when_present_ok(sc):
         snapshot_during={"listen": {"state": "listening"}},
         snapshot_after={"listen": {"state": "idle"}})
     assert check.status == "PASS"
-    assert "listen" in check.text
+    assert "listen" in check.evidence
 
 
 def test_evaluate_scenario_a_listen_checked_when_present_bad(sc):
@@ -143,7 +143,7 @@ def test_evaluate_scenario_a_listen_checked_when_present_bad(sc):
         snapshot_during={"listen": {"state": "idle"}},
         snapshot_after={"listen": {"state": "idle"}})
     assert check.status == "FAIL"
-    assert "listen" in check.text
+    assert "listen" in check.evidence
 
 
 # ------------------------------------------------------------------- agenda matching
@@ -187,7 +187,7 @@ def test_evaluate_scenario_b_fails_without_agenda_line_in_answer(sc):
         call_answer="Robo sagt dazu leider gar nichts Passendes.",
         agenda_text="Budget und Zeitplan besprechen\n")
     assert check.status == "FAIL"
-    assert "Robo sagt" in check.text
+    assert "Robo sagt" in check.evidence
 
 
 # ------------------------------------------------------------- mid-sentence share
@@ -227,7 +227,7 @@ def test_evaluate_scenario_c_pass_under_threshold(sc):
     )
     check = sc.evaluate_scenario_c(protocol_text=protocol, mid_sentence_max=0.5)
     assert check.status == "PASS"
-    assert "count=4" in check.text
+    assert "count=4" in check.evidence
 
 
 def test_evaluate_scenario_c_fails_over_threshold(sc):
@@ -239,14 +239,14 @@ def test_evaluate_scenario_c_fails_over_threshold(sc):
     )
     check = sc.evaluate_scenario_c(protocol_text=protocol, mid_sentence_max=0.2)
     assert check.status == "FAIL"
-    assert "count=3" in check.text
+    assert "count=3" in check.evidence
 
 
 def test_evaluate_scenario_c_fails_without_finals(sc):
     check = sc.evaluate_scenario_c(protocol_text="## Rohtranskript\n",
                                    mid_sentence_max=0.2)
     assert check.status == "FAIL"
-    assert "no finals" in check.text
+    assert "no finals" in check.evidence
 
 
 def test_evaluate_scenario_c_reports_segments_delta_as_info_only(sc):
@@ -258,7 +258,7 @@ def test_evaluate_scenario_c_reports_segments_delta_as_info_only(sc):
     check = sc.evaluate_scenario_c(protocol_text=protocol, mid_sentence_max=0.5,
                                    segments=5)
     assert check.status == "PASS"
-    assert "|count-segments|=3" in check.text
+    assert "|count-segments|=3" in check.evidence
 
 
 # --------------------------------------------------------------- headline check
@@ -332,7 +332,7 @@ def test_run_scenario_a_skipped_without_wav(sc, tmp_path):
                        "--session-dir", "d", "--scenarios", "a"])
     check = sc.run_scenario("a", a)
     assert check.status == "SKIPPED"
-    assert "a.wav" in check.text
+    assert "a.wav" in check.evidence
 
 
 def test_run_scenario_b_skipped_without_agenda_file(sc, tmp_path):
@@ -343,4 +343,4 @@ def test_run_scenario_b_skipped_without_agenda_file(sc, tmp_path):
                        "--session-dir", "d", "--scenarios", "b"])
     check = sc.run_scenario("b", a)
     assert check.status == "SKIPPED"
-    assert "agenda-file" in check.text
+    assert "agenda-file" in check.evidence

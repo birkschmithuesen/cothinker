@@ -56,11 +56,17 @@ import re
 import subprocess
 import sys
 import urllib.request
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
 import yaml
+
+# Run as a plain script, only this directory is on sys.path; the shared
+# report module lives under the repo root's `demo` namespace package.
+_REPO_ROOT = Path(__file__).resolve().parents[2]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+from demo.acceptance.report import Check  # noqa: E402
 
 DEFAULT_PROFILE_ENV = "HERMES_PROFILE_DIR_CALL"
 DEFAULT_CALL_TOOLSET = "file"
@@ -72,16 +78,6 @@ DEFAULT_OPTIONAL_FIELDS = "listen,transcript_recent"
 
 _EOU_RE = re.compile(r"eou_silence=([0-9.]+)")
 _MAX_DELAY_RE = re.compile(r"max_delay=([0-9.]+)")
-
-
-@dataclass
-class Check:
-    status: str  # PASS | FAIL | SKIPPED
-    name: str
-    text: str
-
-    def line(self) -> str:
-        return f"{self.status} {self.name}: {self.text}"
 
 
 # --------------------------------------------------------------- lane_profile
@@ -128,21 +124,21 @@ def check_lane_profile(*, proc_root: Path, pid: int, profile_env: str,
     name = "lane_profile"
     environ_path = Path(proc_root) / str(pid) / "environ"
     if not environ_path.is_file():
-        return Check("FAIL", name, f"environ not found at {environ_path}")
+        return Check(name, "FAIL", f"environ not found at {environ_path}")
     env = read_environ(environ_path)
     profile_dir_raw = env.get(profile_env, "").strip()
     if not profile_dir_raw:
-        return Check("FAIL", name,
+        return Check(name, "FAIL",
                       f"{profile_env} not set (environ={environ_path})")
     profile_dir = Path(profile_dir_raw)
     config_path = profile_dir / "config.yaml"
     if not config_path.is_file():
-        return Check("FAIL", name,
+        return Check(name, "FAIL",
                       f"dir={profile_dir} toolsets=[] (no config.yaml)")
     try:
         cfg = yaml.safe_load(config_path.read_text(encoding="utf-8")) or {}
     except yaml.YAMLError as e:
-        return Check("FAIL", name, f"{config_path} is not valid YAML: {e}")
+        return Check(name, "FAIL", f"{config_path} is not valid YAML: {e}")
     toolsets = list((cfg.get("agent") or {}).get("enabled_toolsets") or [])
     problems = []
     if call_toolset not in toolsets:
@@ -151,10 +147,10 @@ def check_lane_profile(*, proc_root: Path, pid: int, profile_env: str,
         problems.append(
             f"basename matches forbidden glob {forbidden_profile_glob!r}")
     if problems:
-        return Check("FAIL", name,
+        return Check(name, "FAIL",
                       f"dir={profile_dir} toolsets={toolsets} "
                       f"({'; '.join(problems)})")
-    return Check("PASS", name, f"dir={profile_dir} toolsets={toolsets}")
+    return Check(name, "PASS", f"dir={profile_dir} toolsets={toolsets}")
 
 
 # ----------------------------------------------------------------- eou_silence
@@ -163,17 +159,17 @@ def check_eou_silence(*, stt_log: Path, expect_eou: float) -> Check:
     name = "eou_silence"
     stt_log = Path(stt_log)
     if not stt_log.is_file():
-        return Check("FAIL", name, f"log not found at {stt_log}")
+        return Check(name, "FAIL", f"log not found at {stt_log}")
     last = None
     for line in stt_log.read_text(encoding="utf-8", errors="replace").splitlines():
         if "[sm-rt]" in line and "eou_silence=" in line:
             last = line
     if last is None:
-        return Check("FAIL", name,
+        return Check(name, "FAIL",
                       f"no '[sm-rt]' line with eou_silence= in {stt_log}")
     m = _EOU_RE.search(last)
     if not m:
-        return Check("FAIL", name,
+        return Check(name, "FAIL",
                       f"eou_silence= not parseable in line: {last.strip()}")
     found = float(m.group(1))
     extra = ""
@@ -181,9 +177,9 @@ def check_eou_silence(*, stt_log: Path, expect_eou: float) -> Check:
     if md:
         extra = f" max_delay={md.group(1)}"
     if found != expect_eou:
-        return Check("FAIL", name,
+        return Check(name, "FAIL",
                       f"eou_silence={found} (expected {expect_eou}){extra}")
-    return Check("PASS", name, f"eou_silence={found}{extra}")
+    return Check(name, "PASS", f"eou_silence={found}{extra}")
 
 
 # ------------------------------------------------------------ blocks_registered
@@ -192,20 +188,20 @@ def check_blocks_registered(*, consumer_log: Path, start_marker: str) -> Check:
     name = "blocks_registered"
     consumer_log = Path(consumer_log)
     if not consumer_log.is_file():
-        return Check("FAIL", name, f"log not found at {consumer_log}")
+        return Check(name, "FAIL", f"log not found at {consumer_log}")
     lines = consumer_log.read_text(encoding="utf-8", errors="replace").splitlines()
     marker_re = re.compile(start_marker)
     starts = [i for i, l in enumerate(lines) if marker_re.search(l)]
     if not starts:
-        return Check("FAIL", name,
+        return Check(name, "FAIL",
                       f"no start marker ({start_marker!r}) in {consumer_log}")
     last_start = starts[-1]
     missing = [l for l in lines[last_start + 1:] if "no block registered" in l]
     if missing:
-        return Check("FAIL", name,
+        return Check(name, "FAIL",
                       f"{len(missing)} missing-block line(s) after the last "
                       f"start (line {last_start + 1}): {missing[-1].strip()}")
-    return Check("PASS", name,
+    return Check(name, "PASS",
                   f"no missing-block line after the last start "
                   f"(line {last_start + 1})")
 
@@ -214,20 +210,17 @@ def check_template_blocks(template_path) -> Optional[Check]:
     name = "template_blocks"
     if template_path is None:
         return None
-    repo_root = Path(__file__).resolve().parents[2]
-    if str(repo_root) not in sys.path:
-        sys.path.insert(0, str(repo_root))
     try:
         from shared.templates import load_template, TemplateError
     except ImportError as e:
-        return Check("SKIPPED", name, f"shared.templates not importable: {e}")
+        return Check(name, "SKIPPED", f"shared.templates not importable: {e}")
     try:
         template = load_template(Path(template_path))
     except TemplateError as e:
-        return Check("SKIPPED", name,
+        return Check(name, "SKIPPED",
                       f"block ids not readable deterministically: {e}")
     ids = [b.id for b in template.blocks]
-    return Check("PASS", name, f"{len(ids)} block ids: {', '.join(ids)}")
+    return Check(name, "PASS", f"{len(ids)} block ids: {', '.join(ids)}")
 
 
 # -------------------------------------------------------------- contract_fields
@@ -273,24 +266,24 @@ def check_contract_fields(*, snapshot: dict, expect_fields: list,
     checks = []
     missing = [f for f in expect_fields if f not in snapshot]
     if missing:
-        checks.append(Check("FAIL", name,
+        checks.append(Check(name, "FAIL",
                              f"missing required field(s): {', '.join(missing)}"))
     else:
-        checks.append(Check("PASS", name,
+        checks.append(Check(name, "PASS",
                              f"required fields present: {', '.join(expect_fields)}"))
     for field in optional_fields:
         oname = f"{name}:{field}"
         value = snapshot.get(field)
         if field not in snapshot or value is None:
-            checks.append(Check("SKIPPED", oname,
+            checks.append(Check(oname, "SKIPPED",
                                  "field not in snapshot (feature not merged yet)"))
             continue
         if field == "listen":
             problem = _check_listen_shape(value)
             if problem:
-                checks.append(Check("FAIL", oname, problem))
+                checks.append(Check(oname, "FAIL", problem))
                 continue
-        checks.append(Check("PASS", oname, f"present: {json.dumps(value)[:200]}"))
+        checks.append(Check(oname, "PASS", f"present: {json.dumps(value)[:200]}"))
     return checks
 
 
@@ -325,7 +318,7 @@ def main(argv=None) -> int:
     pid, pid_err = resolve_consumer_pid(consumer_pid=a.consumer_pid,
                                         consumer_unit=a.consumer_unit)
     if pid_err:
-        checks.append(Check("FAIL", "lane_profile", pid_err))
+        checks.append(Check("lane_profile", "FAIL", pid_err))
     else:
         checks.append(check_lane_profile(
             proc_root=Path(a.proc_root), pid=pid, profile_env=a.profile_env,
@@ -349,7 +342,7 @@ def main(argv=None) -> int:
                                       token_file=a.token_file,
                                       snapshot_file=a.snapshot_file)
         if err:
-            checks.append(Check("FAIL", "contract_fields", err))
+            checks.append(Check("contract_fields", "FAIL", err))
         else:
             expect_fields = [f.strip() for f in a.expect_fields.split(",") if f.strip()]
             optional_fields = [f.strip() for f in a.optional_fields.split(",") if f.strip()]
@@ -358,7 +351,7 @@ def main(argv=None) -> int:
                 optional_fields=optional_fields))
 
     for c in checks:
-        print(c.line())
+        print(f"{c.status} {c.id}: {c.evidence}")
     return 1 if any(c.status == "FAIL" for c in checks) else 0
 
 

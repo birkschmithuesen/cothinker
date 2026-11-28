@@ -53,13 +53,16 @@ import subprocess
 import sys
 import time
 import wave
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable, Optional
 
 _ACC_DIR = Path(__file__).resolve().parent
+_REPO_ROOT = _ACC_DIR.parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 if str(_ACC_DIR) not in sys.path:
     sys.path.insert(0, str(_ACC_DIR))
+from demo.acceptance.report import Check  # noqa: E402
 import score as _score  # noqa: E402
 from preflight import load_snapshot  # noqa: E402
 
@@ -68,16 +71,6 @@ DEFAULT_WAKE_PHRASE = "Hey Robo"
 DEFAULT_MID_SENTENCE_MAX = 0.2
 DEFAULT_TIMEOUT = 90.0
 DEFAULT_A_KEYWORDS = ["Infrastruktur", "Server", "Oberflaechen"]
-
-
-@dataclass
-class Check:
-    status: str  # PASS | FAIL | SKIPPED
-    name: str
-    text: str
-
-    def line(self) -> str:
-        return f"{self.status} {self.name}: {self.text}"
 
 
 # ----------------------------------------------------------------- scenario a
@@ -128,17 +121,17 @@ def evaluate_scenario_a(*, log_text: str, transcript_text: str, keywords: list,
             parts.append(f"calls={calls} (expected 1)")
         if missing:
             parts.append(f"missing keywords: {missing}")
-        return Check("FAIL", name, "; ".join(parts))
+        return Check(name, "FAIL", "; ".join(parts))
     listen_during = (snapshot_during or {}).get("listen")
     listen_after = (snapshot_after or {}).get("listen")
     if listen_during is None or listen_after is None:
-        return Check("PASS", name,
+        return Check(name, "PASS",
                       f"calls=1 keywords={keywords}; listen: SKIPPED "
                       f"(field not in snapshot (feature not merged yet))")
     problem = _listen_ok(snapshot_during, snapshot_after)
     if problem:
-        return Check("FAIL", name, problem)
-    return Check("PASS", name,
+        return Check(name, "FAIL", problem)
+    return Check(name, "PASS",
                   f"calls=1 keywords={keywords}; listen ok "
                   f"(during={listen_during.get('state')} "
                   f"after={listen_after.get('state')})")
@@ -168,9 +161,9 @@ def evaluate_scenario_b(*, call_answer: str, agenda_text: str) -> Check:
     name = "b"
     matched = matches_agenda(call_answer, agenda_text)
     if matched is None:
-        return Check("FAIL", name,
+        return Check(name, "FAIL",
                       f"no agenda line found in call_answer={call_answer!r}")
-    return Check("PASS", name, f"call_answer contains agenda line {matched!r}")
+    return Check(name, "PASS", f"call_answer contains agenda line {matched!r}")
 
 
 # ----------------------------------------------------------------- scenario c
@@ -203,10 +196,10 @@ def evaluate_scenario_c(*, protocol_text: str, mid_sentence_max: float,
     if segments is not None:
         info += f" |count-segments|={abs(count - segments)}"
     if count == 0:
-        return Check("FAIL", name, f"no finals found ({info})")
+        return Check(name, "FAIL", f"no finals found ({info})")
     if share > mid_sentence_max:
-        return Check("FAIL", name, info)
-    return Check("PASS", name, info)
+        return Check(name, "FAIL", info)
+    return Check(name, "PASS", info)
 
 
 # ----------------------------------------------------------------- scenario d
@@ -240,8 +233,8 @@ def evaluate_scenario_d(*, headline: str, titles: list, wake_phrase: str) -> Che
     offenders = [t for t in [headline, *titles]
                 if t and starts_with_wake_phrase(t, wake_phrase)]
     if offenders:
-        return Check("FAIL", name, f"starts with the wake phrase: {offenders!r}")
-    return Check("PASS", name, f"headline={headline!r} topics={titles!r}")
+        return Check(name, "FAIL", f"starts with the wake phrase: {offenders!r}")
+    return Check(name, "PASS", f"headline={headline!r} topics={titles!r}")
 
 
 # -------------------------------------------------------------- orchestration
@@ -273,9 +266,9 @@ def run_scenario(name: str, args) -> Check:
     audio_dir = Path(args.audio_dir)
     wav = audio_dir / f"{name}.wav"
     if not wav.is_file():
-        return Check("SKIPPED", name, f"{wav} not found")
+        return Check(name, "SKIPPED", f"{wav} not found")
     if name == "b" and not args.agenda_file:
-        return Check("SKIPPED", name, "--agenda-file not given")
+        return Check(name, "SKIPPED", "--agenda-file not given")
 
     meta = _scenario_meta(audio_dir, name)
     duration = wav_duration_s(wav)
@@ -284,7 +277,7 @@ def run_scenario(name: str, args) -> Check:
         url_file=args.url_file, name=f"Scenario{name.upper()}", wav=wav,
         cdp_port=args.cdp_port, seconds=duration, join_timeout=args.timeout)
     if result.returncode != 0:
-        return Check("FAIL", name,
+        return Check(name, "FAIL",
                       f"participant.py failed: {result.stderr.strip()[-300:]}")
 
     time.sleep(args.timeout)
@@ -347,7 +340,7 @@ def main(argv=None) -> int:
     args = parse_args(argv)
     checks = [run_scenario(name, args) for name in args.scenarios]
     for c in checks:
-        print(c.line())
+        print(f"{c.status} {c.id}: {c.evidence}")
     return 1 if any(c.status == "FAIL" for c in checks) else 0
 
 
