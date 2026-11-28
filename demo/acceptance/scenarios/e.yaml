@@ -17,7 +17,7 @@ gaps:
 expect:
   lane_calls:
     count: 1
-    keywords_all: [Liste]
+    keywords_all: [Budget, Team, Terminplan]
   answer:
     must_not: ["[SILENT]"]
     keywords_all: [Budget, Team, Terminplan]

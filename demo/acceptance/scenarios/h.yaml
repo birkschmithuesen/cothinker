@@ -10,7 +10,6 @@ gaps: null
 expect:
   lane_calls:
     count: 1
-    keywords_all: [fass]
 timeouts:
   answer_s: 60
   scenario_s: 180

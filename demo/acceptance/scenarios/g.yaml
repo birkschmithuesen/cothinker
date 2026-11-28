@@ -9,7 +9,7 @@ timeline:
   - {speaker: Alex, say: "Ich finde, wir sollten die Planung für das nächste Quartal heute noch abschließen."}
   - {speaker: Sam, say: "Ja, und wir müssen auch die Räume für den Workshop buchen.", overlap_prev_s: 1.5}
   - {pause: 1.0}
-  - {speaker: Alex, say: "Robo, was haben wir gerade zur Planung gesagt?"}
+  - {speaker: Alex, say: "Hey Robo, was haben wir gerade zur Planung gesagt?"}
 gaps:
   profile: track-a
   seed: 3

@@ -197,3 +197,27 @@ def test_share_no_sentence_end():
     assert share_no_sentence_end(["  ", ""]) == 1.0
     assert share_no_sentence_end(["Fertig.", "Wie bitte?", "Nein!", "Er sagte \"ja.\"", "und dann"]) == pytest.approx(0.2)
     assert share_no_sentence_end(["Wait…", "Hm..."]) == 0.0
+
+
+def test_keywords_fold_case_and_umlaut_transliterations():
+    s = scen({"answer": {"keywords_all": ["Oberflaechen", "Strasse"], "must_not": ["Fuer"]}})
+    o = obs(mode="call", answers=["Die OBERFLÄCHEN an der Straße."])
+    assert by_id(grade(s, o, BASELINE, {}))["scenario.z.answer"].status == "PASS"
+    o = obs(mode="call", answers=["Die Oberflächen an der Straße, für alle."])
+    assert by_id(grade(s, o, BASELINE, {}))["scenario.z.answer"].status == "FAIL"
+
+
+def test_folding_applies_to_transcript_keywords_and_topics():
+    s = scen({"transcript": {"keywords_all": ["Maerz"]}, "topic": {"must_not_contain": ["Aenderung"]}})
+    o = obs(transcript_lines=[("Alex", "Im März ist das so.")], topics=["Änderung am Plan"])
+    rows = by_id(grade(s, o, BASELINE, {}))
+    assert rows["scenario.z.transcript"].status == "PASS"
+    assert rows["scenario.z.topic"].status == "FAIL"
+
+
+def test_lane_call_keywords_are_not_found_in_a_prompt_context_only():
+    # the replay hands the oracle the order text only, so keywords of the
+    # history cannot satisfy the check
+    o = obs(mode="transcript", lane_calls=["Robo, Ende."])
+    c = by_id(grade(ORDER, o, BASELINE, {}))["scenario.z.lane_calls"]
+    assert c.status == "FAIL"

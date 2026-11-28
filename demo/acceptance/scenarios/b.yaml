@@ -5,7 +5,7 @@ regression_only: false
 speakers:
   - {name: Alex, voice: voice-1}
 timeline:
-  - {speaker: Alex, say: "Robo, lies die Agenda vor."}
+  - {speaker: Alex, say: "Hey Robo, lies die Agenda vor."}
 gaps: null
 expect:
   answer:

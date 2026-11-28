@@ -38,9 +38,17 @@ def share_no_sentence_end(lines: list[str]) -> float:
     return sum(1 for t in texts if not _ends_sentence(t)) / len(texts)
 
 
+_FOLD = str.maketrans({"ä": "ae", "ö": "oe", "ü": "ue", "ß": "ss"})
+
+
+def fold(text: str) -> str:
+    """Case-insensitive, German-transliteration-insensitive form of ``text``."""
+    return text.lower().translate(_FOLD)
+
+
 def _missing(keywords, haystack: str) -> list[str]:
-    low = haystack.lower()
-    return [k for k in keywords if k.lower() not in low]
+    low = fold(haystack)
+    return [k for k in keywords if fold(k) not in low]
 
 
 def _lane_calls(cid: str, body: dict, obs: Observation) -> Check:
@@ -64,9 +72,9 @@ def _answer(cid: str, body: dict, obs: Observation) -> Check:
     if not any(a.strip() for a in obs.answers):
         return Check(cid, "FAIL", "no answer observed")
     text = "\n".join(obs.answers)
-    low = text.lower()
+    low = fold(text)
     problems = []
-    bad = [m for m in body.get("must_not", []) if m.lower() in low]
+    bad = [m for m in body.get("must_not", []) if fold(m) in low]
     if bad:
         problems.append(f"answer contains forbidden text: {', '.join(repr(b) for b in bad)}")
     miss = _missing(body.get("keywords_all", []), text)
@@ -76,7 +84,7 @@ def _answer(cid: str, body: dict, obs: Observation) -> Check:
         if not obs.agenda_lines:
             if not problems:
                 return Check(cid, "SKIPPED", "no agenda lines known")
-        elif not any(a.lower() in low for a in obs.agenda_lines if a.strip()):
+        elif not any(fold(a) in low for a in obs.agenda_lines if a.strip()):
             problems.append("answer contains none of the known agenda lines")
     return Check(cid, "FAIL", "; ".join(problems)) if problems else Check(cid, "PASS", "answer ok")
 
@@ -87,7 +95,7 @@ def _topic(cid: str, body: dict, obs: Observation) -> Check:
     hits = []
     for topic in obs.topics:
         for bad in body.get("must_not_contain", []):
-            if bad.lower() in topic.lower():
+            if fold(bad) in fold(topic):
                 hits.append(f"topic {topic!r} contains {bad!r}")
     if hits:
         return Check(cid, "FAIL", "; ".join(hits))

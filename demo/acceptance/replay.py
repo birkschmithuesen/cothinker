@@ -12,7 +12,7 @@ Limits: clip steps (``clip:``, voice ``audio-dir:<x>``) have no text and
 cannot be rendered; ``render_finals`` raises ValueError for them. Topics are
 only observed when the consumer files topic headings, which needs a decider
 model; offline that is normally empty. The call worker receives the full
-lane prompt, so ``lane_calls`` hold prompts, not bare order text.
+lane prompt, and the observation keeps only its order text (``order_text``).
 """
 
 from __future__ import annotations
@@ -99,6 +99,31 @@ def _read(path: Path) -> str:
         return ""
 
 
+_ORDER_MARK = "## Auftrag\n"
+# Start of gateway.call_lane.CALL_MERGED_HEADER (not imported: the gateway
+# modules need their own sys.path set-up); a test pins the two together.
+_MERGED_MARK = "Mehrere Zurufe sind eingegangen"
+
+
+def order_text(prompt: str) -> str:
+    """The order (request) part of a call-lane prompt.
+
+    The prompt is the agenda, a state block, a ``## Verlauf`` section and a
+    final ``## Auftrag`` section holding topic header, rules and the request.
+    The request is the last line there; merged calls are the numbered block
+    that follows the merged-calls header. A prompt without the section is
+    returned unchanged.
+    """
+    head, mark, section = prompt.rpartition(_ORDER_MARK)
+    if not mark:
+        return prompt
+    section = section.strip()
+    merged = section.find(_MERGED_MARK)
+    if merged >= 0:
+        return section[merged:]
+    return section.splitlines()[-1] if section else ""
+
+
 def _calls(path: Path) -> list[str]:
     out = []
     for line in _read(path).splitlines():
@@ -107,7 +132,7 @@ def _calls(path: Path) -> list[str]:
         except ValueError:
             continue
         if rec.get("lane") == "call":
-            out.append(str(rec.get("text", "")))
+            out.append(order_text(str(rec.get("text", ""))))
     return out
 
 
@@ -119,7 +144,7 @@ def _session_dir(project: Path) -> Path | None:
 def run(s, *, repo: Path, workdir: Path, speed: float = 1.0,
         timeout_s: float = 120) -> Observation:
     finals = render_finals(s)
-    workdir = Path(workdir)
+    workdir = Path(workdir).resolve()
     n = 0
     while (workdir / f"replay{n}").exists():
         n += 1
