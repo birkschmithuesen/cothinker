@@ -109,7 +109,7 @@ def test_stop_reaches_blocks(tmp_path):
 def test_reflect_template_loads_with_empty_registry(tmp_path):
     blocks, logs = make_blocks(tmp_path, registry={})
     assert blocks.dispatch("tick", {"at": 0.0, "components": {}}) == 0  # no block is registered; the host's listener is no block
-    assert len(logs) == 15  # every Reflect block id is unregistered today
+    assert len(logs) == 16  # every Reflect block id is unregistered today
 
 
 def test_on_output_sees_block_output(tmp_path):

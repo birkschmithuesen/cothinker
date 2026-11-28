@@ -172,7 +172,7 @@ def dispatch_call_window_state(blocks: SessionRuntime, bb) -> None:
     blocks.dispatch("block_output", {"call_window": bb.state()})
 
 
-HOST_LISTENER_ID = "session-host"
+HOST_LISTENER_ID = "host"
 
 
 # -------------------------------------------------------- meeting chat

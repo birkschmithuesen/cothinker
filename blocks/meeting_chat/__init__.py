@@ -12,7 +12,7 @@ Consumes `action` events (a `UserAction` the host turned into a
 `CoreEvent`, its fields flat in the payload): `chat:room` (`kind`
 `message`, `payload` `{"text"}`) is a chat message by `person`;
 `participant:name` (`kind` `edit`, `payload` `{"name"}`) records a display
-name for `person`. Consumes `block_output` events from `session-host`
+name for `person`. Consumes `block_output` events from `host`
 shaped `{"chat_answer": {"ids", "ok", "text", "reason"}}`: the host's
 answer to one or more chat requests.
 
@@ -46,7 +46,7 @@ __all__ = ["MeetingChatBlock", "make_block", "BLOCK_ID", "INTENT_ID", "CHAT_THRE
 BLOCK_ID = "meeting-chat"
 INTENT_ID = "chat:room"
 NAME_INTENT_ID = "participant:name"
-HOST_ID = "session-host"
+HOST_ID = "host"
 STATE_FILE = "chat.json"
 # Pinned equal to `surfaces.contract.models.CHAT_THREAD_MAX` by this block's
 # tests (a block does not import a surface package).

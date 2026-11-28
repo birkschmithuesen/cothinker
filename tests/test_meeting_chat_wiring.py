@@ -5,7 +5,7 @@
 # under the terms of the GNU Affero General Public License, version 3.
 # It is provided WITHOUT ANY WARRANTY. See LICENSE.
 """`gateway.block_host_wiring.wire_meeting_chat` over the real block host
-(production `REGISTRY`): the record goes to the record writer, the request
+(real block package discovery): the record goes to the record writer, the request
 to the agent, and a broken step never leaves a message pending.
 
     python3 -m pytest -q tests/test_meeting_chat_wiring.py

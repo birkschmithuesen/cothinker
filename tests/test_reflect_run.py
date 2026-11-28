@@ -20,8 +20,8 @@ agent turn carry a pre-written `agent_reply` (the capture-bullets JSON
 shape, see `tests/fake_worker.py`) instead of a live model call.
 
 `build_session_blocks`' default `load` (`shared.block_registry.load_block`)
-finds all fifteen of the Reflect template's blocks by package name (issues
-#178, #181, #28); this test still keeps its own map (`FULL_REGISTRY`) of
+finds all sixteen of the Reflect template's blocks by package name (issues
+#178, #181, #28, #208); this test still keeps its own map (`FULL_REGISTRY`) of
 each package's `make_block` rather than relying on that default -- ADR 0022
 level 3 is about the TEMPLATE, not about which blocks `gateway/consumer.py`
 happens to be wired to, so this test must not go silently stale the next
@@ -44,9 +44,9 @@ from gateway.stage_state import StageState
 from gateway.stage_surface import StageSurface
 import blocks.call_window, blocks.capture_bullets, blocks.condense  # noqa: E401
 import blocks.decisions_tasks_questions, blocks.graph, blocks.knowledge_link  # noqa: E401
-import blocks.live_transcript, blocks.minutes_document, blocks.mirroring_coach  # noqa: E401
-import blocks.speaker_queue, blocks.speaking_share, blocks.status_line  # noqa: E401
-import blocks.timer, blocks.topics, blocks.voice_attribution  # noqa: E401
+import blocks.live_transcript, blocks.meeting_chat, blocks.minutes_document  # noqa: E401
+import blocks.mirroring_coach, blocks.speaker_queue, blocks.speaking_share  # noqa: E401
+import blocks.status_line, blocks.timer, blocks.topics, blocks.voice_attribution  # noqa: E401
 from shared.block_registry import load_from
 from shared.templates import load_template
 from surfaces.contract.models import StageStateSnapshot
@@ -55,7 +55,7 @@ REPO_ROOT = Path(__file__).resolve().parent.parent
 TEMPLATE_PATH = REPO_ROOT / "templates" / "reflect" / "template.toml"
 FIXTURE_PATH = Path(__file__).resolve().parent / "fixtures" / "reflect_meeting.jsonl"
 
-# All fifteen Reflect blocks, pinned to each package's own make_block()
+# All sixteen Reflect blocks, pinned to each package's own make_block()
 # rather than to the host's default `load` (see the module docstring above).
 FULL_REGISTRY = {
     "capture-bullets": blocks.capture_bullets.make_block,
@@ -73,6 +73,7 @@ FULL_REGISTRY = {
     "voice-attribution": blocks.voice_attribution.make_block,
     "call-window": blocks.call_window.make_block,
     "live-transcript": blocks.live_transcript.make_block,
+    "meeting-chat": blocks.meeting_chat.make_block,
 }
 
 # Invented meeting, invented association (AGENTS.md rule 7: only example
@@ -95,11 +96,12 @@ HEAD = dict(title="Werkstatt-Planung", entity="beispielverein",
 #                                and off here, exactly like a default session
 #   condense                  -- never sees a second topic, so it never
 #                                closes the first (no LLM call needed either)
+#   meeting-chat              -- no `chat:room` action in this fixture
 EXPECTED_ACTIVE = {"capture-bullets", "minutes-document", "topics",
                   "speaker-queue", "speaking-share", "status-line", "graph",
                   "voice-attribution", "live-transcript"}
 EXPECTED_SILENT = {"timer", "knowledge-link", "mirroring-coach",
-                  "decisions-tasks-questions", "condense"}
+                  "decisions-tasks-questions", "condense", "meeting-chat"}
 
 
 def _load_fixture() -> list[dict]:

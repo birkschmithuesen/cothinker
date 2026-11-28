@@ -13,8 +13,8 @@
    `## Rohtranskript`), and a consumer restart adds nothing twice.
 
 Real pieces: the contract app (`build_live_app`), `shared.actions_spool`,
-`gateway.actions_reader.ActionsReader`, the block host with the production
-`REGISTRY`, `wire_meeting_chat`, `gateway.call_lane.CallLane`,
+`gateway.actions_reader.ActionsReader`, the block host with the real
+block package discovery (`shared.block_registry.load_block`), `wire_meeting_chat`, `gateway.call_lane.CallLane`,
 `gateway.stage_surface.StageSurface`, `gateway.stage_state.StageState`,
 `gateway.raw_transcript.MinutesFile`, `surfaces.contract.live_player`.
 Fake: the agent (a lane factory that answers at once) and the stage

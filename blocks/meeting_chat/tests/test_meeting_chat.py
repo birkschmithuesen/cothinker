@@ -49,7 +49,7 @@ def _name(name: str, person: str = PID_A) -> CoreEvent:
 
 
 def _answer(ids, ok=True, text="Here is the comparison.", reason="") -> CoreEvent:
-    return CoreEvent("block_output", {"from": "session-host", "chat_answer": {
+    return CoreEvent("block_output", {"from": "host", "chat_answer": {
         "ids": list(ids), "ok": ok, "text": text, "reason": reason}})
 
 
