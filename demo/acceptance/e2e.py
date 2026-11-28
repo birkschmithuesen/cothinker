@@ -477,16 +477,20 @@ _JOINED_RE = re.compile(r"^joined name=(\S+) after ([\d.]+)s", re.MULTILINE)
 
 def start_participant(name: str, wav: Path, url_file: Path, stats_out: Path,
                        screenshot: Path, cdp_port: int, chrome: str,
-                       seconds: float) -> subprocess.Popen:
+                       seconds: float, wrapper=None) -> subprocess.Popen:
+    """`wrapper`, when given, maps the command list to a wrapped one (e.g.
+    the rootless netem wrapper)."""
     cmd = [sys.executable, str(PARTICIPANT_PY), "--url-file", str(url_file),
            "--name", name, "--wav", str(wav), "--seconds", str(seconds),
            "--cdp-port", str(cdp_port), "--chrome", chrome,
            "--stats-out", str(stats_out), "--screenshot", str(screenshot)]
+    if wrapper is not None:
+        cmd = wrapper(cmd)
     return subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
 
 
 def start_participants(base_url: str, token: str, out_dir: Path, chrome: str,
-                        seconds: float) -> dict[str, dict]:
+                        seconds: float, wrapper=None) -> dict[str, dict]:
     """Writes each participant's per-user URL to a token-mode (0600) temp
     file (never printed) and joins Alex and Sam at the same moment via
     the public call-only page, WITHOUT waiting for them to finish --
@@ -503,7 +507,7 @@ def start_participants(base_url: str, token: str, out_dir: Path, chrome: str,
         screenshot = out_dir / ("%s-join.png" % name.lower())
         procs[name] = {
             "proc": start_participant(name, wav, url_file, stats_out, screenshot,
-                                       port, chrome, seconds),
+                                       port, chrome, seconds, wrapper),
             "stats_out": stats_out, "url_file": url_file,
         }
     return procs

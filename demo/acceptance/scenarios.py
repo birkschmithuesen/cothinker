@@ -447,6 +447,22 @@ def apply_gaps(s, paths: dict, baseline: dict) -> str:
     return f"gaps: profile={name} seed={seed} injected={injected}"
 
 
+def netem_setup(args, avail=None) -> Optional[Check]:
+    """Resolves `--netem` once per run: sets `args.netem_wrapper` (None or a
+    command -> command function) and returns the `audio.netem` row, or None
+    when the flag is absent."""
+    args.netem_wrapper = None
+    if not getattr(args, "netem", None):
+        return None
+    from demo.acceptance import netem
+    ok, why = (avail or netem.available)()
+    if not ok:
+        return Check("audio.netem", "SKIPPED", f"{why}; participants run unimpaired")
+    spec = netem.parse_spec(args.netem)
+    args.netem_wrapper = lambda cmd: netem.wrap(cmd, spec)
+    return Check("audio.netem", "PASS", args.netem)
+
+
 def fresh_answers(samples, baseline: str) -> list:
     """Answers that belong to this scenario's window.
 
@@ -523,7 +539,10 @@ def run_call(s, args, workdir: Path, baseline: Optional[dict] = None):
     base_lines = len(_protocol_lines(base_protocol))
     before = len(order_lines())
     seconds = total + float(s.timeouts["answer_s"])
-    procs = e2e.start_participants(args.base_url, token, workdir, args.chrome, seconds)
+    wrapper = getattr(args, "netem_wrapper", None)
+    extra = {"wrapper": wrapper} if wrapper else {}
+    procs = e2e.start_participants(args.base_url, token, workdir, args.chrome, seconds,
+                                   **extra)
     samples: list = []
     snap: dict = {}
     deadline = time.time() + seconds
@@ -643,6 +662,10 @@ def main_catalogue(args) -> int:
     rep = Report(tool="scenarios")
     bind_preflight(rep, args.preflight_report)
     out = Path(args.out)
+    if args.via == "call":
+        netem_row = netem_setup(args)
+        if netem_row:
+            rep.extend([netem_row])
     for s in scenarios.values():
         rep.extend(grade_scenario(s, args, baseline, overrides, judge, out / "work" / s.id))
     rep.judge = judge.summary()
@@ -653,6 +676,15 @@ def main_catalogue(args) -> int:
 
 
 # ------------------------------------------------------------------------ CLI
+
+def _netem_spec(raw: str) -> str:
+    from demo.acceptance import netem
+    try:
+        netem.parse_spec(raw)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError(f"--netem: {exc}")
+    return raw
+
 
 def _scenario_list(raw: str) -> list:
     names = [s.strip() for s in raw.split(",") if s.strip()]
@@ -724,6 +756,9 @@ def parse_args(argv=None):
                      help="transcript driver only")
     cat.add_argument("--consumer-repo", default=str(_REPO_ROOT))
     cat.add_argument("--base-url", help="call driver: deployment base URL")
+    cat.add_argument("--netem", type=_netem_spec,
+                     help="rootless packet loss/delay for the call participants, "
+                          "e.g. loss=2%%,delay=80ms (SKIPPED when unavailable)")
     cat.add_argument("--chrome", default="chromium")
     cat.add_argument("--piper-cmd", default="piper")
     cat.add_argument("--ffmpeg", default="ffmpeg")
