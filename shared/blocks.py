@@ -61,6 +61,7 @@ class BlockContext:
     emit: Callable[[object], None]         # shared.surface.ViewIntent -> None
     artefact: Callable[[str, str], None]   # (name, text), written by the host
     trace: Optional[Callable[[str, Mapping], None]] = None  # (event, fields) -> None
+    artefact_bytes: Optional[Callable[[str, bytes], None]] = None  # (name, data), written by the host
 
 
 class Block(Protocol):
