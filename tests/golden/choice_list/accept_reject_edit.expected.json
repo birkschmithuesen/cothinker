@@ -1,0 +1,17 @@
+{
+  "list_id": "q1",
+  "title": "Fragen zur Auswahl",
+  "groups": [
+    {
+      "heading": "Themen",
+      "rows": [
+        {"id": "ada", "text": "Soll Ada das Budget pruefen?", "state": "accepted"},
+        {"id": "ben", "text": "Soll Ben die Agenda schreiben?", "state": "rejected"},
+        {"id": "cleo", "text": "Soll Cleo die Nachbereitung uebernehmen?", "state": "edited"}
+      ]
+    }
+  ],
+  "counter": {"open": 0, "accepted": 1, "rejected": 1, "edited": 1, "total": 3},
+  "allow_edit": true,
+  "done_label": "Fertig"
+}

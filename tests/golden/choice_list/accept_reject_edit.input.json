@@ -1,0 +1,23 @@
+{
+  "offer": {
+    "list_id": "q1",
+    "title": "Fragen zur Auswahl",
+    "groups": [
+      {
+        "heading": "Themen",
+        "items": [
+          {"id": "ada", "text": "Soll Ada das Budget pruefen?"},
+          {"id": "ben", "text": "Soll Ben die Agenda schreiben?"},
+          {"id": "cleo", "text": "Soll Cleo das Protokoll fuehren?"}
+        ]
+      }
+    ],
+    "allow_edit": true,
+    "done_label": "Fertig"
+  },
+  "actions": [
+    {"kind": "accept", "payload": {"item": "ada"}},
+    {"kind": "reject", "payload": {"item": "ben"}},
+    {"kind": "edit", "payload": {"item": "cleo", "text": "Soll Cleo die Nachbereitung uebernehmen?"}}
+  ]
+}
