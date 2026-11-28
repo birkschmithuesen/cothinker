@@ -1,4 +1,3 @@
-from pathlib import Path
 from demo.acceptance import fingerprint as fpm
 
 
@@ -56,6 +55,71 @@ def test_unit_not_running_is_an_input_not_a_crash(tmp_path):
     assert inputs["unit:tap:argv"] == b"<not running>"
 
 
-def test_local_diff_changes_the_digest(tmp_path):
+def test_local_diff_changes_the_digest():
     base = {"repo:head": b"abc", "repo:diff": b""}
     assert fpm.from_inputs(base).changed(fpm.from_inputs({**base, "repo:diff": b"+x"})) == ["repo:diff"]
+
+
+def _sh_stub(untracked=""):
+    def sh(argv):
+        if argv[:3] == ["systemctl", "--user", "show"]:
+            return "0\n"
+        if "--others" in argv:
+            return untracked
+        return ""
+    return sh
+
+
+def test_profile_skills_edit_shows_in_changed(tmp_path):
+    env = tmp_path / "demo.env"
+    env.write_text("")
+    prof = tmp_path / "main"
+    (prof / "skills" / "x").mkdir(parents=True)
+    (prof / "skills" / "x" / "y.md").write_text("one")
+
+    def run():
+        return fpm.from_inputs(fpm.collect([], repo=tmp_path, demo_env=env, profiles={"main": prof},
+                                           sh=_sh_stub(), proc=tmp_path))
+    before = run()
+    (prof / "skills" / "x" / "y.md").write_text("two")
+    assert before.changed(run()) == ["profile:main:skills/x/y.md"]
+
+
+def test_profile_without_skills_dir_is_missing_input(tmp_path):
+    env = tmp_path / "demo.env"
+    env.write_text("")
+    prof = tmp_path / "main"
+    prof.mkdir()
+    inputs = fpm.collect([], repo=tmp_path, demo_env=env, profiles={"main": prof},
+                         sh=_sh_stub(), proc=tmp_path)
+    assert inputs["profile:main:skills"] == b"<missing>"
+
+
+def test_untracked_file_changes_the_digest(tmp_path):
+    env = tmp_path / "demo.env"
+    env.write_text("")
+
+    def run():
+        return fpm.from_inputs(fpm.collect([], repo=tmp_path, demo_env=env, profiles={},
+                                           sh=_sh_stub("new.txt\n"), proc=tmp_path))
+    before = fpm.from_inputs(fpm.collect([], repo=tmp_path, demo_env=env, profiles={},
+                                         sh=_sh_stub(""), proc=tmp_path))
+    (tmp_path / "new.txt").write_text("a")
+    first = run()
+    assert before.changed(first) == ["repo:untracked"]
+    (tmp_path / "new.txt").write_text("b")
+    assert first.changed(run()) == ["repo:untracked"]
+
+
+def test_unreadable_proc_is_an_input_not_a_crash(tmp_path):
+    proc = tmp_path / "proc" / "42"
+    proc.mkdir(parents=True)  # exists, but cmdline/environ cannot be read
+    env = tmp_path / "demo.env"
+    env.write_text("")
+
+    def sh(argv):
+        return "42\n" if argv[:3] == ["systemctl", "--user", "show"] else ""
+    inputs = fpm.collect(["stt"], repo=tmp_path, demo_env=env, profiles={}, sh=sh,
+                         proc=tmp_path / "proc")
+    assert inputs["unit:stt:argv"] == b"<unreadable>"
+    assert inputs["unit:stt:env"] == b"<unreadable>"
