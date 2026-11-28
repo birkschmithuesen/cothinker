@@ -304,7 +304,13 @@ def check_registry(template_path, registry: dict, log_tail: str) -> Check:
                  else "every template block registered")
 
 
-def check_unit_pending(unit: str, need_reload: bool, changed_after_start: int) -> Check:
+def check_unit_pending(unit: str, need_reload: bool, changed_after_start) -> Check:
+    """`changed_after_start` is a count, or a str naming why it could not be
+    determined (which fails the check: unknown is not "nothing pending")."""
+    if isinstance(changed_after_start, str):
+        return Check(f"preflight.unit.pending.{unit}", "FAIL",
+                     f"NeedDaemonReload={'yes' if need_reload else 'no'} "
+                     f"{changed_after_start}")
     bad = need_reload or changed_after_start > 0
     return Check(f"preflight.unit.pending.{unit}", "FAIL" if bad else "PASS",
                  f"NeedDaemonReload={'yes' if need_reload else 'no'} "
@@ -312,8 +318,9 @@ def check_unit_pending(unit: str, need_reload: bool, changed_after_start: int) -
 
 
 def _unit_pending_inputs(unit: str, sh: Callable) -> tuple:
-    """-> (need_reload, files changed after the unit's start). Reads only
-    `systemctl --user show` and file mtimes."""
+    """-> (need_reload, files changed after the unit's start, or a str saying
+    why that cannot be determined). Reads only `systemctl --user show` and
+    file mtimes."""
     props = {}
     for line in sh(["systemctl", "--user", "show", "-p",
                     "NeedDaemonReload,ActiveEnterTimestamp,FragmentPath,DropInPaths",
@@ -326,15 +333,20 @@ def _unit_pending_inputs(unit: str, sh: Callable) -> tuple:
     if started:
         out = sh(["date", "-d", started, "+%s"]).strip()
         start_ts = int(out) if out.isdigit() else None
+    if start_ts is None:
+        return need_reload, "start time not determinable"
     paths = [p for p in [props.get("FragmentPath", "")] +
              props.get("DropInPaths", "").split() if p]
     changed = 0
+    unreadable = 0
     for p in paths:
         try:
-            if start_ts is not None and Path(p).stat().st_mtime > start_ts:
+            if Path(p).stat().st_mtime > start_ts:
                 changed += 1
         except OSError:
-            pass
+            unreadable += 1
+    if unreadable:
+        return need_reload, f"cannot stat {unreadable} unit file(s)"
     return need_reload, changed
 
 
@@ -517,6 +529,8 @@ def main(argv=None) -> int:
         if template_check is not None:
             checks.append(template_check)
 
+    if not a.unit:
+        checks.append(Check("preflight.unit.pending", "SKIPPED", "no --unit given"))
     for unit in a.unit:
         need_reload, changed = _unit_pending_inputs(unit, run_sh)
         checks.append(check_unit_pending(unit, need_reload, changed))
