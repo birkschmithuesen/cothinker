@@ -151,6 +151,8 @@ start_all() {
     esac
   done
   echo "demo up in ${SECONDS}s"
+  mkdir -p "$DEMO_HOME/acceptance" || return 1
+  printf '{"at": %s}\n' "$(date +%s)" >"$DEMO_HOME/acceptance/last-start.json" || return 1
 }
 
 do_status() {

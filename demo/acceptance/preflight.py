@@ -490,6 +490,30 @@ def fingerprint_check(*, unit: Optional[str], profiles: dict, home: Path):
     return Check("preflight.fingerprint", "PASS", fp.digest), fp.to_dict()
 
 
+def current_fingerprint(*, consumer_unit: Optional[str] = None,
+                        consumer_pid: Optional[int] = None,
+                        proc_root: Path = Path("/proc"), template=None,
+                        home: Path = Path.home()) -> "fingerprint.Fingerprint":
+    """Fingerprint of the running deployment, computed as `--out` does.
+    Raises RuntimeError when it cannot be determined."""
+    pid, pid_err = resolve_consumer_pid(consumer_pid=consumer_pid,
+                                        consumer_unit=consumer_unit)
+    if pid_err:
+        raise RuntimeError(pid_err)
+    try:
+        argv = read_cmdline(Path(proc_root) / str(pid) / "cmdline")
+    except OSError as e:
+        raise RuntimeError(f"consumer command line not readable: {type(e).__name__}")
+    profiles = lane_profiles(argv, _coach_command(template), home=Path(home))
+    repo = _repo_of_unit(consumer_unit)
+    if repo is None:
+        raise RuntimeError("repo (consumer unit WorkingDirectory) not determinable; "
+                           "give --consumer-unit")
+    return fingerprint.from_inputs(fingerprint.collect(
+        fingerprint.DEFAULT_UNITS, repo=repo, demo_env=_demo_env_path(Path(home)),
+        profiles=profiles))
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     ap.add_argument("--proc-root", default="/proc")
