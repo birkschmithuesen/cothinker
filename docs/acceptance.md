@@ -176,7 +176,11 @@ and invented sentences only.
 | h | order-one-breath | yes | lane_calls |
 
 Check ids are `scenario.<id>.<group>`. Scenario h is a regression guard for a
-bug that was fixed; it has no judge question.
+bug that was fixed; it has no judge question, and its check is the count of
+lane calls only (the order has no content noun to look for). Every ordering
+utterance opens with the default wake phrase "Hey Robo" (a bare "Robo" is not
+an order). The `voice` field of a speaker is a label only: call mode picks the
+Piper voice from the speaker's name (`--piper-voice-alex` / `-sam`).
 
 ### The oracle: mechanical first, the judge can only fail
 
@@ -185,6 +189,14 @@ observation record: the number and text of lane calls, the answer, the
 transcript, the topic titles. A group that cannot be observed is `SKIPPED`
 with a reason, never `PASS`. Notably:
 
+- keyword and substring matches (lane call keywords, answer keywords and
+  forbidden text, transcript keywords, forbidden topic text) ignore case and
+  fold German transliterations on both sides (ae/ä, oe/ö, ue/ü, ss/ß), so the
+  YAML keyword "Oberflaechen" matches an answer's "Oberflächen". Keywords are
+  content nouns that the order or a correct answer repeats;
+- in transcript mode a lane call is the order text only (the final request of
+  the lane prompt), not the whole prompt, so keywords in the conversation
+  history or in an acknowledgement line cannot satisfy a check;
 - `answer` is `SKIPPED` in transcript mode (no answer exists offline);
 - `topic` is `SKIPPED` ("no topic observed") when no topic was seen. Topic
   detection needs a decider model, so an offline replay normally yields no
@@ -193,7 +205,8 @@ with a reason, never `PASS`. Notably:
 The judge (`judge.py`) runs only on a scenario whose mechanical checks
 passed and which carries a `judge.question`. It can turn that PASS into a
 FAIL; it never produces a PASS on its own and never rescues a mechanical
-FAIL. Its flags are all-or-none (giving some but not all is an argument
+FAIL. A scenario with a mechanical FAIL (or with nothing that passed) does not
+spend a judge call. Its flags are all-or-none (giving some but not all is an argument
 error):
 
 - `--judge-model`, `--judge-endpoint`, `--judge-key-env` (the name of the
@@ -202,16 +215,19 @@ error):
   `--judge-max-calls`, `--judge-max-tokens`.
 
 The judge is pinned to the configured model. It refuses to run when that
-model equals the lane model (`--lane-model`, or read from the preflight
-report), so the system does not grade itself, and it stops at
+model equals the lane model (`--lane-model`; pass it whenever the judge is
+on, because the preflight report does not carry it today), so the system
+does not grade itself, and it stops at
 `--judge-max-calls`. It only sees the invented spoken text of a catalogue
 scenario and the answer to it: the judge never sees a real meeting.
 
 ### Thresholds
 
-A numeric threshold (for example the share of segments allowed to end
-mid-sentence in scenario c, `baseline:scenario.share_no_sentence_end`) is
-never a default in code. It comes from `demo/acceptance/baseline.yaml`, where
+In catalogue mode a numeric threshold (for example the share of segments
+allowed to end mid-sentence in scenario c,
+`baseline:scenario.share_no_sentence_end`) is never a default in code. (The
+older a-d runner without `--catalogue` still has its own `--mid-sentence-max`
+default; that predates the catalogue and is left as it is.) It comes from `demo/acceptance/baseline.yaml`, where
 every entry carries a `measured_by` string, or from `--threshold KEY=VALUE`.
 If a selected scenario needs a threshold that neither provides, the run
 prints `missing threshold(s): <keys> -- pass --threshold or run the part-4
@@ -230,17 +246,32 @@ clock.
 `--via call` runs the whole path: Piper renders each speaker, headless
 Chrome joins the real call (`--base-url`, `--token-file`, `--chrome`,
 `--piper-voice-alex`, `--piper-voice-sam`), and the run observes the
-deployment. It costs real lane calls. Observation sources: lane calls are
-counted from the `ORDER` lines of the consumer log (`--consumer-log`), and the
-transcript and topics come from the session's `protokoll.md`
-(`--session-dir`). Live order text is not visible, so keyword checks on a
-lane call are made on the answer in this mode.
+deployment. It costs real lane calls, so point it at a test or demo project:
+the answer comes from that project's files and is sent to the judge endpoint
+when the judge is on, which a live meeting's project must never be.
+Observation sources: lane calls are counted from the `ORDER` lines of the
+consumer log (`--consumer-log`); the transcript comes from the session's
+`protokoll.md` (`--session-dir`); topics come from the snapshot `history` and
+the `###` headings of `protokoll.md`; agenda lines come from the snapshot's
+`agenda.items` titles, with `--agenda-file` as a fallback. Live order text is
+not visible, so keyword checks on a lane call are made on the answer in this
+mode.
+
+Each scenario is observed in its own window. Before it starts, the driver
+records the current `call_answer`, the number of history titles, topic
+headings and transcript lines, and the number of `ORDER` lines. Afterwards only
+what is new is graded: an answer equal to the pre-scenario one is not counted,
+and older topics and transcript lines are dropped. A scenario that raises
+(missing Piper, unreadable file, wrong WAV rate) becomes a FAIL row and the
+run continues, so the report is always written. `--audio-dir` is required when
+a selected scenario has a clip step or an `audio-dir:` voice; without it the
+run exits 2 naming the flag.
 
 Other flags: `--only a,b` selects scenarios, `--baseline` points at another
 baseline file, `--preflight-report` binds the run to a preflight, and
 `--out` is required and receives `report.json` and `report.md` (tool
 `scenarios`). Exit code 0 without FAIL, 1 with a FAIL, 2 for a missing
-threshold or unknown scenario id; `SKIPPED` does not change the exit code.
+threshold, unknown scenario id or broken catalogue; `SKIPPED` does not change the exit code.
 
 ## Before and after a run: preflight, fingerprint, go/no-go, acceptances
 
