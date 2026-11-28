@@ -1,4 +1,7 @@
+import shutil
 import subprocess
+
+import pytest
 
 from demo.acceptance import acceptances as acc
 
@@ -38,7 +41,7 @@ def test_agent_edit_of_human_entry_rejected(tmp_path):
     f.write_text(ENTRY.replace('"d1"', '"d2"'))
     _git(tmp_path, "commit", "-qam", "bump", name="Robo", email="robo@example.invalid")
     ok, rejected = acc.load_verified(f, agent_ids=AGENTS)
-    assert ok == []
+    assert ok == [] and "agent identity" in rejected[0]
 
 
 def test_uncommitted_entry_ignored(tmp_path):
@@ -87,3 +90,123 @@ def test_agent_identities_from_factory(tmp_path):
     fy.write_text('commit_identity:\n  name: "Robo"\n  email: "1+x@users.noreply.github.com"\n')
     ids = acc.agent_identities(fy, ["Example Agent <agent@example.invalid>"])
     assert ids == {("Robo", "1+x@users.noreply.github.com"), ("Example Agent", "agent@example.invalid")}
+
+
+def _edit_hidden(tmp_path, flag):
+    f = _repo(tmp_path)
+    _git(tmp_path, "update-index", flag, "acceptances.toml")
+    f.write_text(ENTRY + ENTRY.replace("scenario.d.topic", "scenario.a"))
+    return f
+
+
+@pytest.mark.parametrize("flag", ["--assume-unchanged", "--skip-worktree"])
+def test_hidden_worktree_edit_counts_nothing(tmp_path, flag):
+    f = _edit_hidden(tmp_path, flag)
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS)
+    assert [a.check_id for a in ok] == ["scenario.d.topic"]  # only the committed entry, never the edit
+    assert all("scenario.a" not in a.check_id for a in ok)
+
+
+def test_zero_sha_blame_rejected_without_status_check(tmp_path):
+    f = _repo(tmp_path)
+
+    def sh(argv, cwd):
+        if "status" in argv:
+            return 0, ""
+        rc, out = acc.run_sh_in(argv, cwd)
+        if "blame" in argv:
+            out = out.replace(out.split()[0], "0" * 40)
+        return rc, out
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS, sh=sh)
+    assert ok == [] and "not committed" in rejected[0]
+
+
+def test_ssh_signature_real(tmp_path):
+    if shutil.which("ssh-keygen") is None:
+        pytest.skip("ssh-keygen missing")
+    keys = tmp_path / "keys"
+    keys.mkdir()
+    key = keys / "id"
+    subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(key)], check=True)
+    pub = (keys / "id.pub").read_text().split()
+    signers = keys / "signers"
+    signers.write_text(f"alex@example.invalid {pub[0]} {pub[1]}\n")
+    other = keys / "other"
+    subprocess.run(["ssh-keygen", "-q", "-t", "ed25519", "-N", "", "-f", str(other)], check=True)
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / "acceptances.toml").write_text(ENTRY)
+    _git(repo, "add", "acceptances.toml")
+    _git(repo, "-c", "gpg.format=ssh", "-c", f"user.signingkey={key}", "commit", "-S", "-qm", "accept")
+    ok, rejected = acc.load_verified(repo / "acceptances.toml", agent_ids=AGENTS, allowed_signers=signers)
+    assert [a.verification for a in ok] == ["signature-checked"], rejected
+    ok, rejected = acc.load_verified(repo / "acceptances.toml", agent_ids=AGENTS, allowed_signers=keys / "none")
+    assert ok == [] and "no valid allowed signature" in rejected[0]
+    # a commit signed by a key not in allowed signers is rejected
+    (repo / "acceptances.toml").write_text(ENTRY.replace('"d1"', '"d2"'))
+    _git(repo, "-c", "gpg.format=ssh", "-c", f"user.signingkey={other}", "commit", "-S", "-qam", "bump")
+    ok, rejected = acc.load_verified(repo / "acceptances.toml", agent_ids=AGENTS, allowed_signers=signers)
+    assert ok == [] and "no valid allowed signature" in rejected[0]
+
+
+def test_verify_commit_uses_ssh_format(tmp_path):
+    f = _repo(tmp_path)
+    seen = []
+
+    def sh(argv, cwd):
+        if "verify-commit" in argv:
+            seen.append(argv)
+            return 0, ""
+        return acc.run_sh_in(argv, cwd)
+    acc.load_verified(f, agent_ids=AGENTS, allowed_signers=tmp_path / "s", sh=sh)
+    assert "gpg.format=ssh" in seen[0]
+    assert f"gpg.ssh.allowedSignersFile={tmp_path / 's'}" in seen[0]
+
+
+def _committed(tmp_path, text):
+    _git(tmp_path, "init", "-q")
+    f = tmp_path / "acceptances.toml"
+    f.write_text(text)
+    _git(tmp_path, "add", "acceptances.toml")
+    _git(tmp_path, "commit", "-qm", "accept")
+    return f
+
+
+@pytest.mark.parametrize("text,word", [
+    ("[[accept\nbroken", "invalid TOML"),
+    ('[[accept]]\ncheck_id = "x"\nfingerprint = "f"\n', "missing"),
+    ('accept = "nope"\n', "list of tables"),
+    ('accept = [1, 2]\n', "list of tables"),
+])
+def test_malformed_input_rejects(tmp_path, text, word):
+    ok, rejected = acc.load_verified(_committed(tmp_path, text), agent_ids=AGENTS)
+    assert ok == [] and word in rejected[0]
+
+
+def test_header_hidden_in_multiline_string_rejects_file(tmp_path):
+    text = ENTRY.replace('reason = "known, F2"', 'reason = """\n[[accept]]\n"""')
+    ok, rejected = acc.load_verified(_committed(tmp_path, text), agent_ids=AGENTS)
+    assert ok == [] and "could not be matched" in rejected[0]
+
+
+def test_header_whitespace_tolerated(tmp_path):
+    text = ENTRY.replace("[[accept]]", "[[ accept ]]  # note")
+    ok, _ = acc.load_verified(_committed(tmp_path, text), agent_ids=AGENTS)
+    assert len(ok) == 1
+
+
+def test_mailmap_cannot_launder_agent(tmp_path):
+    _git(tmp_path, "init", "-q")
+    (tmp_path / ".mailmap").write_text("Alex Example <alex@example.invalid> <robo@example.invalid>\n")
+    (tmp_path / "acceptances.toml").write_text(ENTRY)
+    _git(tmp_path, "add", ".mailmap", "acceptances.toml")
+    _git(tmp_path, "commit", "-qm", "accept", name="Robo", email="robo@example.invalid")
+    ok, rejected = acc.load_verified(tmp_path / "acceptances.toml", agent_ids=AGENTS)
+    assert ok == [] and "agent identity" in rejected[0]
+
+
+def test_agent_email_matched_case_insensitively_any_name(tmp_path):
+    f = _repo(tmp_path, ("Someone Else", "ROBO@Example.Invalid"))
+    ok, rejected = acc.load_verified(f, agent_ids=AGENTS)
+    assert ok == [] and "agent identity" in rejected[0]

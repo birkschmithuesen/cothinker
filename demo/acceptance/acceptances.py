@@ -42,55 +42,91 @@ def agent_identities(factory_yaml: Path, extra) -> set:
     return ids
 
 
+_HEADER = re.compile(r"^\s*\[\[\s*accept\s*\]\]\s*(#.*)?$")
+_ZERO = "0" * 40
+_REQUIRED = ("check_id", "fingerprint", "accepted_by")
+
+
 def _entry_ranges(lines):
-    starts = [i for i, ln in enumerate(lines) if ln.strip() == "[[accept]]"]
+    starts = [i for i, ln in enumerate(lines) if _HEADER.match(ln)]
     return [(s + 1, (starts[k + 1] if k + 1 < len(starts) else len(lines))) for k, s in enumerate(starts)]
 
 
-def _blame(path: Path, a: int, b: int, sh):
-    rc, out = sh(["git", "blame", "--line-porcelain", "-L", f"{a},{b}", "--", path.name], path.parent)
+def _blame_lines(name: str, cwd, sh):
+    """Blame HEAD (never the working tree); returns {line_no: sha} or None."""
+    rc, out = sh(["git", "blame", "--line-porcelain", "HEAD", "--", name], cwd)
     if rc != 0:
         return None
-    commits, cur = {}, None
+    by_line = {}
     for ln in out.splitlines():
-        if re.fullmatch(r"[0-9a-f]{40} .*", ln):
-            cur = ln.split()[0]
-            commits.setdefault(cur, ["", ""])
-        elif cur and ln.startswith("author "):
-            commits[cur][0] = ln[7:]
-        elif cur and ln.startswith("author-mail "):
-            commits[cur][1] = ln[12:].strip("<>")
-    return {c: tuple(v) for c, v in commits.items()}
+        m = re.fullmatch(r"([0-9a-f]{40}) \d+ (\d+)(?: \d+)?", ln)
+        if m:
+            by_line[int(m.group(2))] = m.group(1)
+    return by_line
+
+
+def _raw_author(sha: str, cwd, sh):
+    """Raw author (name, email) from the commit object; mailmap never applies."""
+    rc, out = sh(["git", "cat-file", "commit", sha], cwd)
+    if rc != 0:
+        return None
+    for ln in out.splitlines():
+        if not ln:
+            break
+        m = re.fullmatch(r"author (.*?) <([^>]*)> .*", ln)
+        if m:
+            return m.group(1), m.group(2)
+    return None
 
 
 def load_verified(path: Path, *, agent_ids: set, allowed_signers: Path | None = None, sh=run_sh_in):
     path = Path(path)
-    rc, dirty = sh(["git", "status", "--porcelain", "--", path.name], path.parent)
+    cwd, name = path.parent, path.name
+    rc, dirty = sh(["git", "status", "--porcelain", "--", name], cwd)
     if rc != 0:
-        return [], [f"{path.name}: not in a git repository; no entry counts"]
+        return [], [f"{name}: not in a git repository; no entry counts"]
     if dirty.strip():
-        return [], [f"{path.name}: uncommitted changes; no entry counts until committed"]
-    text = path.read_text(encoding="utf-8")
-    entries = tomllib.loads(text).get("accept", [])
+        return [], [f"{name}: uncommitted changes; no entry counts until committed"]
+    rc, text = sh(["git", "show", f"HEAD:./{name}"], cwd)
+    if rc != 0:
+        return [], [f"{name}: not committed at HEAD; no entry counts"]
+    try:
+        entries = tomllib.loads(text).get("accept", [])
+    except tomllib.TOMLDecodeError as exc:
+        return [], [f"{name}: invalid TOML ({exc}); no entry counts"]
+    if not isinstance(entries, list) or not all(isinstance(e, dict) for e in entries):
+        return [], [f"{name}: 'accept' must be a list of tables; no entry counts"]
+    for e in entries:
+        missing = [k for k in _REQUIRED if not isinstance(e.get(k), str)]
+        if missing:
+            return [], [f"{name}: entry missing required key(s) {', '.join(missing)}; no entry counts"]
     ranges = _entry_ranges(text.splitlines())
     if len(entries) != len(ranges):
-        return [], [f"{path.name}: entries could not be matched to lines; no entry counts"]
+        return [], [f"{name}: entries could not be matched to lines; no entry counts"]
+    blame = _blame_lines(name, cwd, sh)
+    if blame is None:
+        return [], [f"{name}: git blame failed; no entry counts"]
+    agent_emails = {e.lower() for _, e in agent_ids}
     accepted, rejected = [], []
     for entry, (a, b) in zip(entries, ranges):
-        cid = entry.get("check_id")
-        commits = _blame(path, a, b, sh)
-        if not commits:
-            rejected.append(f"{cid}: git blame failed; entry does not count")
+        cid = entry["check_id"]
+        shas = {blame.get(n) for n in range(a, b + 1)}
+        if None in shas or _ZERO in shas:
+            rejected.append(f"{cid}: lines not committed (blamed to no commit); entry does not count")
             continue
-        agents = [c for c, who in commits.items() if who in agent_ids]
+        authors = {c: _raw_author(c, cwd, sh) for c in shas}
+        if any(w is None for w in authors.values()):
+            rejected.append(f"{cid}: commit author could not be read; entry does not count")
+            continue
+        agents = [c for c, (_, em) in authors.items() if em.lower() in agent_emails]
         if agents:
             rejected.append(f"{cid}: written by an agent identity ({agents[0][:8]})")
             continue
         verification = "author-checked"
         if allowed_signers is not None:
-            bad = [c for c in commits
-                   if sh(["git", "-c", f"gpg.ssh.allowedSignersFile={allowed_signers}", "verify-commit", c],
-                         path.parent)[0] != 0]
+            bad = [c for c in shas
+                   if sh(["git", "-c", "gpg.format=ssh", "-c", f"gpg.ssh.allowedSignersFile={allowed_signers}",
+                          "verify-commit", c], cwd)[0] != 0]
             if bad:
                 rejected.append(f"{cid}: commit {bad[0][:8]} has no valid allowed signature")
                 continue
