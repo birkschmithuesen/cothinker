@@ -118,3 +118,15 @@ def test_consumer_service_points_at_the_same_pointer_file_contract_env_names():
 
     consumer = (ROOT / "demo" / "systemd" / "cothinker-demo-consumer.service").read_text()
     assert "COTHINKER_SESSION_POINTER=%t/cothinker-demo/session.path" in consumer
+
+
+def test_start_writes_the_acceptance_start_marker(tmp_path):
+    """The marker line (the go/no-go gate reads `at`) runs and yields an integer."""
+    import json
+    text = (ROOT / "demo" / "demo.sh").read_text()
+    m = re.search(r'echo "demo up in \$\{SECONDS\}s"\n((?:  .*\n)+?)\}', text)
+    assert m, "demo.sh start_all does not write the acceptance start marker after 'demo up'"
+    script = f'DEMO_HOME={tmp_path}\nf() {{\n{m.group(1)}}}\nf\n'
+    assert subprocess.run(["bash", "-c", script], capture_output=True, text=True).returncode == 0
+    data = json.loads((tmp_path / "acceptance" / "last-start.json").read_text())
+    assert isinstance(data["at"], int) and data["at"] > 0
