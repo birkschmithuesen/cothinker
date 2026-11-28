@@ -25,9 +25,9 @@ def zero_runs(samples, rate: int, *, zero_max: int = 1, voiced_rms: float = VOIC
     """Lengths (s) of zero runs lying between two voiced frames.
 
     A zero run is consecutive samples with `|x| <= zero_max`. It counts only
-    if it is `min_s..max_s` long and the nearest voiced frame (`rms >
-    voiced_rms` over `frame_s`) before it and the nearest one after it are
-    within `within_s` of each other (end of the first to start of the second).
+    if it is `min_s..max_s` long, and a voiced frame (`rms > voiced_rms`
+    over `frame_s`) ends within `within_s` before it starts and another
+    starts within `within_s` after it ends.
     """
     n = max(1, int(round(rate * frame_s)))
     voiced = voiced_frames(samples, rate, frame_s=frame_s, voiced_rms=voiced_rms)
@@ -55,8 +55,8 @@ def zero_runs(samples, rate: int, *, zero_max: int = 1, voiced_rms: float = VOIC
         after = [j for j in voiced_idx if j * n >= end]
         if not before or not after:
             continue
-        # the two flanking voiced frames must be within `within_s` of each other
-        if after[0] * n - (before[-1] + 1) * n > reach:
+        # each flanking voiced frame must lie within `within_s` of the run
+        if start - (before[-1] + 1) * n > reach or after[0] * n - end > reach:
             continue
         out.append(length_s)
     return out

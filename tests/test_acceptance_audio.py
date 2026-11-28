@@ -60,14 +60,18 @@ def test_zero_run_next_to_silence_is_ignored():
     assert gap_probe.zero_runs(a, RATE) == []
 
 
-def test_flanking_voiced_frames_must_be_within_the_window_of_each_other():
+def test_each_flanking_voiced_frame_must_be_within_the_window_of_the_run():
+    # M4 reading: each flanking voiced frame lies within within_s of the run
+    # (not the two flanks within within_s of each other). This reading
+    # reproduces M4's 360 runs / 12.1 per voiced min on the original track;
+    # the between-flanks reading found only 246 on the same audio.
     def build(quiet_s):
         return (speech(1.0) + lead_noise(quiet_s) + array.array("h", [0] * (RATE // 2))
                 + lead_noise(quiet_s, seed=3) + speech(1.0))
-    # each neighbour is 2 s away (<= 3 s) but they are 4.5 s apart: not counted
-    assert gap_probe.zero_runs(build(2.0), RATE) == []
-    # neighbours 1.5 s apart: counted
-    assert len(gap_probe.zero_runs(build(0.5), RATE)) == 1
+    # each neighbour is 2 s from the run (<= 3 s) although they are 4.5 s apart: counted
+    assert len(gap_probe.zero_runs(build(2.0), RATE)) == 1
+    # each neighbour is 3.5 s from the run (> 3 s): not counted
+    assert gap_probe.zero_runs(build(3.5), RATE) == []
 
 
 def test_runs_outside_min_max_are_ignored():
