@@ -27,6 +27,7 @@ Expected output (exactly these two lines, exit code 0):
 
 ```
 cothinker@HEAD: <N> source files, <N> mapped, 0 unmapped, 0 stale, 0 unknown targets
+cothinker@HEAD: 89 source files, 89 mapped, 0 unmapped, 0 stale, 0 unknown targets
 OK
 ```
 
@@ -62,6 +63,9 @@ tables below are built from.
 | voice attribution (who is talking right now, by track/STT speaker label) | Show + share | `blocks/voice_attribution/__init__.py` 104, `voice.py` 73 — 177 | Reflect | 1× |
 | call window (listen:room open/close by voice, tap, or timeout) | Capture | `blocks/call_window/__init__.py` 108 | Reflect | 1× |
 | live transcript (side panel: last 10 finished lines + the in-progress partial) | Show + share | `blocks/live_transcript/__init__.py` 114, `transcript.py` 86 — 200 | Reflect | 1× |
+| status line | Show + share | `blocks/status_line/__init__.py` 86, `line.py` 24 — 110 | Reflect | 1× |
+| graph (session / results / terms) | Show + share | `stage/session_graph.py` 389 | Reflect | 1× |
+| forms & styles (theatre/music form catalogue, scene forms, writing styles) | Agent behaviour | `blocks/forms_styles/__init__.py` 169, `catalogue.py` 175 — 344 | core | 1× |
 
 **Reflect check:** all 12 of the blocks Birk confirmed for Reflect now have
 code in this repository — topic change, capture bullets, condense,
@@ -141,6 +145,7 @@ block:speaker-queue          block — speaker queue (tap to request/leave the f
 block:voice-attribution      block — voice attribution (who is talking right now, by track/STT speaker label)
 block:call-window            block — call window (listen:room open/close by voice, tap, or timeout)
 block:live-transcript        block — live transcript (side panel: last 10 finished lines + the in-progress partial)
+block:forms-styles           block — forms & styles catalogue (theatre/music forms, scene forms, writing styles)
 retire                       dropped by the target (decision 25 engines)
 ```
 
@@ -220,6 +225,8 @@ blocks/mirroring_coach/coach.py                                                 
 blocks/mirroring_coach/context.py                                                 block:mirroring-coach
 blocks/knowledge_link/__init__.py                                                 block:knowledge-link
 blocks/knowledge_link/wiki.py                                                     block:knowledge-link
+blocks/forms_styles/__init__.py                                                   block:forms-styles
+blocks/forms_styles/catalogue.py                                                  block:forms-styles
 gateway/worker.py                                                                 core:agent
 graph/__init__.py                                                                 core:session
 graph/graph_build.py                                                              core:session

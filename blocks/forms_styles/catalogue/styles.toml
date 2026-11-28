@@ -1,0 +1,30 @@
+# CoThinker — blocks/forms_styles/catalogue/styles.toml: the writing styles
+# Copyright (C) 2026 Birk Schmithuesen
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License, version 3.
+# It is provided WITHOUT ANY WARRANTY. See LICENSE.
+#
+# Ported from `interview_theater.stile.STILE` of the archived
+# interview-theater repository (content port, not a code import). Each
+# style's rule block (`prompts/styles/<slug>.en.md`) is a measure derived
+# from a concrete reference piece -- what is taken over is the build, never
+# the content. The source productions and artists named in the archive are
+# not public here (no real persons or productions named in this public
+# repository); the slugs below are new and neutral, chosen for this port.
+# A style applies only when a scene's form is not the prose/story variant.
+
+[[style]]
+slug = "measured-baseline"
+name = "Measured baseline"
+summary = "The measured baseline of an in-house reference script: short lines, little stage direction, no further shift in style."
+
+[[style]]
+slug = "litany"
+name = "Litany"
+summary = "A sentence pattern repeated with one changing word; the build-up is in frequency, not in content."
+
+[[style]]
+slug = "back-and-forth"
+name = "Sharp back-and-forth with a hook"
+summary = "Short lines addressed to another person, a hook that returns word for word, negation and concrete things over abstractions."

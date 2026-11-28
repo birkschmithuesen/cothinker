@@ -1,0 +1,479 @@
+# CoThinker — blocks/forms_styles/PROVENANCE.toml: provenance of imported
+# catalogue and prompt files
+# Copyright (C) 2026 Birk Schmithuesen
+#
+# This program is free software: you can redistribute it and/or modify it
+# under the terms of the GNU Affero General Public License, version 3.
+# It is provided WITHOUT ANY WARRANTY. See LICENSE.
+#
+# Each entry: path (repo-relative), sha256 (hex), reviewed (bool), optional
+# note. tests/test_public_text_hygiene.py enforces this file.
+#
+# Sources: the archived interview-theater repository's
+# interview_theater/{formen,formen_musik}/*.md (theatre + music form
+# catalogue), sprachen/en/prompts/{formen,stile}/*.md (scene form and
+# style rule-block prompts) and workshop.VORGABE_FORMEN (scene form
+# names/labels/keywords in catalogue/scene_forms.toml). No real persons or
+# productions are named in this public repository -- see the `note` field
+# on the files where the archive named one.
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/cadence-and-tonic.md"
+sha256 = "78be5bc9a6796549508bb5a6708c60887b1edc5d9febae094d5220580c71ab02"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/call-and-response.md"
+sha256 = "bf16be919de1db1c5768e5b5635c259de48f6a3ed8357601c7e66df909a09195"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/coda.md"
+sha256 = "6d8cfebac03ce6e13de2dc60bea0ccd44fac2731a8a511652aca4881100fd408"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/crescendo-and-dynamic-arc.md"
+sha256 = "8c99620847dd24bd5ee3bc2358f1932ce5714a4c21cb418b6b99ba66dedc6996"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/da-capo-and-aba-form.md"
+sha256 = "9dade60b0aa859572fdc98babba7868316a36c851c5f5c98bff9b7a98408a50f"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/fugue-canon-and-counterpoint.md"
+sha256 = "c1162a05c175800539672b0c09554731c74d147a10b5df21567b3a1a2b8b410b"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/leitmotif.md"
+sha256 = "1f11a54dda79231d39ac26425ead84f39a7e3e50a71003a7ddbf416291a2f89d"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/modulation-key-change.md"
+sha256 = "40d23f2f2fd548df86eef0ad9aaf7dbe4914ed731edd5c424d12d2a8b246f755"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/ostinato-and-ground-bass.md"
+sha256 = "23b562f229e70a4bd2fc87431540371557b5fcc3bb5ffa608d1aefc2a1420b72"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/polyphony-homophony-and-monophony.md"
+sha256 = "4a170285abd858824d9f117f0e7af59281d83847fee4f3f1ad7fe4a458ad5a7f"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/rondo-and-ritornello.md"
+sha256 = "1e34e83abdf2e1ee0213d5629c5888a8820d45016db87a585a3159591a3e497b"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/sonata-form.md"
+sha256 = "588106e665723a99e98a9343e67996269dee44f0af4de883a55bb6f23a72cb4a"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/tension-and-resolution-dissonance-consonance.md"
+sha256 = "ea1df9e0c913808a74c689deb539778c3a08df8946a7533e6ac496080800f7d6"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/music/theme-and-variations.md"
+sha256 = "5bad28cfd9492521181dce3b212f82fa628c11a53e62ef9bd2c9bdfaa96b0905"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/scene_forms.toml"
+sha256 = "bdc5493b26832f0cd8124a84782c87966e284e6e6d5acd579ba4257bd729c8bd"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/styles.toml"
+sha256 = "6963299b29566d1737fa85c1590153d526a86c19e1fd9be8c4fa50d1656936c3"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/ancient-greek-theatre.md"
+sha256 = "771e43b9ddfcc5ae2da4832446f6d7758a5f0c08fd776d4fa3b5581c327d3544"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/audio-walk.md"
+sha256 = "bf320cd2cc81f46a2eecc1fe54beb70cc53004ad7114e6c161272ab9fe6749ca"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/ballet.md"
+sha256 = "cdb04a70772df7d687755d1896fab1ae2d82170b1dd0eb5e29522abdbe063d70"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/bauhaus-stage.md"
+sha256 = "4ff4ca44329eb726ddbe879b89490a747b64ad7d0a6eff7f44701aebfed01ea0"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/body-art.md"
+sha256 = "b72330b401e664d0790cb23e0e2eda8cc484899bc6c98388389bd02b1a69cba2"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/butoh.md"
+sha256 = "91356acb3e947ea89876da9d8ad2d620bd924d08138a7dc2fec2ffa7659a7726"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/cabaret.md"
+sha256 = "e11ef8f54b740b83cb685ad629052b3a61ceb0df5b5c459c30c1a471879063f7"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/commedia-dell-arte.md"
+sha256 = "2e7f161cd8abbaaf7d30e9b1db18c1295556dfbb3e5543684d2189dcbd610d3d"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/conceptual-dance.md"
+sha256 = "4bedccf86e19a1382732c5dcaf02d99f8c545f212ead5c783b8516b6ff4f6d4f"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/concert-performance.md"
+sha256 = "67106b196ae670e7ea4d94a2a80761215aaa611ad7bf720c3ba6f18b2b171861"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/court-masque.md"
+sha256 = "655bc408679026ee438fdbfe8b7e100128c24bbe416adc14650d44b124c22fd0"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/dada-soiree.md"
+sha256 = "65e31e74204a54544a9ec3795e21dc7c731eda0e4cc1618d3146cfa08d464ea8"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/devised-theatre.md"
+sha256 = "b3c3586272450641929cc2f285b4a7c6af75a1f5dd24149d3ed37ea8c12551df"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/documentary-theatre.md"
+sha256 = "91ec79f401577f14d64054742b398a3e23baa5338f531dbcf6125e5010154438"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/durational-performance.md"
+sha256 = "513edc3645402004b935554349be2cd7207ecb3f32c22b539a5b8e20b7e26a7f"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/epic-theatre.md"
+sha256 = "e680bbf4f265ac54e824a75aabc624f5a78353d50da4d022a0abedd64d536358"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/experts-of-the-everyday.md"
+sha256 = "71b024e6096b8fa7f94c12a4f8f73452a47e87b55895137d6b5476572215174f"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/flash-mob-art-intervention.md"
+sha256 = "80482b25793b8d1b2e79f8d38cedbf2748a40f13d3ec3e007272298cbcc77e01"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/fluxus-event-score.md"
+sha256 = "37bfd09ca04119d52bce81e12410d7736fdac85aa616ea224ff15582bfb4d358"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/futurist-serata.md"
+sha256 = "a812eb6b51366207c72477ffcd3c4bb11e38c57fdd9d96a5c02c81b980079156"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/game-theatre.md"
+sha256 = "12b0f60fd4407012b0f5952a2d770fd37f91e24fd1b19f063146ccd2914630fc"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/guided-tour-performance.md"
+sha256 = "081232c8f7edab23922655693c8db86ba2578076a0b8cd37969d7c3067e10dff"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/happening.md"
+sha256 = "525513bc43768388dc01a897e448bd5c1fd787c3e09cac1b2ac6658699b35571"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/hip-hop-theatre.md"
+sha256 = "c3501074a4773ce5e5a08c61d3089e507bbb1e5dc4ca106f4cee5056c1d5c1c0"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/immersive-theatre.md"
+sha256 = "2e84332cce03db51914ef4be599ae5af8c9d712c8a8a3191845ffa0421bffc55"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/improvisational-theatre.md"
+sha256 = "272dc652c14a1236629b51f6545cc7fe6f50189da2c9fb0fb3bd85f533ef29cf"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/instrumental-theatre.md"
+sha256 = "82c1467cb9a0c6ea528e5ead1b8d6ad84f1142335ae0784b955ba167dc283288"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/invisible-theatre.md"
+sha256 = "a2f9e32771846d4b8bc9138e7638b3bf3c64a47a9832062f4cf0114aebd2e261"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/learning-play-agitprop.md"
+sha256 = "d3a256ea629863ef06e239187afbb2cc6c5a301fe31197015a1c0a7dcaed8f12"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/lecture-performance.md"
+sha256 = "7a0f0fbcc2b2f79aa35033feb3c06478b861641f17bce5964fa1be68b457cc1e"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/live-action-role-play-larp.md"
+sha256 = "063bf41a373044409fc36411ef5eb5b3e8b34a3ac3ce605b75154357526ee848"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/live-art.md"
+sha256 = "bcacb31f380a5d9fead492b33608e7da00b6a0c85858ac488459751c662091cc"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/live-cinema.md"
+sha256 = "bd80a9ec72c59322a7841412383bab1477dea3d207f28634be9ff6271331e84f"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/live-radio-play.md"
+sha256 = "973b0e798aba3156a72b4a86b3d0ccff3baa7d35cb8d32fadfbde94db3ea8a6b"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/multimedia-performance.md"
+sha256 = "b02c9bc2ba390a9a95c5dc7d1ba03812e5c58714ebe81aed6c782754886433b1"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/musical.md"
+sha256 = "1825fbd7864544d98eab6b2a46f6883ededa68efcc28eb7e05233e274c7b8714"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/mystery-play.md"
+sha256 = "12f4e1aa0d4841028199ef9daeedf23fff50626eb102778ac94cf05055ceac37"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/new-music-theatre.md"
+sha256 = "024c844a9139b55067743619a22ee82ff8ee2589ae6581fc2d1367777380c33a"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/one-to-one-performance.md"
+sha256 = "42b1e782f29948bb2bcea6a646805a99e5e3cc9dbcb2f3ccfa109590ace7f9dd"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/opera.md"
+sha256 = "9ab276f772b78f5f66d0a78fd3c8f374cb9f66f4f0447eebe109ac01711829ee"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/operetta.md"
+sha256 = "207ba9ce51a20f119d15c78c94dd88a9d6e58f6962f7dba619065c1db1575569"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/participatory-performance.md"
+sha256 = "63875039cc80d4273c455ab0ca5680dbfe0a713f204e2774e7ca6846128f4e1d"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/performance-installation.md"
+sha256 = "e87420e89f4893d17e22b45a253423c402a0220526d043d83e359cdc03cf5737"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/poor-theatre.md"
+sha256 = "4125c690c64c35a7ac13313e1465cb5a01c2fe46fc76c30ff007148bbbec4cb0"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/postdramatic-theatre.md"
+sha256 = "6dbe76c96923163c9b6a4ceeae703af950bffa564cd1a342828170cca6339545"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/postmodern-dance.md"
+sha256 = "b237b40ba815aaf535312e0a4d26b82b3fc2ef4f95b7d9a004e378e61f4c5412"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/promenade-theatre.md"
+sha256 = "554378d50d1d863a56ca513ee1694ad7ccfa1ccdde481a240425c834c197cce9"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/puppetry.md"
+sha256 = "0701752234960c178e688a5300d470e5bbb71f422642706d54ae762573d149fa"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/reenactment-reperformance.md"
+sha256 = "9148906795393f44cdd135e19e30e6450305b966fec8d3966f81cadb5a272ea5"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/robot-ai-performance.md"
+sha256 = "98dc60d0d62e80c0a7375d152a54daff59e88303a0af71eca0a795b8c26d573d"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/site-specific-performance.md"
+sha256 = "ab83e1f86e4ac6dc7b60f6671f6e8212d925728e97ca0fa5733c984e4c655ba4"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/social-experiment-as-art.md"
+sha256 = "3d9c8366e1998bcfe8222f3f352f3cb6458fd1507d092f510eee64ba4fe18aa9"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/sound-performance-sound-art.md"
+sha256 = "d9cc37bf0a5d58c149094e8a95446283929b6a382f14e5281542ee8c9ecb7fb0"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/spoken-word-poetry-slam.md"
+sha256 = "774615d5b02ecd178448ed20b022ae62580c3faf4acb0f947b5de246c7ac9375"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/staged-oratorio.md"
+sha256 = "7ddd5b5003dbc820e2382de6031435e44876baa4a2208d8d29ac2363828a59fd"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/staged-reading.md"
+sha256 = "7e34384da26a522352c85f76d64926ed312bb8e74ca848d962b2b0d4ee4d3e8f"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/stand-up-comedy.md"
+sha256 = "7b08cae3766847521e5f3db11e271c6e36c379874140e2e1baa6e5b17ff3a44c"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/street-theatre.md"
+sha256 = "0784c922d661150d6660e439347e489c19aacb065668fe547a65e7c909cb2b6f"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/tableau-vivant.md"
+sha256 = "27320cf0c0285017ca75c4761c772a740687a619892db6c3ab11aa041e5d91ee"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/tanztheater-dance-theatre.md"
+sha256 = "e094a4382bc9934d660bf4e4dc840d975d1bcbd7a1f0ab1d448db1fded258072"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/telematic-performance.md"
+sha256 = "2b05ffa14ae0334f985c4447fe3874ef4a53c41caa30b6c2475d95681e5f381f"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/theatre-of-the-absurd.md"
+sha256 = "43b88617597a3aa6bf0b342dd36d7792b31c7bbd872e3d75436631ec92173069"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/theatre-of-the-oppressed.md"
+sha256 = "78e11396bf14631d8df250ec841545c0bfb753d88e38401405ec451a05bb87aa"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/variety-contemporary-circus.md"
+sha256 = "2b16ceb8e110591a416b5a6f147fc3266c0e5d20ea4738b7cb4dc6f62c92825d"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/verbatim-theatre.md"
+sha256 = "edbd927ebe04f943de074a6a077488a7665e1a32464e3e05fe888d730cc09fd8"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/viennese-actionism.md"
+sha256 = "54bbfc3f9372f997e45bf013b055048307059c357dd5699545067494503f846d"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/catalogue/theatre/vr-xr-theatre.md"
+sha256 = "85b934b993b295dba191f5e52a9e240391cbf7bcda4736cb528c3449786f00ea"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/prompts/scene_forms/chorus.en.md"
+sha256 = "727b47ee3b3d40ef0117b9914fabd83ae706856331b1645866b63c36f4cac45c"
+reviewed = true
+note = "ported from the archived interview-theater repository; named production/person/artist references redacted, measured numbers kept"
+
+[[file]]
+path = "blocks/forms_styles/prompts/scene_forms/dialogue.en.md"
+sha256 = "a395bd5926fb57b735e63a8a6458e0d28e140f04d93e74a303e9fc648ae4ad84"
+reviewed = true
+note = "ported from the archived interview-theater repository; named production/person/artist references redacted, measured numbers kept"
+
+[[file]]
+path = "blocks/forms_styles/prompts/scene_forms/monologue.en.md"
+sha256 = "51a7f7eab43ba1fbf4aa59bd78d3ce8d0cab1f8c3a010c21f8d5de114eea6e53"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/prompts/scene_forms/rap.en.md"
+sha256 = "d68f2566a7aabc919173644bd1cbcacbca62f0b7927aefda6315f91bc61fd1dd"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/prompts/scene_forms/song.en.md"
+sha256 = "d51da0244c59d7776ce6444f97ce51c9d75281693092313186e5d88e39f0bea3"
+reviewed = true
+
+[[file]]
+path = "blocks/forms_styles/prompts/styles/back-and-forth.en.md"
+sha256 = "dde14b572362f6e28f964ba7c627598465160ad6907aaa6d1d01d62c6587b934"
+reviewed = true
+note = "ported from the archived interview-theater repository; named production/person/artist references redacted, measured numbers kept"
+
+[[file]]
+path = "blocks/forms_styles/prompts/styles/litany.en.md"
+sha256 = "79b37d3d2672a470c1d035304ee8b742e82695c65c49c66ac9a402867d04be6c"
+reviewed = true
+note = "ported from the archived interview-theater repository; named production/person/artist references redacted, measured numbers kept"
+
+[[file]]
+path = "blocks/forms_styles/prompts/styles/measured-baseline.en.md"
+sha256 = "e2531ba889a1af851905c6bc21ceb2f6108f4de5cf6cfe8329db25e85b9531a6"
+reviewed = true
+note = "ported from the archived interview-theater repository; named production/person/artist references redacted, measured numbers kept"
+
