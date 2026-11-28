@@ -239,6 +239,7 @@ shared/instance.py                                                              
 shared/lane_port.py                                                               core:agent
 shared/language_guard.py                                                          core:llm   
 shared/llm.py                                                                     core:llm   
+shared/mcp_stdio.py                                                               core:session
 shared/modules.py                                                                 core:module
 shared/phases.py                                                                  core:session
 shared/profiles.py                                                                core:instance
@@ -250,6 +251,7 @@ shared/surface.py                                                               
 shared/text.py                                                                    surface:stage
 shared/stt.py                                                                     stt:api-client
 shared/stt_inprocess.py                                                           stt:engine-speechmatics
+shared/tool_api.py                                                                core:session
 shared/utterance.py                                                              stt:engine-speechmatics
 shared/wake_word.py                                                               block:segment
 shared/wiki_names.py                                                              block:knowledge-link
