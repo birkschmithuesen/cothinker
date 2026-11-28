@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import sys
 from pathlib import Path
 
@@ -26,16 +27,57 @@ _VERIFICATION_TEXT = {
 }
 
 
-def _reports(reports_dir: Path) -> list:
-    out = []
-    for p in Path(reports_dir).glob("*/report.json"):
+def _num(x):
+    """A finite real number, else None."""
+    if isinstance(x, bool) or not isinstance(x, (int, float)) or not math.isfinite(x):
+        return None
+    return x
+
+
+def _reports(reports_dir: Path):
+    """-> (reports newest first, problems). An unloadable file is a problem, never skipped."""
+    out, problems = [], []
+    for p in sorted(Path(reports_dir).glob("*/report.json")):
+        label = f"{p.parent.name}/{p.name}"
         try:
             r = report.load(p)
-        except (OSError, ValueError):
+        except (OSError, ValueError) as exc:
+            problems.append(f"report {label} unreadable ({type(exc).__name__})")
             continue
-        if isinstance(r, dict) and r.get("run_id"):
-            out.append(r)
-    return sorted(out, key=lambda r: r.get("started_at", 0), reverse=True)
+        if not isinstance(r, dict) or not isinstance(r.get("run_id"), str) or not r["run_id"]:
+            problems.append(f"report {label} has no run_id")
+            continue
+        out.append(r)
+    out.sort(key=lambda r: _num(r.get("started_at")) if _num(r.get("started_at")) is not None
+             else float("-inf"), reverse=True)
+    return out, problems
+
+
+def _check_problem(run, pre):
+    """Reason the matched run cannot decide, or None."""
+    rid = run["run_id"]
+    if run["preflight_run_id"] == rid:
+        return f"{rid} names itself as its preflight"
+    if pre.get("preflight_run_id"):
+        return f"preflight {pre['run_id']} is itself a level-4 run"
+    pchecks = pre.get("checks")
+    if not isinstance(pchecks, list) or not any(
+            isinstance(c, dict) and c.get("id") == "preflight.fingerprint" and c.get("status") == "PASS"
+            for c in pchecks):
+        return f"preflight {pre['run_id']} has no PASS preflight.fingerprint check"
+    checks = run.get("checks")
+    if not isinstance(checks, list):
+        return f"{rid} has missing or non-list checks"
+    for c in checks:
+        if not isinstance(c, dict) or not isinstance(c.get("id"), str):
+            return f"{rid} has a malformed check"
+        if c.get("status") not in report.STATUSES:
+            return f"{rid} check {c['id']} has missing or unknown status"
+    if not any(c["id"] == "fingerprint.bound" and c["status"] == "PASS" for c in checks):
+        return f"level-4 report not bound to a preflight ({rid})"
+    if not any(c["status"] == "PASS" and c["id"] != "fingerprint.bound" for c in checks):
+        return f"level-4 report exercised nothing ({rid})"
+    return None
 
 
 def _digest(r) -> str | None:
@@ -55,13 +97,19 @@ def _marker_at(marker: Path):
         at = json.loads(Path(marker).read_text(encoding="utf-8"))["at"]
     except (OSError, ValueError, KeyError, TypeError) as exc:
         return None, f"start marker {Path(marker).name} unreadable ({type(exc).__name__})"
-    if isinstance(at, bool) or not isinstance(at, (int, float)):
-        return None, f"start marker {Path(marker).name} has no numeric 'at'"
+    if _num(at) is None:
+        return None, f"start marker {Path(marker).name} has no finite numeric 'at'"
     return at, None
 
 
 def decide(current, reports_dir, accepted, marker=None):
-    all_reports = _reports(reports_dir)
+    all_reports, problems = _reports(reports_dir)
+    if problems:
+        return False, ["NO-GO: " + "; ".join(problems)]
+    ids = [r["run_id"] for r in all_reports]
+    dups = sorted({i for i in ids if ids.count(i) > 1})
+    if dups:
+        return False, ["NO-GO: duplicate run id " + ", ".join(dups)]
     by_id = {r["run_id"]: r for r in all_reports}
     outside = [r for r in all_reports if r.get("preflight_run_id")]
     match = [r for r in outside
@@ -74,15 +122,21 @@ def decide(current, reports_dir, accepted, marker=None):
                            + (", ".join(changed) or "fingerprint differs")]
         return False, ["NO-GO: no level-4 report bound to a preflight"]
     run = match[0]
+    why = _check_problem(run, by_id[run["preflight_run_id"]])
+    if why:
+        return False, [f"NO-GO: {why}"]
+    started = _num(run.get("started_at"))
+    if started is None:
+        return False, [f"NO-GO: {run['run_id']} has no finite numeric started_at"]
     if marker is not None:
         at, why = _marker_at(Path(marker))
         if why:
             return False, [f"NO-GO: {why}"]
-        if run.get("started_at", 0) < at:
+        if started < at:
             return False, [f"NO-GO: {run['run_id']} is older than the last demo.sh start"]
     bound = {a.check_id: a for a in accepted if a.fingerprint == current.digest}
     notes, open_fails, used = [], [], []
-    for c in run.get("checks", []):
+    for c in run["checks"]:
         if c.get("status") != "FAIL":
             continue
         a = bound.get(c["id"])
@@ -108,14 +162,12 @@ def main(argv) -> int:
     ap.add_argument("--allowed-signers")
     ap.add_argument("--marker")
     ap.add_argument("--factory", default=str(_REPO_ROOT / "FACTORY.yaml"))
-    ap.add_argument("--consumer-unit", help="consumer unit whose WorkingDirectory is the deployed repo")
+    ap.add_argument("--consumer-unit", required=True, help="consumer unit whose WorkingDirectory is the deployed repo")
     ap.add_argument("--consumer-pid", type=int)
     ap.add_argument("--proc-root", default="/proc")
     ap.add_argument("--template")
     ap.add_argument("--home", default=str(Path.home()))
     a = ap.parse_args(argv)
-    if a.consumer_pid is None and not a.consumer_unit:
-        ap.error("one of --consumer-pid or --consumer-unit is required")
     from demo.acceptance import preflight  # host-side discovery lives there
     try:
         current = preflight.current_fingerprint(
@@ -126,13 +178,15 @@ def main(argv) -> int:
         return 1
     try:
         agent_ids = acceptances.agent_identities(Path(a.factory), a.agent_identity)
-    except (OSError, ValueError) as exc:
+    except Exception as exc:  # any unreadable or malformed FACTORY.yaml
         agent_ids = set()  # fail closed: with no known agent identity no acceptance counts
         print(f"note: {Path(a.factory).name} unreadable ({type(exc).__name__}); no acceptance can count")
     accepted, rejected = acceptances.load_verified(
         Path(a.acceptances), agent_ids=agent_ids,
         allowed_signers=Path(a.allowed_signers) if a.allowed_signers else None)
     ok, lines = decide(current, Path(a.reports), accepted, Path(a.marker) if a.marker else None)
+    if not a.marker:
+        lines = lines + ["start marker not checked (no --marker given)"]
     for ln in lines + [f"ignored acceptance: {r}" for r in rejected]:
         print(ln)
     return 0 if ok else 1
